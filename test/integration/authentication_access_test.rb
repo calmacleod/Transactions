@@ -30,6 +30,8 @@ class AuthenticationAccessTest < ActionDispatch::IntegrationTest
     get "/admin/jobs"
 
     assert_response :success
+    assert_includes response.body, "Pending jobs"
+    assert_includes response.body, "Failed jobs"
   end
 
   test "sign in page does not expose the admin email as sample text" do
