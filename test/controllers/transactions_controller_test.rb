@@ -90,10 +90,8 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
       params: { expense_transaction: { category_id: categories(:restaurants).id } },
       headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
-    assert_response :success
-    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_response :no_content
     assert_equal categories(:restaurants), transaction.reload.category
-    assert_includes response.body, "expense_transaction_#{transaction.id}"
-    assert_includes response.body, "Transaction updated."
+    assert_empty response.body
   end
 end

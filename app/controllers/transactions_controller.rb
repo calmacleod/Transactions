@@ -22,7 +22,7 @@ class TransactionsController < ApplicationController
     @categories = Category.by_name
 
     respond_to do |format|
-      format.turbo_stream { flash.now[:notice] = "Transaction updated." }
+      format.turbo_stream { head :no_content }
       format.html { redirect_back fallback_location: transactions_path, notice: "Transaction updated." }
     end
   end
