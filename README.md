@@ -47,6 +47,7 @@ $EDITOR .env
 
 Optional provider environment variables:
 
+- `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `GEMINI_API_KEY`
 - `OPENAI_API_BASE`
@@ -93,7 +94,6 @@ Rails generated the deployment skeleton:
 Fill in image, hosts, registry, and secrets later, then deploy with:
 
 ```bash
-export KAMAL_BITWARDEN_PROJECT_ID=your-bitwarden-project-id
 export BWS_ACCESS_TOKEN=your-bitwarden-access-token
 bin/kamal setup
 bin/kamal deploy
@@ -106,5 +106,6 @@ Kamal expects these Bitwarden Secrets Manager keys:
 - `RAILS_MASTER_KEY`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
+- `OPENAI_API_KEY`
 
-`KAMAL_SERVER_IP` and `KAMAL_APP_HOST` can also be exported directly in the shell; otherwise `config/deploy.yml` fetches them from the Bitwarden project before rendering.
+Kamal loads `.kamal/secrets`, fetches the Bitwarden project with `kamal secrets fetch --adapter bitwarden-sm`, and extracts these values with `kamal secrets extract`.

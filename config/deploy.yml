@@ -1,22 +1,5 @@
-<%
-require "json"
-require "shellwords"
-
-def deployment_value(key)
-  value = ENV[key]
-  return value if value && !value.empty?
-
-  project_id = ENV.fetch("KAMAL_BITWARDEN_PROJECT_ID")
-  @bitwarden_secrets ||= JSON.parse(`bws secret list #{Shellwords.escape(project_id)}`).to_h do |secret|
-    [ secret.fetch("key"), secret.fetch("value") ]
-  end
-
-  @bitwarden_secrets.fetch(key)
-end
-
-server_ip = deployment_value("KAMAL_SERVER_IP")
-app_host = deployment_value("KAMAL_APP_HOST")
-%>
+<% app_host = ENV.fetch("KAMAL_APP_HOST") %>
+<% server_ip = ENV.fetch("KAMAL_SERVER_IP") %>
 
 service: transactions
 
@@ -38,8 +21,10 @@ env:
     - RAILS_MASTER_KEY
     - ADMIN_EMAIL
     - ADMIN_PASSWORD
+    - OPENAI_API_KEY
   clear:
     APP_URL: https://<%= app_host %>
+    RUBYLLM_MODEL: <%= ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano") %>
     SOLID_QUEUE_IN_PUMA: true
 
 aliases:
