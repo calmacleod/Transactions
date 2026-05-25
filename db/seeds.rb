@@ -19,6 +19,8 @@
   end
 end
 
+RubyLlmModelImporter.load_cached! if RubyLlmModelImporter.model_table_ready?
+
 admin_email = ENV["ADMIN_EMAIL"]
 admin_password = ENV["ADMIN_PASSWORD"]
 

@@ -1,0 +1,102 @@
+<section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">RubyLLM Models</h1>
+    <p class="mt-2 text-sm text-slate-600">Browse imported RubyLLM model metadata, capabilities, context windows, and pricing.</p>
+  </div>
+
+  <%= button_to "Refresh models", models_path, method: :post, class: "rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+</section>
+
+<section class="mb-6 grid gap-4 md:grid-cols-4">
+  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-sm font-medium text-slate-500">Available models</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= Model.count %></p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-sm font-medium text-slate-500">Providers</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= @providers.count %></p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-sm font-medium text-slate-500">Structured output</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= Model.where("capabilities LIKE ?", "%structured_output%").count %></p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-sm font-medium text-slate-500">Vision</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= Model.where("capabilities LIKE ?", "%vision%").count %></p>
+  </div>
+</section>
+
+<section class="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+  <%= form_with url: models_path, method: :get, class: "grid gap-3 md:grid-cols-[1fr_220px_220px_auto]" do |form| %>
+    <div>
+      <%= form.label :query, "Search", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.search_field :query, value: params[:query], class: "w-full rounded-md border-slate-300 text-sm", placeholder: "Model, family, or ID" %>
+    </div>
+    <div>
+      <%= form.label :provider, "Provider", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.select :provider, options_for_select(@providers.map { |provider| ["#{provider} (#{@provider_counts[provider]})", provider] }, params[:provider]), { include_blank: "All providers" }, class: "w-full rounded-md border-slate-300 text-sm" %>
+    </div>
+    <div>
+      <%= form.label :capability, "Capability", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.select :capability, options_for_select([["Structured output", "structured_output"], ["Function calling", "function_calling"], ["Vision", "vision"], ["Reasoning", "reasoning"]], params[:capability]), { include_blank: "All capabilities" }, class: "w-full rounded-md border-slate-300 text-sm" %>
+    </div>
+    <div class="flex items-end gap-2">
+      <%= form.submit "Filter", class: "rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" %>
+      <%= link_to "Clear", models_path, class: "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50" %>
+    </div>
+  <% end %>
+</section>
+
+<div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="min-w-full divide-y divide-slate-200 text-sm">
+    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <tr>
+        <th class="px-5 py-3">Model</th>
+        <th class="px-5 py-3">Provider</th>
+        <th class="px-5 py-3">I/O</th>
+        <th class="px-5 py-3">Capabilities</th>
+        <th class="px-5 py-3 text-right">Context</th>
+        <th class="px-5 py-3 text-right">Input / Output</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      <% @models.each do |model| %>
+        <tr class="align-top hover:bg-slate-50">
+          <td class="px-5 py-4">
+            <p class="font-medium text-slate-900"><%= model.name %></p>
+            <p class="mt-1 font-mono text-xs text-slate-500"><%= model.model_id %></p>
+            <% if model.family.present? %>
+              <p class="mt-1 text-xs text-slate-500"><%= model.family %></p>
+            <% end %>
+          </td>
+          <td class="whitespace-nowrap px-5 py-4 text-slate-700"><%= model.provider %></td>
+          <td class="px-5 py-4 text-xs text-slate-600">
+            <p>In: <%= model.input_modalities.presence&.join(", ") || "unknown" %></p>
+            <p class="mt-1">Out: <%= model.output_modalities.presence&.join(", ") || "unknown" %></p>
+          </td>
+          <td class="max-w-xs px-5 py-4">
+            <div class="flex flex-wrap gap-1.5">
+              <% model.capabilities.each do |capability| %>
+                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"><%= capability.to_s.humanize %></span>
+              <% end %>
+            </div>
+          </td>
+          <td class="whitespace-nowrap px-5 py-4 text-right text-slate-600"><%= number_with_delimiter(model.context_window) if model.context_window.present? %></td>
+          <td class="whitespace-nowrap px-5 py-4 text-right text-slate-600">
+            <% input_price = model.input_price_per_million %>
+            <% output_price = model.output_price_per_million %>
+            <% if input_price.present? || output_price.present? %>
+              <%= number_to_currency(input_price || 0, precision: 2) %> / <%= number_to_currency(output_price || 0, precision: 2) %>
+            <% else %>
+              <span class="text-slate-400">Unknown</span>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if @models.size == 250 %>
+  <p class="mt-4 text-sm text-slate-500">Showing the first 250 matching models. Narrow the filters to inspect a smaller set.</p>
+<% end %>

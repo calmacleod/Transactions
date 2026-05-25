@@ -6,6 +6,7 @@ Rails.application.routes.draw do
   resources :transactions, only: %i[index update]
   resources :imports, only: :create
   resources :insights, only: %i[index create]
+  resources :models, only: %i[index create]
   resource :classifications, only: :create
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

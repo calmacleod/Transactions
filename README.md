@@ -53,6 +53,16 @@ Optional provider environment variables:
 
 Without a provider key, the app still imports data and uses transparent local merchant rules for basic classification.
 
+## RubyLLM Models
+
+The app stores RubyLLM's model registry locally so available models can be browsed in the UI.
+
+```bash
+bin/rails db:seed
+```
+
+Seeding imports RubyLLM's packaged model catalog. The app also syncs that packaged catalog on boot so model metadata stays current with the installed RubyLLM version. Use the Models page in the app to browse providers, capabilities, pricing, and context windows, or refresh the registry from RubyLLM/providers when API keys are configured.
+
 ## CSV Import
 
 The importer expects headerless rows shaped like this:

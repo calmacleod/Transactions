@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_25_140244) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_25_143203) do
   create_table "categories", force: :cascade do |t|
     t.string "color"
     t.datetime "created_at", null: false
@@ -63,6 +63,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_25_140244) do
     t.string "title"
     t.datetime "updated_at", null: false
     t.index ["starts_on", "ends_on"], name: "index_insights_on_starts_on_and_ends_on"
+  end
+
+  create_table "models", force: :cascade do |t|
+    t.json "capabilities", default: []
+    t.integer "context_window"
+    t.datetime "created_at", null: false
+    t.string "family"
+    t.date "knowledge_cutoff"
+    t.integer "max_output_tokens"
+    t.json "metadata", default: {}
+    t.json "modalities", default: {}
+    t.datetime "model_created_at"
+    t.string "model_id", null: false
+    t.string "name", null: false
+    t.json "pricing", default: {}
+    t.string "provider", null: false
+    t.datetime "updated_at", null: false
+    t.index ["family"], name: "index_models_on_family"
+    t.index ["provider", "model_id"], name: "index_models_on_provider_and_model_id", unique: true
+    t.index ["provider"], name: "index_models_on_provider"
   end
 
   create_table "sessions", force: :cascade do |t|
