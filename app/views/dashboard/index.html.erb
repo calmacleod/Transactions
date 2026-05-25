@@ -22,6 +22,10 @@
   </div>
 </section>
 
+<% if @classification_run.present? %>
+  <%= render "classification_runs/classification_run", classification_run: @classification_run %>
+<% end %>
+
 <section class="kpi-grid">
   <%= link_to transactions_path(start_date: @month_range.begin, end_date: @month_range.end, direction: "debit"), class: "kpi-card" do %>
     <p class="kpi-label">Month spend</p>

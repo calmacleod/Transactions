@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_25_150500) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_25_165000) do
   create_table "categories", force: :cascade do |t|
     t.string "color"
     t.datetime "created_at", null: false
@@ -18,6 +18,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_25_150500) do
     t.string "name"
     t.datetime "updated_at", null: false
     t.index ["name"], name: "index_categories_on_name", unique: true
+  end
+
+  create_table "classification_runs", force: :cascade do |t|
+    t.string "active_job_id"
+    t.integer "ai_count", default: 0, null: false
+    t.datetime "cancel_requested_at"
+    t.integer "classified_count", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.integer "failed_count", default: 0, null: false
+    t.datetime "finished_at"
+    t.text "notes"
+    t.integer "processed_count", default: 0, null: false
+    t.integer "rule_based_count", default: 0, null: false
+    t.datetime "started_at"
+    t.string "status", default: "queued", null: false
+    t.integer "total_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_classification_runs_on_created_at"
+    t.index ["status"], name: "index_classification_runs_on_status"
   end
 
   create_table "expense_transactions", force: :cascade do |t|

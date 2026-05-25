@@ -18,6 +18,20 @@ class AuthenticationAccessTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Cutback targets"
   end
 
+  test "redirects anonymous visitors away from job management" do
+    get "/admin/jobs"
+
+    assert_redirected_to Rails.application.routes.url_helpers.new_session_path
+  end
+
+  test "allows authenticated visitors into job management" do
+    sign_in_as users(:one)
+
+    get "/admin/jobs"
+
+    assert_response :success
+  end
+
   test "sign in page does not expose the admin email as sample text" do
     get new_session_path
 

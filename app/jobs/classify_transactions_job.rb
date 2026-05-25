@@ -1,9 +1,10 @@
 class ClassifyTransactionsJob < ApplicationJob
   queue_as :default
 
-  def perform(transaction_ids = nil)
+  def perform(classification_run_id, transaction_ids = nil)
+    run = ClassificationRun.find(classification_run_id)
     scope = transaction_ids.present? ? ExpenseTransaction.where(id: transaction_ids) : ExpenseTransaction.unclassified
 
-    Ai::TransactionClassifier.new.classify_all(scope)
+    TransactionClassification::FastPass.new(run:).call(scope)
   end
 end

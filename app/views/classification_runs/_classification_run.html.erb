@@ -1,0 +1,33 @@
+<%= turbo_frame_tag "classification_run", data: { controller: classification_run.active? ? "poll" : nil, poll_interval_value: 2000, poll_url_value: classification_run_path(classification_run) } do %>
+  <div class="classification-progress panel">
+    <div class="panel-header">
+      <div>
+        <h2 class="panel-title">Classification</h2>
+        <p class="classification-status"><%= classification_run.status.humanize %></p>
+      </div>
+
+      <% if classification_run.cancellable? %>
+        <%= button_to "Stop", cancel_classification_run_path(classification_run), method: :patch, class: "btn-secondary", data: { turbo_frame: "_top" } %>
+      <% end %>
+    </div>
+
+    <div class="classification-progress-body">
+      <div class="classification-meter" aria-label="Classification progress">
+        <div class="classification-meter-fill" style="width: <%= classification_run.progress_percent %>%"></div>
+      </div>
+
+      <div class="classification-stats">
+        <span><strong><%= classification_run.processed_count %></strong> / <%= classification_run.total_count %> processed</span>
+        <span><strong><%= classification_run.classified_count %></strong> classified</span>
+        <span><strong><%= classification_run.rule_based_count %></strong> fast pass</span>
+        <% if classification_run.failed_count.positive? %>
+          <span><strong><%= classification_run.failed_count %></strong> failed</span>
+        <% end %>
+      </div>
+
+      <% if classification_run.notes.present? %>
+        <p class="classification-note"><%= classification_run.notes %></p>
+      <% end %>
+    </div>
+  </div>
+<% end %>

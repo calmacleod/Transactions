@@ -23,7 +23,8 @@ module Ai
 
     def classify(transaction)
       result = credit_classification(transaction) unless transaction.expense?
-      result ||= llm_classification(transaction) if ai_configured?
+      result ||= rule_based_classification(transaction)
+      result = llm_classification(transaction) if result[:category] == "Uncategorized" && ai_configured?
       result ||= rule_based_classification(transaction)
       apply_result(transaction, result)
     end

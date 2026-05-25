@@ -60,6 +60,34 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
     end
   end
 
+  test "uses local rules before AI when provider keys are present" do
+    old_key = ENV["OPENAI_API_KEY"]
+    ENV["OPENAI_API_KEY"] = "present"
+    transaction = ExpenseTransaction.create!(
+      occurred_on: Date.new(2026, 5, 22),
+      description: "PET SUPPLY",
+      amount_cents: 7446,
+      direction: "debit",
+      card_last4: "2222",
+      source: "test",
+      external_id: "pet-valu-local-first-row"
+    )
+
+    RubyLLM.singleton_class.alias_method :chat_without_local_first_test, :chat
+    RubyLLM.define_singleton_method(:chat) { |*| raise "AI should not be called for local rule matches" }
+
+    begin
+      Ai::TransactionClassifier.new.classify(transaction)
+    ensure
+      RubyLLM.singleton_class.alias_method :chat, :chat_without_local_first_test
+      RubyLLM.singleton_class.remove_method :chat_without_local_first_test
+    end
+
+    assert_equal "Pets", transaction.reload.category.name
+  ensure
+    old_key.nil? ? ENV.delete("OPENAI_API_KEY") : ENV["OPENAI_API_KEY"] = old_key
+  end
+
   private
 
   def without_ai_keys

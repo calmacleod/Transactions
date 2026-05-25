@@ -1,8 +1,14 @@
 class ClassificationsController < ApplicationController
   def create
-    count = ExpenseTransaction.unclassified.count
-    ClassifyTransactionsJob.perform_later
+    if (active_run = ClassificationRun.active.latest.first)
+      redirect_to root_path, alert: "Classification is already #{active_run.status}."
+      return
+    end
 
-    redirect_to root_path, notice: "Queued classification for #{count} unclassified transactions."
+    run = ClassificationRun.create!(total_count: ExpenseTransaction.unclassified.count)
+    job = ClassifyTransactionsJob.perform_later(run.id)
+    run.update!(active_job_id: job.job_id)
+
+    redirect_to root_path, notice: "Queued fast classification for #{run.total_count} unclassified transactions."
   end
 end

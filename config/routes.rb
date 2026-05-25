@@ -3,12 +3,17 @@ Rails.application.routes.draw do
   resources :passwords, param: :token
   root "dashboard#index"
 
+  mount MissionControl::Jobs::Engine, at: "/admin/jobs"
+
   resources :transactions, only: %i[index update]
   resources :saved_transaction_queries, only: %i[create destroy]
   resources :imports, only: :create
   resources :insights, only: %i[index create]
   resources :models, only: %i[index create]
   resource :classifications, only: :create
+  resources :classification_runs, only: :show do
+    patch :cancel, on: :member
+  end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
