@@ -648,18 +648,24 @@ textarea.input-control {
 }
 
 @media (max-width: 1024px) {
+  html,
+  body {
+    overflow-x: visible;
+    overflow-y: visible;
+  }
+
+  .app-shell {
+    overflow-x: visible;
+  }
+
   .app-sidebar {
-    position: sticky;
+    position: relative;
     inset: auto;
-    top: 0;
-    z-index: 30;
     width: auto;
     overflow: visible;
     display: block;
-    padding: 0.625rem 0.75rem 0.75rem;
+    padding: 3.25rem 0.75rem 0.75rem;
     border-right: 0;
-    border-bottom: 1px solid #3d3c35;
-    box-shadow: 0 12px 30px rgba(36, 36, 31, 0.14);
   }
 
   .app-main {
@@ -667,10 +673,17 @@ textarea.input-control {
   }
 
   .app-sidebar-top {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 30;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    background: linear-gradient(180deg, #303029 0%, var(--app-sidebar) 100%);
+    border-bottom: 1px solid #3d3c35;
+    box-shadow: 0 12px 30px rgba(36, 36, 31, 0.14);
   }
 
   .app-brand {
@@ -734,7 +747,11 @@ textarea.input-control {
   }
 
   .app-sidebar {
-    padding: 0.5rem 0.625rem 0.625rem;
+    padding: 2.875rem 0.625rem 0.625rem;
+  }
+
+  .app-sidebar-top {
+    padding: 0.5rem 0.625rem;
   }
 
   .app-brand {
@@ -800,16 +817,6 @@ textarea.input-control {
   .page-bar {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .transactions-page-bar {
-    position: sticky;
-    top: 4.125rem;
-    z-index: 19;
-    margin: -0.75rem -0.75rem 1rem;
-    padding: 0.75rem;
-    background: var(--app-bg);
-    border-bottom: 1px solid var(--app-border);
   }
 
   .filter-grid {
