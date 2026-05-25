@@ -483,6 +483,97 @@ textarea.input-control {
   color: #fffefa;
 }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--app-border);
+  padding: 0.75rem 1rem;
+  color: var(--app-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.per-page-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.per-page-form .field-label {
+  margin-bottom: 0;
+}
+
+.per-page-form .input-control {
+  width: auto;
+  min-width: 5rem;
+}
+
+.pagination-bar p span {
+  color: var(--app-ink);
+  font-weight: 800;
+}
+
+.pagy {
+  --text: #52525b;
+  --text-hover: var(--app-ink);
+  --text-current: #fffefa;
+  --background: #fffefa;
+  --background-hover: #f8f7f0;
+  --background-current: var(--app-ink);
+  --spacing: 0.25rem;
+  --padding: 0.75rem;
+  --rounding: 999px;
+  --border-width: 1px;
+  --font-size: 0.8125rem;
+  --font-weight: 700;
+  --line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing);
+  color: var(--text);
+  font-size: var(--font-size);
+  font-weight: var(--font-weight);
+  line-height: var(--line-height);
+}
+
+.pagy a:not([role="separator"]) {
+  display: block;
+  min-width: 2rem;
+  border: var(--border-width) solid var(--app-border);
+  border-radius: var(--rounding);
+  background: var(--background);
+  color: inherit;
+  padding: 0.3125rem var(--padding);
+  text-align: center;
+  text-decoration: none;
+}
+
+.pagy a[href]:hover {
+  background: var(--background-hover);
+  color: var(--text-hover);
+}
+
+.pagy a:not([href]) {
+  cursor: default;
+}
+
+.pagy a[role="link"]:not([aria-current]) {
+  opacity: 0.5;
+}
+
+.pagy a[role="separator"] {
+  padding: 0.3125rem 0.25rem;
+}
+
+.pagy a[aria-current] {
+  border-color: var(--background-current);
+  background: var(--background-current);
+  color: var(--text-current);
+}
+
 @media (max-width: 1024px) {
   .app-sidebar {
     position: sticky;
@@ -640,6 +731,15 @@ textarea.input-control {
 
   .filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pagination-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .per-page-form {
+    margin-left: 0;
   }
 
   .category-row {

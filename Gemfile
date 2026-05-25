@@ -72,3 +72,5 @@ gem "ruby_llm", "~> 1.15"
 gem "ruby_llm-schema", "~> 0.4.0"
 
 gem "csv", "~> 3.3"
+
+gem "pagy", "~> 43.5"

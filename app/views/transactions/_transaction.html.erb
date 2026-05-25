@@ -1,0 +1,16 @@
+<tr id="<%= dom_id(transaction) %>">
+  <td class="whitespace-nowrap text-zinc-500"><%= transaction.occurred_on.strftime("%b %-d, %Y") %></td>
+  <td>
+    <p class="font-semibold text-zinc-950"><%= transaction.description %></p>
+    <% if transaction.classification_reason.present? %>
+      <p class="mt-1 max-w-xl text-xs leading-5 text-zinc-500"><%= transaction.classification_reason %></p>
+    <% end %>
+  </td>
+  <td>
+    <%= form_with model: transaction, url: transaction_path(transaction), method: :patch do |form| %>
+      <%= form.select :category_id, options_from_collection_for_select(@categories, :id, :name, transaction.category_id), { include_blank: "Unclassified" }, class: "input-control w-44", onchange: "this.form.requestSubmit()" %>
+    <% end %>
+  </td>
+  <td class="whitespace-nowrap text-zinc-500"><%= confidence_label(transaction) %></td>
+  <td class="whitespace-nowrap text-right font-bold <%= transaction_amount_class(transaction) %>"><%= transaction_money(transaction) %></td>
+</tr>

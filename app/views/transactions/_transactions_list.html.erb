@@ -1,0 +1,51 @@
+<%= turbo_frame_tag "transactions_list" do %>
+  <div class="panel overflow-hidden">
+    <div class="table-scroll">
+      <table class="dense-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Confidence</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if @transactions.any? %>
+            <%= render partial: "transactions/transaction", collection: @transactions, as: :transaction %>
+          <% else %>
+            <tr>
+              <td colspan="5" class="text-center text-sm text-zinc-500">No matching transactions.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination-bar">
+      <p>
+        <% if @pagy.count.positive? %>
+          Showing <span><%= @pagy.from %>-<%= @pagy.to %></span> of <span><%= @pagy.count %></span>
+        <% else %>
+          Showing <span>0</span> records
+        <% end %>
+      </p>
+
+      <%= form_with url: transactions_path, method: :get, class: "per-page-form", data: { turbo_frame: "transactions_list" } do |form| %>
+        <% @filter_params.each do |key, value| %>
+          <%= hidden_field_tag key, value %>
+        <% end %>
+        <% if @selected_saved_query.present? %>
+          <%= hidden_field_tag :saved_query_id, @selected_saved_query.id %>
+        <% end %>
+        <%= form.label :limit, "Rows", class: "field-label" %>
+        <%= form.select :limit, options_for_select(transaction_per_page_options.map { |option| [option, option] }, @transactions_per_page), {}, class: "input-control", onchange: "this.form.requestSubmit()" %>
+      <% end %>
+
+      <% if @pagy.pages > 1 %>
+        <%== @pagy.series_nav(aria_label: "Transactions pages", anchor_string: 'data-turbo-frame="transactions_list"') %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

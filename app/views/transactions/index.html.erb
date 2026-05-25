@@ -5,7 +5,7 @@
     <p class="page-subtitle">Filter, inspect, save common views, and reclassify imported records.</p>
   </div>
   <div class="rounded-full border border-zinc-200 bg-stone-50 px-3 py-1.5 text-sm text-zinc-600">
-    <span class="font-bold text-zinc-950"><%= @transactions.size %></span> matching records
+    <span class="font-bold text-zinc-950"><%= @pagy.count %></span> matching records
   </div>
 </section>
 
@@ -107,38 +107,4 @@
   </section>
 <% end %>
 
-<div class="panel overflow-hidden">
-  <div class="table-scroll">
-    <table class="dense-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Description</th>
-          <th>Category</th>
-          <th>Confidence</th>
-          <th class="text-right">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% @transactions.each do |transaction| %>
-          <tr>
-            <td class="whitespace-nowrap text-zinc-500"><%= transaction.occurred_on.strftime("%b %-d, %Y") %></td>
-            <td>
-              <p class="font-semibold text-zinc-950"><%= transaction.description %></p>
-              <% if transaction.classification_reason.present? %>
-                <p class="mt-1 max-w-xl text-xs leading-5 text-zinc-500"><%= transaction.classification_reason %></p>
-              <% end %>
-            </td>
-            <td>
-              <%= form_with model: transaction, url: transaction_path(transaction), method: :patch do |form| %>
-                <%= form.select :category_id, options_from_collection_for_select(@categories, :id, :name, transaction.category_id), { include_blank: "Unclassified" }, class: "input-control w-44", onchange: "this.form.requestSubmit()" %>
-              <% end %>
-            </td>
-            <td class="whitespace-nowrap text-zinc-500"><%= confidence_label(transaction) %></td>
-            <td class="whitespace-nowrap text-right font-bold <%= transaction_amount_class(transaction) %>"><%= transaction_money(transaction) %></td>
-          </tr>
-        <% end %>
-      </tbody>
-    </table>
-  </div>
-</div>
+<%= render "transactions_list" %>
