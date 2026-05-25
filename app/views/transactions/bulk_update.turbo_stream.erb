@@ -1,0 +1,3 @@
+<% @transactions.each do |transaction| %>
+  <%= turbo_stream.replace transaction, partial: "transactions/transaction", locals: { transaction: transaction } %>
+<% end %>

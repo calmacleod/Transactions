@@ -1,4 +1,7 @@
-<tr id="<%= dom_id(transaction) %>">
+<tr id="<%= dom_id(transaction) %>" data-action="pointerdown->bulk-transactions#startDrag pointerover->bulk-transactions#dragSelect mouseover->bulk-transactions#dragSelect">
+  <td class="select-column">
+    <input type="checkbox" class="bulk-checkbox" aria-label="Select <%= transaction.description %>" value="<%= transaction.id %>" data-bulk-transactions-target="checkbox" data-amount-cents="<%= transaction.signed_amount_cents %>" data-action="bulk-transactions#toggle">
+  </td>
   <td class="whitespace-nowrap text-zinc-500"><%= transaction.occurred_on.strftime("%b %-d, %Y") %></td>
   <td>
     <p class="font-semibold text-zinc-950"><%= transaction.description %></p>

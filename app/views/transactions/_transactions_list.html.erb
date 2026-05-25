@@ -1,9 +1,12 @@
 <%= turbo_frame_tag "transactions_list" do %>
-  <div class="panel overflow-hidden">
+  <div class="panel overflow-hidden" data-controller="bulk-transactions">
     <div class="table-scroll">
       <table class="dense-table">
         <thead>
           <tr>
+            <th class="select-column">
+              <input type="checkbox" class="bulk-checkbox" aria-label="Select all visible transactions" data-bulk-transactions-target="selectAll" data-action="bulk-transactions#toggleAll">
+            </th>
             <th>Date</th>
             <th>Description</th>
             <th>Category</th>
@@ -16,7 +19,7 @@
             <%= render partial: "transactions/transaction", collection: @transactions, as: :transaction %>
           <% else %>
             <tr>
-              <td colspan="5" class="text-center text-sm text-zinc-500">No matching transactions.</td>
+              <td colspan="6" class="text-center text-sm text-zinc-500">No matching transactions.</td>
             </tr>
           <% end %>
         </tbody>
@@ -40,11 +43,26 @@
           <%= hidden_field_tag :saved_query_id, @selected_saved_query.id %>
         <% end %>
         <%= form.label :limit, "Rows", class: "field-label" %>
-        <%= form.select :limit, options_for_select(transaction_per_page_options.map { |option| [option, option] }, @transactions_per_page), {}, class: "input-control", onchange: "this.form.requestSubmit()" %>
+        <%= form.select :limit, options_for_select(transaction_per_page_options, @transactions_per_page), {}, class: "input-control", onchange: "this.form.requestSubmit()" %>
       <% end %>
 
       <% if @pagy.pages > 1 %>
         <%== @pagy.series_nav(aria_label: "Transactions pages", anchor_string: 'data-turbo-frame="transactions_list"') %>
+      <% end %>
+    </div>
+
+    <div class="bulk-action-bar" data-bulk-transactions-target="bar" hidden>
+      <div>
+        <p class="bulk-action-title"><span data-bulk-transactions-target="count">0</span> selected</p>
+        <p class="bulk-action-total">Total <span data-bulk-transactions-target="total">$0.00</span></p>
+      </div>
+
+      <%= form_with scope: :bulk_transaction, url: bulk_update_transactions_path, method: :patch, class: "bulk-action-form", data: { action: "turbo:submit-end->bulk-transactions#submitEnd" } do |form| %>
+        <div data-bulk-transactions-target="ids"></div>
+        <%= form.label :category_id, "Reclassify", class: "field-label" %>
+        <%= form.select :category_id, options_from_collection_for_select(@categories, :id, :name), { include_blank: "Unclassified" }, class: "input-control" %>
+        <%= form.submit "Apply", class: "btn-primary", data: { bulk_transactions_target: "apply" }, disabled: true %>
+        <button type="button" class="btn-secondary" data-action="bulk-transactions#clear">Clear</button>
       <% end %>
     </div>
   </div>

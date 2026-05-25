@@ -5,7 +5,9 @@ Rails.application.routes.draw do
 
   mount MissionControl::Jobs::Engine, at: "/admin/jobs"
 
-  resources :transactions, only: %i[index update]
+  resources :transactions, only: %i[index update] do
+    patch :bulk_update, on: :collection
+  end
   resources :saved_transaction_queries, only: %i[create destroy]
   resources :imports, only: :create
   resources :insights, only: %i[index create]

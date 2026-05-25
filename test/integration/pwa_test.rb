@@ -7,9 +7,12 @@ class PwaTest < ActionDispatch::IntegrationTest
     get root_path
 
     assert_response :success
+    assert_includes response.body, 'content="width=device-width,initial-scale=1,viewport-fit=cover"'
     assert_includes response.body, 'rel="manifest" href="/manifest.json"'
     assert_includes response.body, 'name="theme-color" content="#f3f4f0"'
+    assert_includes response.body, 'name="msapplication-TileColor" content="#f3f4f0"'
     assert_includes response.body, 'name="apple-mobile-web-app-capable" content="yes"'
+    assert_includes response.body, 'name="apple-mobile-web-app-status-bar-style" content="black-translucent"'
   end
 
   test "manifest is installable" do

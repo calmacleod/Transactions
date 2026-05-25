@@ -82,6 +82,34 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Showing <span>1-50</span> of <span>60</span>"
   end
 
+  test "can show all filtered transactions and persist that page size" do
+    sign_in_as users(:one)
+    import_batch = import_batches(:statement)
+
+    58.times do |index|
+      ExpenseTransaction.create!(
+        occurred_on: Date.new(2026, 5, 1) + index.days,
+        description: "All page size transaction #{index}",
+        amount_cents: 1000 + index,
+        direction: "debit",
+        external_id: "all-page-size-row-#{index}",
+        raw_data: {},
+        import_batch: import_batch
+      )
+    end
+
+    get transactions_path, params: { limit: "all" }
+
+    assert_response :success
+    assert_includes response.body, "Showing <span>1-60</span> of <span>60</span>"
+    assert_includes response.body, '<option selected="selected" value="all">All</option>'
+
+    get transactions_path
+
+    assert_response :success
+    assert_includes response.body, "Showing <span>1-60</span> of <span>60</span>"
+  end
+
   test "updates transaction category with turbo stream" do
     sign_in_as users(:one)
     transaction = expense_transactions(:grocery)
@@ -93,5 +121,45 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :no_content
     assert_equal categories(:restaurants), transaction.reload.category
     assert_empty response.body
+  end
+
+  test "bulk updates selected transaction categories with turbo stream" do
+    sign_in_as users(:one)
+    grocery = expense_transactions(:grocery)
+    restaurant = expense_transactions(:restaurant)
+
+    patch bulk_update_transactions_path,
+      params: {
+        bulk_transaction: {
+          category_id: categories(:groceries).id,
+          transaction_ids: [ grocery.id, restaurant.id ]
+        }
+      },
+      headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+    assert_response :success
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_equal categories(:groceries), grocery.reload.category
+    assert_equal categories(:groceries), restaurant.reload.category
+    assert_includes response.body, "turbo-stream action=\"replace\" target=\"expense_transaction_#{grocery.id}\""
+    assert_includes response.body, "turbo-stream action=\"replace\" target=\"expense_transaction_#{restaurant.id}\""
+  end
+
+  test "bulk update can clear selected transaction categories" do
+    sign_in_as users(:one)
+    grocery = expense_transactions(:grocery)
+    restaurant = expense_transactions(:restaurant)
+
+    patch bulk_update_transactions_path,
+      params: {
+        bulk_transaction: {
+          category_id: "",
+          transaction_ids: [ grocery.id, restaurant.id ]
+        }
+      }
+
+    assert_redirected_to transactions_path
+    assert_nil grocery.reload.category
+    assert_nil restaurant.reload.category
   end
 end
