@@ -2,188 +2,176 @@
 <% category_totals = @dashboard.category_totals %>
 <% day_totals = @dashboard.day_of_week_totals %>
 <% month_trend = @dashboard.month_trend %>
+<% month_delta = @dashboard.month_to_month_delta %>
 <% top_merchants = @dashboard.top_merchants %>
 <% recommendations = @dashboard.recommendations %>
 <% max_category = category_totals.map { |item| item[:cents] }.max.to_i %>
 <% max_day_count = day_totals.map { |item| item[:count] }.max.to_i %>
 <% max_month = month_trend.map { |item| item[:cents] }.max.to_i %>
-<% donut_start = 0 %>
-<% donut_segments = category_totals.first(6).map do |item|
-  segment_start = donut_start
-  donut_start += item[:percent]
-  "#{item[:color]} #{segment_start}% #{donut_start}%"
-end %>
-<% donut_segments << "#e2e8f0 #{donut_start}% 100%" if donut_start < 100 %>
 
-<section class="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+<section class="mb-5 flex flex-col gap-3 border-b border-zinc-300 pb-4 lg:flex-row lg:items-end lg:justify-between">
   <div>
-    <p class="text-sm font-medium uppercase tracking-wide text-slate-500">Expense workspace</p>
-    <h1 class="mt-2 text-4xl font-semibold tracking-tight text-slate-950">Spending dashboard</h1>
-    <p class="mt-3 max-w-2xl text-base text-slate-600">A monthly view of where money is going, which habits repeat, and which categories are best candidates to reduce.</p>
+    <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Expense control</p>
+    <h1 class="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">Spending dashboard</h1>
+    <p class="mt-1 max-w-2xl text-sm text-zinc-600">Current month, recent movement, and drill-downs into the transactions behind each number.</p>
   </div>
 
-  <div class="flex flex-wrap gap-3">
-    <%= button_to "Classify pending", classifications_path, method: :post, class: "rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
-    <%= button_to "Generate insights", insights_path, method: :post, class: "rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50" %>
+  <div class="flex flex-wrap gap-2">
+    <%= button_to "Classify pending", classifications_path, method: :post, class: "border border-zinc-950 bg-zinc-950 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800" %>
+    <%= button_to "Generate insights", insights_path, method: :post, class: "border border-zinc-300 bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-200" %>
   </div>
 </section>
 
-<section class="mb-8 grid gap-4 md:grid-cols-4">
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-slate-500">Monthly spend</p>
-    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= money_from_cents(total_spend) %></p>
-    <p class="mt-1 text-xs text-slate-500"><%= @month_range.begin.strftime("%b %-d") %> to <%= @month_range.end.strftime("%b %-d") %></p>
-  </div>
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-slate-500">Expense count</p>
-    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= @dashboard.expense_count %></p>
-    <p class="mt-1 text-xs text-slate-500"><%= @dashboard.transaction_count %> total records this month</p>
-  </div>
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-slate-500">Average purchase</p>
-    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= money_from_cents(@dashboard.average_expense_cents) %></p>
-    <p class="mt-1 text-xs text-slate-500">Debits only</p>
-  </div>
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-slate-500">Unclassified</p>
-    <p class="mt-2 text-3xl font-semibold tracking-tight"><%= ExpenseTransaction.unclassified.count %></p>
-    <p class="mt-1 text-xs text-slate-500"><%= @categories.count %> categories configured</p>
-  </div>
+<section class="mb-5 grid border border-zinc-300 bg-zinc-50 md:grid-cols-4">
+  <%= link_to transactions_path(start_date: @month_range.begin, end_date: @month_range.end, direction: "debit"), class: "border-b border-zinc-300 p-4 hover:bg-white md:border-b-0 md:border-r" do %>
+    <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Month spend</p>
+    <p class="mt-1 text-2xl font-semibold"><%= money_from_cents(total_spend) %></p>
+    <p class="mt-1 text-xs text-zinc-500"><%= @month_range.begin.strftime("%b %-d") %> to <%= @month_range.end.strftime("%b %-d") %></p>
+  <% end %>
+  <%= link_to transactions_path(start_date: @month_range.begin, end_date: @month_range.end, direction: "debit"), class: "border-b border-zinc-300 p-4 hover:bg-white md:border-b-0 md:border-r" do %>
+    <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Purchases</p>
+    <p class="mt-1 text-2xl font-semibold"><%= @dashboard.expense_count %></p>
+    <p class="mt-1 text-xs text-zinc-500"><%= @dashboard.transaction_count %> total records</p>
+  <% end %>
+  <%= link_to transactions_path(start_date: @month_range.begin, end_date: @month_range.end, direction: "debit"), class: "border-b border-zinc-300 p-4 hover:bg-white md:border-b-0 md:border-r" do %>
+    <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Average purchase</p>
+    <p class="mt-1 text-2xl font-semibold"><%= money_from_cents(@dashboard.average_expense_cents) %></p>
+    <p class="mt-1 text-xs text-zinc-500">Debits only</p>
+  <% end %>
+  <%= link_to transactions_path(classified: "unclassified"), class: "p-4 hover:bg-white" do %>
+    <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Unclassified</p>
+    <p class="mt-1 text-2xl font-semibold"><%= ExpenseTransaction.unclassified.count %></p>
+    <p class="mt-1 text-xs text-zinc-500"><%= @categories.count %> categories</p>
+  <% end %>
 </section>
 
-<section class="mb-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)]">
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <div class="flex flex-col gap-6 md:flex-row md:items-center">
-      <div class="relative mx-auto size-56 shrink-0 rounded-full" style="background: conic-gradient(<%= donut_segments.presence&.join(", ") || "#e2e8f0 0% 100%" %>);">
-        <div class="absolute inset-10 flex flex-col items-center justify-center rounded-full bg-white text-center">
-          <span class="text-xs font-medium uppercase tracking-wide text-slate-500">Spend</span>
-          <span class="mt-1 text-2xl font-semibold"><%= money_from_cents(total_spend) %></span>
-        </div>
-      </div>
-
-      <div class="w-full">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="text-base font-semibold">Category allocation</h2>
-          <%= link_to "Review categories", transactions_path, class: "text-sm font-semibold text-blue-700 hover:text-blue-900" %>
-        </div>
-        <div class="space-y-3">
-          <% category_totals.first(6).each do |item| %>
-            <% width = max_category.positive? ? ((item[:cents].to_f / max_category) * 100).round : 0 %>
-            <div>
-              <div class="mb-1 flex items-center justify-between gap-3 text-sm">
-                <span class="flex items-center gap-2 font-medium text-slate-700">
-                  <span class="size-2 rounded-full" style="background-color: <%= item[:color] %>"></span>
-                  <%= item[:name] %>
-                </span>
-                <span class="text-slate-500"><%= money_from_cents(item[:cents]) %> · <%= item[:percent] %>%</span>
-              </div>
-              <div class="h-2 rounded-full bg-slate-100">
-                <div class="h-2 rounded-full" style="width: <%= width %>%; background-color: <%= item[:color] %>"></div>
-              </div>
-              <% if item[:budget_cents].present? %>
-                <p class="mt-1 text-xs text-slate-500"><%= item[:budget_percent] %>% of <%= money_from_cents(item[:budget_cents]) %> monthly target</p>
-              <% end %>
+<section class="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+  <div class="border border-zinc-300 bg-zinc-50">
+    <div class="flex items-center justify-between border-b border-zinc-300 px-4 py-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Category allocation</h2>
+      <%= link_to "All transactions", transactions_path, class: "text-xs font-semibold text-zinc-600 hover:text-zinc-950" %>
+    </div>
+    <div class="divide-y divide-zinc-200">
+      <% category_totals.first(8).each do |item| %>
+        <% width = max_category.positive? ? ((item[:cents].to_f / max_category) * 100).round : 0 %>
+        <%= link_to transactions_path(item[:filters]), class: "grid gap-3 px-4 py-3 hover:bg-white md:grid-cols-[180px_1fr_120px]" do %>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-zinc-900"><%= item[:name] %></p>
+            <p class="text-xs text-zinc-500"><%= pluralize(item[:count], "transaction") %></p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="h-2 w-full bg-zinc-200">
+              <div class="h-2 bg-zinc-900" style="width: <%= width %>%"></div>
             </div>
-          <% end %>
-        </div>
-      </div>
+            <span class="w-10 text-right text-xs text-zinc-500"><%= item[:percent] %>%</span>
+          </div>
+          <div class="text-left md:text-right">
+            <p class="text-sm font-semibold"><%= money_from_cents(item[:cents]) %></p>
+            <% if item[:budget_cents].present? %>
+              <p class="text-xs text-zinc-500"><%= item[:budget_percent] %>% budget</p>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
     </div>
   </div>
 
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-base font-semibold">Cutback recommendations</h2>
-    <div class="mt-4 space-y-3">
+  <div class="border border-zinc-300 bg-zinc-50">
+    <div class="border-b border-zinc-300 px-4 py-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Cutback targets</h2>
+    </div>
+    <div class="divide-y divide-zinc-200">
       <% recommendations.each do |recommendation| %>
-        <article class="rounded-md border border-slate-200 p-4">
-          <div class="flex items-start justify-between gap-4">
-            <h3 class="text-sm font-semibold text-slate-900"><%= recommendation[:title] %></h3>
-            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"><%= recommendation[:severity] %></span>
+        <%= link_to transactions_path(recommendation[:filters]), class: "block px-4 py-3 hover:bg-white" do %>
+          <div class="flex items-start justify-between gap-3">
+            <h3 class="text-sm font-semibold text-zinc-950"><%= recommendation[:title] %></h3>
+            <span class="border border-zinc-300 px-1.5 py-0.5 text-[11px] font-semibold uppercase text-zinc-600"><%= recommendation[:severity] %></span>
           </div>
-          <p class="mt-2 text-sm leading-6 text-slate-600"><%= recommendation[:body] %></p>
-        </article>
+          <p class="mt-1 text-xs leading-5 text-zinc-600"><%= recommendation[:body] %></p>
+        <% end %>
       <% end %>
     </div>
   </div>
 </section>
 
-<section class="mb-8 grid gap-6 lg:grid-cols-2">
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-base font-semibold">Day-of-week frequency</h2>
-    <div class="mt-6 flex h-56 items-end gap-3">
+<section class="mb-5 grid gap-5 xl:grid-cols-2">
+  <div class="border border-zinc-300 bg-zinc-50 p-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Day-of-week frequency</h2>
+      <span class="text-xs text-zinc-500">click a day</span>
+    </div>
+    <div class="mt-4 flex h-48 items-end gap-2">
       <% day_totals.each do |day| %>
-        <% height = max_day_count.positive? ? [((day[:count].to_f / max_day_count) * 100).round, 8].max : 8 %>
-        <div class="flex min-w-0 flex-1 flex-col items-center gap-2">
-          <div class="flex h-40 w-full items-end rounded-md bg-slate-100">
-            <div class="w-full rounded-md bg-cyan-700" style="height: <%= height %>%"></div>
+        <% height = max_day_count.positive? ? [((day[:count].to_f / max_day_count) * 100).round, 6].max : 6 %>
+        <%= link_to transactions_path(day[:filters]), class: "flex min-w-0 flex-1 flex-col items-center gap-2 hover:opacity-80" do %>
+          <div class="flex h-36 w-full items-end bg-zinc-200">
+            <div class="w-full bg-zinc-900" style="height: <%= height %>%"></div>
           </div>
           <div class="text-center">
-            <p class="text-xs font-semibold text-slate-700"><%= day[:name] %></p>
-            <p class="text-xs text-slate-500"><%= day[:count] %></p>
+            <p class="text-xs font-semibold text-zinc-800"><%= day[:name] %></p>
+            <p class="text-xs text-zinc-500"><%= day[:count] %></p>
           </div>
-        </div>
+        <% end %>
       <% end %>
     </div>
   </div>
 
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-base font-semibold">Six-month spend trend</h2>
-    <div class="mt-6 flex h-56 items-end gap-3">
+  <div class="border border-zinc-300 bg-zinc-50 p-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Recent month movement</h2>
+      <span class="text-xs font-semibold <%= month_delta[:cents].positive? ? "text-red-500" : "text-emerald-700" %>">
+        <%= month_delta[:cents].positive? ? "+" : "" %><%= money_from_cents(month_delta[:cents]) %>
+      </span>
+    </div>
+    <div class="mt-4 flex h-48 items-end gap-3">
       <% month_trend.each do |month| %>
-        <% height = max_month.positive? ? [((month[:cents].to_f / max_month) * 100).round, 8].max : 8 %>
-        <div class="flex min-w-0 flex-1 flex-col items-center gap-2">
-          <div class="flex h-40 w-full items-end rounded-md bg-slate-100">
-            <div class="w-full rounded-md bg-blue-700" style="height: <%= height %>%"></div>
+        <% height = max_month.positive? ? [((month[:cents].to_f / max_month) * 100).round, 6].max : 6 %>
+        <%= link_to transactions_path(month[:filters]), class: "flex min-w-0 flex-1 flex-col items-center gap-2 hover:opacity-80" do %>
+          <div class="flex h-36 w-full items-end bg-zinc-200">
+            <div class="w-full bg-zinc-900" style="height: <%= height %>%"></div>
           </div>
           <div class="text-center">
-            <p class="text-xs font-semibold text-slate-700"><%= month[:label] %></p>
-            <p class="text-xs text-slate-500"><%= money_from_cents(month[:cents]) %></p>
+            <p class="text-xs font-semibold text-zinc-800"><%= month[:label] %></p>
+            <p class="text-xs text-zinc-500"><%= money_from_cents(month[:cents]) %></p>
           </div>
-        </div>
+        <% end %>
       <% end %>
     </div>
   </div>
 </section>
 
-<section class="mb-8 grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-base font-semibold">Top merchants this month</h2>
-    <div class="mt-4 divide-y divide-slate-100">
+<section class="mb-5 grid gap-5 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
+  <div class="border border-zinc-300 bg-zinc-50">
+    <div class="border-b border-zinc-300 px-4 py-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Top merchants</h2>
+    </div>
+    <div class="divide-y divide-zinc-200">
       <% top_merchants.each do |merchant| %>
-        <div class="flex items-center justify-between gap-4 py-3">
-          <div>
-            <p class="text-sm font-medium text-slate-900"><%= merchant[:merchant].titleize %></p>
-            <p class="text-xs text-slate-500"><%= pluralize(merchant[:count], "purchase") %></p>
+        <%= link_to transactions_path(merchant[:filters]), class: "flex items-center justify-between gap-4 px-4 py-3 hover:bg-white" do %>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold text-zinc-950"><%= merchant[:merchant].titleize %></p>
+            <p class="text-xs text-zinc-500"><%= pluralize(merchant[:count], "purchase") %></p>
           </div>
           <p class="text-sm font-semibold"><%= money_from_cents(merchant[:cents]) %></p>
-        </div>
+        <% end %>
       <% end %>
     </div>
   </div>
 
-  <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
-    <div class="border-b border-slate-200 px-5 py-4">
-      <div class="flex items-center justify-between gap-4">
-        <h2 class="text-base font-semibold">Latest transactions</h2>
-        <%= link_to "View all", transactions_path, class: "text-sm font-semibold text-blue-700 hover:text-blue-900" %>
-      </div>
+  <div class="border border-zinc-300 bg-zinc-50">
+    <div class="flex items-center justify-between border-b border-zinc-300 px-4 py-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Latest transactions</h2>
+      <%= link_to "View all", transactions_path, class: "text-xs font-semibold text-zinc-600 hover:text-zinc-950" %>
     </div>
     <div class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-slate-200 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-          <tr>
-            <th class="px-5 py-3">Date</th>
-            <th class="px-5 py-3">Merchant</th>
-            <th class="px-5 py-3">Category</th>
-            <th class="px-5 py-3 text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
+      <table class="min-w-full divide-y divide-zinc-200 text-sm">
+        <tbody class="divide-y divide-zinc-200">
           <% @transactions.each do |transaction| %>
-            <tr class="hover:bg-slate-50">
-              <td class="whitespace-nowrap px-5 py-4 text-slate-500"><%= transaction.occurred_on.strftime("%b %-d") %></td>
-              <td class="max-w-sm px-5 py-4 font-medium text-slate-900"><%= transaction.description %></td>
-              <td class="px-5 py-4"><%= category_badge(transaction.category) %></td>
-              <td class="whitespace-nowrap px-5 py-4 text-right font-semibold <%= transaction_amount_class(transaction) %>"><%= transaction_money(transaction) %></td>
+            <tr class="hover:bg-white">
+              <td class="whitespace-nowrap px-4 py-3 text-zinc-500"><%= transaction.occurred_on.strftime("%b %-d") %></td>
+              <td class="max-w-sm px-4 py-3 font-medium text-zinc-950"><%= transaction.description %></td>
+              <td class="px-4 py-3"><%= category_badge(transaction.category) %></td>
+              <td class="whitespace-nowrap px-4 py-3 text-right font-semibold <%= transaction_amount_class(transaction) %>"><%= transaction_money(transaction) %></td>
             </tr>
           <% end %>
         </tbody>
@@ -192,21 +180,21 @@ end %>
   </div>
 </section>
 
-<section class="mb-8 grid gap-6 lg:grid-cols-[minmax(320px,0.45fr)_minmax(0,0.55fr)]">
-  <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 class="text-base font-semibold">Import CSV</h2>
-    <%= form_with url: imports_path, multipart: true, class: "mt-4 space-y-4" do |form| %>
-      <%= form.file_field :csv_file, accept: ".csv,text/csv", class: "block w-full rounded-md border border-slate-300 bg-white text-sm file:mr-4 file:border-0 file:bg-slate-100 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200" %>
-      <%= form.submit "Import transactions", class: "w-full rounded-md bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800" %>
+<section class="grid gap-5 xl:grid-cols-[minmax(300px,0.35fr)_minmax(0,0.65fr)]">
+  <div class="border border-zinc-300 bg-zinc-50 p-4">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-700">Import CSV</h2>
+    <%= form_with url: imports_path, multipart: true, class: "mt-3 space-y-3" do |form| %>
+      <%= form.file_field :csv_file, accept: ".csv,text/csv", class: "block w-full border border-zinc-300 bg-white text-xs file:mr-3 file:border-0 file:bg-zinc-200 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-zinc-800 hover:file:bg-zinc-300" %>
+      <%= form.submit "Import transactions", class: "w-full border border-zinc-950 bg-zinc-950 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800" %>
     <% end %>
   </div>
 
-  <div class="grid gap-4 md:grid-cols-2">
+  <div class="grid gap-3 md:grid-cols-2">
     <% @insights.each do |insight| %>
-      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500"><%= insight.severity %></p>
-        <h3 class="mt-2 text-base font-semibold"><%= insight.title %></h3>
-        <p class="mt-2 text-sm leading-6 text-slate-600"><%= insight.body %></p>
+      <article class="border border-zinc-300 bg-zinc-50 p-4">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-zinc-500"><%= insight.severity %> · <%= insight.starts_on&.strftime("%b %Y") %></p>
+        <h3 class="mt-1 text-sm font-semibold text-zinc-950"><%= insight.title %></h3>
+        <p class="mt-1 text-xs leading-5 text-zinc-600"><%= insight.body %></p>
       </article>
     <% end %>
   </div>

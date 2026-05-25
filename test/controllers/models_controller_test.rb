@@ -16,15 +16,10 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
   test "refreshes RubyLLM models" do
     sign_in_as users(:one)
 
-    singleton = RubyLlmModelImporter.singleton_class
-    singleton.alias_method :refresh_without_test!, :refresh!
-    RubyLlmModelImporter.define_singleton_method(:refresh!) { true }
-
-    post models_path
+    assert_enqueued_with(job: RefreshRubyLlmModelsJob) do
+      post models_path
+    end
 
     assert_redirected_to models_path
-  ensure
-    singleton&.alias_method :refresh!, :refresh_without_test!
-    singleton&.remove_method :refresh_without_test!
   end
 end

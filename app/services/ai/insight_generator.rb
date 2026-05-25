@@ -4,7 +4,7 @@ module Ai
       @model = model
     end
 
-    def call(start_date: 30.days.ago.to_date, end_date: Date.current)
+    def call(start_date: 4.months.ago.to_date.beginning_of_month, end_date: Date.current)
       transactions = ExpenseTransaction.includes(:category).between(start_date, end_date)
       payload = summary_payload(transactions)
       insights = llm_insights(payload) if ai_configured?
@@ -33,9 +33,12 @@ module Ai
 
     def llm_insights(payload)
       response = RubyLLM.chat(model:).with_schema(ExpenseInsightsSchema).ask(<<~PROMPT)
-        Generate 4 concise, useful personal finance insights from this transaction summary.
-        Focus on where spending is concentrated, which flexible categories to cut, repeated merchant habits,
-        weekday frequency patterns, and realistic savings recommendations.
+        Generate 4 to 8 concise, useful personal finance insights from this recent transaction summary.
+        Always include the four standard angles when the data supports them: category concentration,
+        flexible cutback opportunities, repeat merchant habits, and weekday frequency patterns.
+        Add any other materially useful observations you see, especially month-to-month changes,
+        spikes, drops, new recurring spend, and realistic savings recommendations.
+        Ignore long-term yearly trends. Focus on the last few months and current month-to-month variation.
         Data: #{JSON.pretty_generate(payload)}
       PROMPT
 
@@ -95,20 +98,32 @@ module Ai
         severity: "success"
       } if insights.size < 4
 
-      insights.first(4)
+      insights.first(6)
     end
 
     def summary_payload(transactions)
-      expense_transactions = transactions.select(&:expense?)
+      transaction_records = transactions.to_a
+      expense_transactions = transaction_records.select(&:expense?)
+      month_groups = expense_transactions.group_by { |transaction| transaction.occurred_on.beginning_of_month }
+      category_month_groups = expense_transactions.group_by { |transaction| transaction.category&.name || "Uncategorized" }
 
       {
         period: {
-          start_date: transactions.minimum(:occurred_on),
-          end_date: transactions.maximum(:occurred_on)
+          start_date: transaction_records.map(&:occurred_on).min,
+          end_date: transaction_records.map(&:occurred_on).max
         },
-        transaction_count: transactions.size,
+        generated_on: Date.current,
+        transaction_count: transaction_records.size,
         expense_total_cents: expense_transactions.sum(&:amount_cents),
-        credit_total_cents: transactions.reject(&:expense?).sum(&:amount_cents),
+        credit_total_cents: transaction_records.reject(&:expense?).sum(&:amount_cents),
+        month_totals: month_groups.sort.to_h.transform_keys { |month| month.strftime("%Y-%m") }
+                                  .transform_values { |items| items.sum(&:amount_cents) },
+        category_month_totals: category_month_groups.transform_values do |items|
+          items.group_by { |transaction| transaction.occurred_on.beginning_of_month }
+               .sort.to_h
+               .transform_keys { |month| month.strftime("%Y-%m") }
+               .transform_values { |month_items| month_items.sum(&:amount_cents) }
+        end,
         category_totals: expense_transactions.group_by { |transaction| transaction.category&.name || "Uncategorized" }
                                              .transform_values { |items| items.sum(&:amount_cents) },
         merchant_totals: expense_transactions.group_by { |transaction| normalized_merchant(transaction.description) }

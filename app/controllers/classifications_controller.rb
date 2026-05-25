@@ -1,9 +1,8 @@
 class ClassificationsController < ApplicationController
   def create
-    scope = ExpenseTransaction.unclassified
-    count = scope.count
-    Ai::TransactionClassifier.new.classify_all(scope)
+    count = ExpenseTransaction.unclassified.count
+    ClassifyTransactionsJob.perform_later
 
-    redirect_to root_path, notice: "Classified #{count} transactions."
+    redirect_to root_path, notice: "Queued classification for #{count} unclassified transactions."
   end
 end

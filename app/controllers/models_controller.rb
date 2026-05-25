@@ -12,9 +12,9 @@ class ModelsController < ApplicationController
   end
 
   def create
-    RubyLlmModelImporter.refresh!
+    RefreshRubyLlmModelsJob.perform_later
 
-    redirect_to models_path, notice: "RubyLLM models refreshed. #{Model.count} models are available."
+    redirect_to models_path, notice: "Queued RubyLLM model refresh. #{Model.count} models are currently available."
   rescue StandardError => error
     redirect_to models_path, alert: "Model refresh failed: #{error.message}"
   end

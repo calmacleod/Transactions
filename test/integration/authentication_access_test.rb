@@ -15,7 +15,7 @@ class AuthenticationAccessTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Spending dashboard"
     assert_includes response.body, "Day-of-week frequency"
-    assert_includes response.body, "Cutback recommendations"
+    assert_includes response.body, "Cutback targets"
   end
 
   test "sign in page does not expose the admin email as sample text" do

@@ -4,6 +4,7 @@ Rails.application.routes.draw do
   root "dashboard#index"
 
   resources :transactions, only: %i[index update]
+  resources :saved_transaction_queries, only: %i[create destroy]
   resources :imports, only: :create
   resources :insights, only: %i[index create]
   resources :models, only: %i[index create]

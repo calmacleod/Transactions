@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_25_143203) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_25_150500) do
   create_table "categories", force: :cascade do |t|
     t.string "color"
     t.datetime "created_at", null: false
@@ -85,6 +85,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_25_143203) do
     t.index ["provider"], name: "index_models_on_provider"
   end
 
+  create_table "saved_transaction_queries", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.json "filters", default: {}, null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["user_id", "name"], name: "index_saved_transaction_queries_on_user_id_and_name", unique: true
+    t.index ["user_id"], name: "index_saved_transaction_queries_on_user_id"
+  end
+
   create_table "sessions", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "ip_address"
@@ -104,5 +114,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_25_143203) do
 
   add_foreign_key "expense_transactions", "categories"
   add_foreign_key "expense_transactions", "import_batches"
+  add_foreign_key "saved_transaction_queries", "users"
   add_foreign_key "sessions", "users"
 end

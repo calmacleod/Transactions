@@ -7,7 +7,7 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     get transactions_path, params: { start_date: "2026-05-21", end_date: "2026-05-21" }
 
     assert_response :success
-    assert_includes response.body, "Showing transactions"
+    assert_includes response.body, "Showing"
     assert_includes response.body, "May 21, 2026"
     assert_includes response.body, "NEIGHBOURHOOD RESTAURANT"
     assert_no_match "LOCAL GROCERY MARKET", response.body

@@ -9,15 +9,15 @@ module ApplicationHelper
   end
 
   def transaction_amount_class(transaction)
-    transaction.expense? ? "text-slate-900" : "text-emerald-700"
+    transaction.expense? ? "text-zinc-900" : "text-emerald-700"
   end
 
   def category_badge(category)
-    return tag.span("Unclassified", class: "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600") if category.blank?
+    return tag.span("Unclassified", class: "border border-zinc-300 bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600") if category.blank?
 
-    tag.span(class: "inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200") do
+    tag.span(class: "inline-flex items-center gap-1.5 border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-700") do
       safe_join([
-        tag.span("", class: "size-2 rounded-full", style: "background-color: #{category.color || '#64748b'}"),
+        tag.span("", class: "size-2", style: "background-color: #{category.color || '#52525b'}"),
         category.name
       ])
     end

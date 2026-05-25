@@ -1,13 +1,13 @@
 class TransactionsController < ApplicationController
   def index
     @categories = Category.by_name
-    @transactions = ExpenseTransaction.includes(:category).recent
-    @transactions = @transactions.where(category_id: params[:category_id]) if params[:category_id].present?
-    @transactions = @transactions.where(direction: params[:direction]) if params[:direction].present?
-    @start_date = parsed_date(params[:start_date])
-    @end_date = parsed_date(params[:end_date])
-    @transactions = @transactions.where(occurred_on: @start_date..) if @start_date.present?
-    @transactions = @transactions.where(occurred_on: ..@end_date) if @end_date.present?
+    @saved_queries = Current.session.user.saved_transaction_queries.ordered
+    @selected_saved_query = @saved_queries.find_by(id: params[:saved_query_id])
+    @filter_params = merged_filter_params
+    @filter = TransactionFilter.new(@filter_params)
+    @transactions = @filter.call
+    @start_date = @filter.start_date
+    @end_date = @filter.end_date
   end
 
   def update
@@ -23,9 +23,10 @@ class TransactionsController < ApplicationController
     params.require(:expense_transaction).permit(:category_id)
   end
 
-  def parsed_date(value)
-    Date.iso8601(value) if value.present?
-  rescue ArgumentError
-    nil
+  def merged_filter_params
+    saved_filters = @selected_saved_query&.filters || {}
+    request_filters = TransactionFilter.clean(params)
+
+    saved_filters.merge(request_filters)
   end
 end

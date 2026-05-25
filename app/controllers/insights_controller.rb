@@ -4,10 +4,10 @@
     end
 
     def create
-      start_date = ExpenseTransaction.minimum(:occurred_on) || 30.days.ago.to_date
-      end_date = ExpenseTransaction.maximum(:occurred_on) || Date.current
-      insights = Ai::InsightGenerator.new.call(start_date:, end_date:)
+      start_date = 4.months.ago.to_date.beginning_of_month
+      end_date = Date.current
+      GenerateInsightsJob.perform_later(start_date, end_date)
 
-      redirect_to root_path, notice: "Generated #{insights.size} insights."
+      redirect_to root_path, notice: "Queued insight generation for recent month-to-month spending."
     end
   end

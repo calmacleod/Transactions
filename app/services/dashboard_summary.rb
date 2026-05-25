@@ -40,13 +40,15 @@ class DashboardSummary
       {
         name: name.first(3),
         full_name: name,
+        wday:,
         count: records.size,
-        cents: records.sum(&:amount_cents)
+        cents: records.sum(&:amount_cents),
+        filters: range_filters.merge(day_of_week: wday)
       }
     end
   end
 
-  def month_trend(months: 6)
+  def month_trend(months: 4)
     end_month = Date.current.beginning_of_month
     start_month = (months - 1).months.ago.to_date.beginning_of_month
     records = ExpenseTransaction.expenses.where(occurred_on: start_month..end_month.end_of_month)
@@ -58,14 +60,28 @@ class DashboardSummary
       {
         label: month.strftime("%b"),
         full_label: month.strftime("%B %Y"),
-        cents: totals.fetch(month, []).sum(&:amount_cents)
+        cents: totals.fetch(month, []).sum(&:amount_cents),
+        filters: {
+          start_date: month.iso8601,
+          end_date: month.end_of_month.iso8601,
+          direction: "debit"
+        }
       }
     end
   end
 
+  def month_to_month_delta
+    current_month, previous_month = month_trend.last(2).reverse
+    return { cents: 0, percent: 0 } if current_month.blank? || previous_month.blank?
+
+    cents = current_month[:cents] - previous_month[:cents]
+    percent = percentage(cents.abs, previous_month[:cents])
+    { cents:, percent: }
+  end
+
   def top_merchants(limit: 5)
     expense_records.group_by { |transaction| normalized_merchant(transaction.description) }
-                   .map { |merchant, records| { merchant:, count: records.size, cents: records.sum(&:amount_cents) } }
+                   .map { |merchant, records| { merchant:, count: records.size, cents: records.sum(&:amount_cents), filters: range_filters.merge(query: merchant) } }
                    .sort_by { |item| -item[:cents] }
                    .first(limit)
   end
@@ -97,13 +113,15 @@ class DashboardSummary
     cents = records.sum(&:amount_cents)
 
     {
+      category_id: category.persisted? ? category.id : nil,
       name: category.name,
       color: category.color.presence || "#64748b",
       cents:,
       count: records.size,
       budget_cents: category.monthly_budget_cents,
       percent: percentage(cents, total_spend_cents),
-      budget_percent: percentage(cents, category.monthly_budget_cents)
+      budget_percent: percentage(cents, category.monthly_budget_cents),
+      filters: category.persisted? ? range_filters.merge(category_id: category.id) : range_filters.merge(classified: "unclassified")
     }
   end
 
@@ -118,7 +136,8 @@ class DashboardSummary
       title: "Bring #{over_budget[:name]} back under budget",
       body: "#{over_budget[:name]} is over its monthly target by #{money(overage)}. A 15% reduction next month would save about #{money((over_budget[:cents] * 0.15).round)}.",
       severity: "warning",
-      amount_cents: overage
+      amount_cents: overage,
+      filters: over_budget[:filters]
     }
   end
 
@@ -131,7 +150,8 @@ class DashboardSummary
       title: "Trim #{category[:name].downcase} first",
       body: "#{category[:name]} is the largest flexible category this period at #{money(category[:cents])}. Cutting it by 20% would free up #{money((category[:cents] * 0.20).round)}.",
       severity: "info",
-      amount_cents: (category[:cents] * 0.20).round
+      amount_cents: (category[:cents] * 0.20).round,
+      filters: category[:filters]
     }
   end
 
@@ -143,7 +163,8 @@ class DashboardSummary
       title: "#{busiest_day[:full_name]} is your busiest spend day",
       body: "#{busiest_day[:count]} purchases landed on #{busiest_day[:full_name]} for #{money(busiest_day[:cents])}. Check recurring habits or errands clustered on that day.",
       severity: "info",
-      amount_cents: busiest_day[:cents]
+      amount_cents: busiest_day[:cents],
+      filters: busiest_day[:filters]
     }
   end
 
@@ -155,7 +176,16 @@ class DashboardSummary
       title: "Watch repeat spending at #{merchant[:merchant].titleize}",
       body: "#{merchant[:count]} purchases at #{merchant[:merchant].titleize} total #{money(merchant[:cents])}. This is a good candidate for a monthly cap.",
       severity: "warning",
-      amount_cents: merchant[:cents]
+      amount_cents: merchant[:cents],
+      filters: merchant[:filters]
+    }
+  end
+
+  def range_filters
+    {
+      start_date: range.begin.iso8601,
+      end_date: range.end.iso8601,
+      direction: "debit"
     }
   end
 
