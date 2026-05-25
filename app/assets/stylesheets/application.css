@@ -31,6 +31,16 @@ html {
   background: var(--app-bg);
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  height: env(safe-area-inset-top, 0);
+  background: var(--app-bg);
+  pointer-events: none;
+}
+
 html,
 body {
   max-width: 100%;
@@ -664,7 +674,7 @@ textarea.input-control {
     width: auto;
     overflow: visible;
     display: block;
-    padding: 3.25rem 0.75rem 0.75rem;
+    padding: calc(3.25rem + env(safe-area-inset-top, 0)) 0.75rem 0.75rem;
     border-right: 0;
   }
 
@@ -674,7 +684,7 @@ textarea.input-control {
 
   .app-sidebar-top {
     position: fixed;
-    inset: 0 0 auto;
+    inset: env(safe-area-inset-top, 0) 0 auto;
     z-index: 30;
     display: flex;
     align-items: center;
@@ -747,7 +757,7 @@ textarea.input-control {
   }
 
   .app-sidebar {
-    padding: 2.875rem 0.625rem 0.625rem;
+    padding: calc(2.875rem + env(safe-area-inset-top, 0)) 0.625rem 0.625rem;
   }
 
   .app-sidebar-top {
