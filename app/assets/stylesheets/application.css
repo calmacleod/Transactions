@@ -37,7 +37,7 @@ body::before {
   inset: 0 0 auto;
   z-index: 40;
   height: env(safe-area-inset-top, 0);
-  background: var(--app-bg);
+  background: var(--app-sidebar);
   pointer-events: none;
 }
 

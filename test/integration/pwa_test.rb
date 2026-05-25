@@ -10,8 +10,8 @@ class PwaTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'content="width=device-width,initial-scale=1,viewport-fit=cover"'
     assert_includes response.body, 'rel="manifest" href="/manifest.json"'
     assert_includes response.body, 'name="color-scheme" content="light"'
-    assert_includes response.body, 'name="theme-color" content="#f3f4f0"'
-    assert_includes response.body, 'name="msapplication-TileColor" content="#f3f4f0"'
+    assert_includes response.body, 'name="theme-color" content="#24241f"'
+    assert_includes response.body, 'name="msapplication-TileColor" content="#24241f"'
     assert_includes response.body, 'name="apple-mobile-web-app-capable" content="yes"'
     assert_includes response.body, 'name="apple-mobile-web-app-status-bar-style" content="black-translucent"'
   end
@@ -25,7 +25,7 @@ class PwaTest < ActionDispatch::IntegrationTest
     assert_equal "Transactions", manifest.fetch("short_name")
     assert_equal "/", manifest.fetch("start_url")
     assert_equal "standalone", manifest.fetch("display")
-    assert_equal "#f3f4f0", manifest.fetch("theme_color")
+    assert_equal "#24241f", manifest.fetch("theme_color")
     assert_equal "#f3f4f0", manifest.fetch("background_color")
     assert manifest.fetch("icons").any? { |icon| icon["sizes"] == "512x512" && icon["purpose"] == "maskable" }
   end
