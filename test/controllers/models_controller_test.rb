@@ -9,7 +9,7 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_operator Model.count, :>, 0
-    assert_includes response.body, "RubyLLM Models"
+    assert_includes response.body, "RubyLLM registry"
     assert_includes response.body, "Available models"
   end
 
