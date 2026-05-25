@@ -1,0 +1,29 @@
+grocery:
+  occurred_on: 2026-05-19
+  description: LOCAL GROCERY MARKET
+  amount_cents: 5879
+  direction: debit
+  card_last4: "2222"
+  source: statement_csv
+  category: groceries
+  classification_confidence: 0.65
+  classification_reason: Matched local merchant rules.
+  classified_at: 2026-05-25 09:36:20
+  external_id: grocery-row
+  raw_data: {}
+  import_batch: statement
+
+restaurant:
+  occurred_on: 2026-05-21
+  description: NEIGHBOURHOOD RESTAURANT
+  amount_cents: 7274
+  direction: debit
+  card_last4: "2222"
+  source: statement_csv
+  category: restaurants
+  classification_confidence: 0.65
+  classification_reason: Matched local merchant rules.
+  classified_at: 2026-05-25 09:36:20
+  external_id: restaurant-row
+  raw_data: {}
+  import_batch: statement

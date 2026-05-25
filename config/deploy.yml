@@ -1,0 +1,57 @@
+<%
+require "json"
+require "shellwords"
+
+def deployment_value(key)
+  value = ENV[key]
+  return value if value && !value.empty?
+
+  project_id = ENV.fetch("KAMAL_BITWARDEN_PROJECT_ID")
+  @bitwarden_secrets ||= JSON.parse(`bws secret list #{Shellwords.escape(project_id)}`).to_h do |secret|
+    [ secret.fetch("key"), secret.fetch("value") ]
+  end
+
+  @bitwarden_secrets.fetch(key)
+end
+
+server_ip = deployment_value("KAMAL_SERVER_IP")
+app_host = deployment_value("KAMAL_APP_HOST")
+%>
+
+service: transactions
+
+image: transactions
+
+servers:
+  web:
+    - &server_ip <%= server_ip %>
+
+proxy:
+  ssl: true
+  host: <%= app_host %>
+
+registry:
+  server: localhost:5555
+
+env:
+  secret:
+    - RAILS_MASTER_KEY
+    - ADMIN_EMAIL
+    - ADMIN_PASSWORD
+  clear:
+    APP_URL: https://<%= app_host %>
+    SOLID_QUEUE_IN_PUMA: true
+
+aliases:
+  console: app exec --interactive --reuse "bin/rails console"
+  shell: app exec --interactive --reuse "bash"
+  logs: app logs -f
+  dbc: app exec --interactive --reuse "bin/rails dbconsole --include-password"
+
+volumes:
+  - "transactions_storage:/rails/storage"
+
+asset_path: /rails/public/assets
+
+builder:
+  arch: amd64

@@ -1,0 +1,76 @@
+<section class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Transactions</h1>
+    <p class="mt-2 text-sm text-slate-600">Review imported rows, confidence, and category assignments.</p>
+  </div>
+
+  <%= form_with url: transactions_path, method: :get, class: "grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end" do |form| %>
+    <div>
+      <%= form.label :start_date, "From", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.date_field :start_date, value: @start_date, class: "w-full rounded-md border-slate-300 text-sm lg:w-40" %>
+    </div>
+    <div>
+      <%= form.label :end_date, "To", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.date_field :end_date, value: @end_date, class: "w-full rounded-md border-slate-300 text-sm lg:w-40" %>
+    </div>
+    <div>
+      <%= form.label :category_id, "Category", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.select :category_id, options_from_collection_for_select(@categories, :id, :name, params[:category_id]), { include_blank: "All categories" }, class: "w-full rounded-md border-slate-300 text-sm lg:w-44" %>
+    </div>
+    <div>
+      <%= form.label :direction, "Type", class: "mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+      <%= form.select :direction, options_for_select([["All directions", ""], ["Debits", "debit"], ["Credits", "credit"]], params[:direction]), {}, class: "w-full rounded-md border-slate-300 text-sm lg:w-36" %>
+    </div>
+    <div class="flex gap-2 sm:col-span-2 lg:col-span-1">
+      <%= form.submit "Filter", class: "rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" %>
+      <%= link_to "Clear", transactions_path, class: "rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50" %>
+    </div>
+  <% end %>
+</section>
+
+<% if @start_date.present? || @end_date.present? %>
+  <p class="mb-4 text-sm text-slate-600">
+    Showing transactions
+    <% if @start_date.present? && @end_date.present? %>
+      from <%= @start_date.strftime("%b %-d, %Y") %> to <%= @end_date.strftime("%b %-d, %Y") %>.
+    <% elsif @start_date.present? %>
+      from <%= @start_date.strftime("%b %-d, %Y") %> onward.
+    <% else %>
+      through <%= @end_date.strftime("%b %-d, %Y") %>.
+    <% end %>
+  </p>
+<% end %>
+
+<div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="min-w-full divide-y divide-slate-200 text-sm">
+    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <tr>
+        <th class="px-5 py-3">Date</th>
+        <th class="px-5 py-3">Description</th>
+        <th class="px-5 py-3">Category</th>
+        <th class="px-5 py-3">Confidence</th>
+        <th class="px-5 py-3 text-right">Amount</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      <% @transactions.each do |transaction| %>
+        <tr class="align-top hover:bg-slate-50">
+          <td class="whitespace-nowrap px-5 py-4 text-slate-500"><%= transaction.occurred_on.strftime("%b %-d, %Y") %></td>
+          <td class="px-5 py-4">
+            <p class="font-medium text-slate-900"><%= transaction.description %></p>
+            <% if transaction.classification_reason.present? %>
+              <p class="mt-1 max-w-xl text-xs leading-5 text-slate-500"><%= transaction.classification_reason %></p>
+            <% end %>
+          </td>
+          <td class="px-5 py-4">
+            <%= form_with model: transaction, url: transaction_path(transaction), method: :patch do |form| %>
+              <%= form.select :category_id, options_from_collection_for_select(@categories, :id, :name, transaction.category_id), { include_blank: "Unclassified" }, class: "w-44 rounded-md border-slate-300 text-sm", onchange: "this.form.requestSubmit()" %>
+            <% end %>
+          </td>
+          <td class="whitespace-nowrap px-5 py-4 text-slate-500"><%= confidence_label(transaction) %></td>
+          <td class="whitespace-nowrap px-5 py-4 text-right font-semibold <%= transaction_amount_class(transaction) %>"><%= transaction_money(transaction) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

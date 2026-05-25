@@ -1,0 +1,7 @@
+category:
+  title: Groceries leads spending
+  body: Groceries account for the largest spend.
+  severity: info
+  starts_on: 2026-05-01
+  ends_on: 2026-05-31
+  payload: {}

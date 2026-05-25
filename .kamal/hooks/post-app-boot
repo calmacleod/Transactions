@@ -1,0 +1,15 @@
+#!/bin/sh
+# Warm the Rails app after boot so the first real request is not the slow path.
+
+APP_HOST="localhost"
+APP_PORT="${KAMAL_CONTAINER_NAME:+$(docker inspect --format='{{(index (index .NetworkSettings.Ports "3000/tcp") 0).HostPort}}' "$KAMAL_CONTAINER_NAME" 2>/dev/null)}"
+APP_PORT="${APP_PORT:-3000}"
+
+echo "Warming up $KAMAL_SERVICE_NAME on $KAMAL_HOSTS..."
+
+for i in $(seq 1 5); do
+  curl --silent --output /dev/null --max-time 10 "http://${APP_HOST}:${APP_PORT}/up" || true
+  curl --silent --output /dev/null --max-time 10 "http://${APP_HOST}:${APP_PORT}/session/new" || true
+done
+
+echo "Warm-up complete."
