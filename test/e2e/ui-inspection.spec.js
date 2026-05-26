@@ -104,6 +104,7 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await expect(page.getByRole("columnheader", { name: "Description" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Confidence" })).toHaveCount(0)
   await expect(page.locator(".confidence-chip").first()).toBeVisible()
+  await expectDesktopCategoryPickersAreLazy(page)
   await expectTransactionDetailsStayInDescriptionColumn(page)
   await expectButtonsFeelNative(page)
 
@@ -369,6 +370,16 @@ async function expectButtonsFeelNative(page) {
   })
 
   expect(offenders).toEqual([])
+}
+
+async function expectDesktopCategoryPickersAreLazy(page) {
+  const row = page.locator("[data-transaction-row-id]").first()
+  await expect(row.getByRole("combobox")).toHaveCount(0)
+
+  const categoryButton = row.getByRole("button", { name: /Change category for/i })
+  await expect(categoryButton).toBeVisible()
+  await categoryButton.click()
+  await expect(row.getByRole("combobox")).toBeVisible()
 }
 
 async function expectTransactionDetailsStayInDescriptionColumn(page) {

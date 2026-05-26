@@ -12,6 +12,7 @@
   import Check from "@lucide/svelte/icons/check"
   import Search from "@lucide/svelte/icons/search"
   import X from "@lucide/svelte/icons/x"
+  import CategoryPicker from "./CategoryPicker.svelte"
 
   export let categories = []
   export let saved_queries = []
@@ -35,12 +36,15 @@
   let shiftDown = false
   let lastShiftHoverId = null
   let suppressNextRowClick = false
+  let desktopLayout = typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : true
 
   $: selectedTransactions = transactions.filter((transaction) => selectedIds.has(transaction.id))
   $: selectedTotal = selectedTransactions.reduce((sum, transaction) => sum + Number(transaction.signed_amount_cents || 0), 0)
   $: allVisibleSelected = transactions.length > 0 && transactions.every((transaction) => selectedIds.has(transaction.id))
 
   onMount(() => {
+    const layoutMedia = window.matchMedia("(min-width: 768px)")
+    const updateLayout = () => (desktopLayout = layoutMedia.matches)
     const stopDrag = () => {
       dragSelecting = false
       dragSelectionMode = null
@@ -76,13 +80,16 @@
 
     document.addEventListener("pointermove", selectRowUnderPointer)
     document.addEventListener("pointerup", stopDrag)
+    layoutMedia.addEventListener("change", updateLayout)
     window.addEventListener("keydown", handleKeyDown, true)
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", stopDrag)
+    updateLayout()
 
     return () => {
       document.removeEventListener("pointermove", selectRowUnderPointer)
       document.removeEventListener("pointerup", stopDrag)
+      layoutMedia.removeEventListener("change", updateLayout)
       window.removeEventListener("keydown", handleKeyDown, true)
       window.removeEventListener("keyup", handleKeyUp, true)
       window.removeEventListener("blur", stopDrag)
@@ -355,7 +362,8 @@
   {/if}
 
   <Card class="mb-4 overflow-hidden">
-    <div class="divide-y divide-border md:hidden" data-testid="mobile-transactions-list">
+    {#if !desktopLayout}
+    <div class="divide-y divide-border" data-testid="mobile-transactions-list">
       {#if transactions.length}
         {#each transactions as transaction}
           <div
@@ -387,12 +395,7 @@
 
             <div class="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
               <span aria-hidden="true"></span>
-              <NativeSelect value={transaction.category_id || ""} class="h-9 w-full text-xs" onchange={(event) => updateCategory(transaction, event.currentTarget.value)}>
-                <NativeSelectOption value="">Unclassified</NativeSelectOption>
-                {#each categories as category}
-                  <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>
-                {/each}
-              </NativeSelect>
+              <CategoryPicker {categories} {transaction} eager selectClass="h-9 w-full text-xs" onChange={updateCategory} />
             </div>
           </div>
         {/each}
@@ -400,8 +403,10 @@
         <p class="px-4 py-8 text-center text-sm text-muted-foreground">No matching transactions.</p>
       {/if}
     </div>
+    {/if}
 
-    <div class="hidden md:block">
+    {#if desktopLayout}
+    <div>
       <Table class="min-w-[64rem] table-fixed">
         <TableHeader>
           <TableRow>
@@ -445,12 +450,7 @@
                   {/if}
                 </TableCell>
                 <TableCell class="w-56">
-                  <NativeSelect value={transaction.category_id || ""} class="w-48" onchange={(event) => updateCategory(transaction, event.currentTarget.value)}>
-                    <NativeSelectOption value="">Unclassified</NativeSelectOption>
-                    {#each categories as category}
-                      <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>
-                    {/each}
-                  </NativeSelect>
+                  <CategoryPicker {categories} {transaction} className="w-48" selectClass="w-48" onChange={updateCategory} />
                 </TableCell>
                 <TableCell class={`money-value pr-6 text-right font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</TableCell>
               </TableRow>
@@ -463,6 +463,7 @@
         </TableBody>
       </Table>
     </div>
+    {/if}
 
     <div class="flex flex-col gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground lg:flex-row lg:items-center">
       <p>
