@@ -81,6 +81,7 @@
 			aria-disabled={disabled}
 			role={disabled ? "link" : undefined}
 			tabindex={disabled ? -1 : undefined}
+			draggable="false"
 			{prefetch}
 			{cacheFor}
 			{...restProps}
@@ -96,6 +97,7 @@
 			aria-disabled={disabled}
 			role={disabled ? "link" : undefined}
 			tabindex={disabled ? -1 : undefined}
+			draggable="false"
 			{...restProps}
 		>
 			{@render children?.()}
@@ -108,6 +110,7 @@
 		class={cn(buttonVariants({ variant, size }), className)}
 		{type}
 		{disabled}
+		draggable="false"
 		{...restProps}
 	>
 		{@render children?.()}

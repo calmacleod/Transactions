@@ -78,12 +78,29 @@
   function navPrefetchMode(item) {
     return item.fullReload ? false : mountedNavPrefetch
   }
+
+  function mouseDownNavigate(event, href, options = {}) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
+    event.preventDefault()
+    if (options.closeMobile) mobileOpen = false
+    router.visit(href)
+  }
+
+  function ignoreMouseClickAfterMouseDown(event, options = {}) {
+    if (event.detail > 0) {
+      event.preventDefault()
+      return
+    }
+
+    if (options.closeMobile) mobileOpen = false
+  }
 </script>
 
-<div class="min-h-screen bg-background text-foreground">
+<div class="min-h-screen bg-background text-foreground" data-app-chrome>
   <aside class="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-card/95 px-3 py-4 shadow-sm xl:flex xl:flex-col">
     <div class="px-2">
-      <Link href={paths.root || "/"} prefetch cacheFor="30s" class="flex items-center gap-3">
+      <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/")} onclick={ignoreMouseClickAfterMouseDown}>
         <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
           <BarChart3 class="size-5" />
         </span>
@@ -100,7 +117,7 @@
       <nav class="grid gap-1">
         {#each navItems as item}
           {#if item.fullReload}
-            <a href={item.href} data-turbo="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+            <a href={item.href} data-turbo="false" draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
               <svelte:component this={item.icon} class="size-4" />
               <span>{item.label}</span>
             </a>
@@ -109,6 +126,9 @@
               href={item.href}
               prefetch={navPrefetchMode(item)}
               cacheFor="1m"
+              draggable="false"
+              onmousedown={(event) => mouseDownNavigate(event, item.href)}
+              onclick={ignoreMouseClickAfterMouseDown}
               class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
             >
               <svelte:component this={item.icon} class="size-4" />
@@ -143,7 +163,7 @@
     <Button variant="outline" size="icon" aria-label="Open navigation" onclick={() => (mobileOpen = true)}>
       <Menu class="size-4" />
     </Button>
-    <Link href={paths.root || "/"} prefetch cacheFor="30s" class="flex items-center gap-3">
+    <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/")} onclick={ignoreMouseClickAfterMouseDown}>
       <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
         <BarChart3 class="size-5" />
       </span>
@@ -166,7 +186,7 @@
       <SheetHeader class="sr-only">
         <SheetTitle>Navigation</SheetTitle>
       </SheetHeader>
-      <Link href={paths.root || "/"} prefetch cacheFor="30s" class="flex items-center gap-3">
+      <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/", { closeMobile: true })} onclick={(event) => ignoreMouseClickAfterMouseDown(event, { closeMobile: true })}>
         <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
           <BarChart3 class="size-5" />
         </span>
@@ -180,7 +200,7 @@
         <nav class="grid gap-1">
           {#each navItems as item}
             {#if item.fullReload}
-              <a href={item.href} data-turbo="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+              <a href={item.href} data-turbo="false" draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>
               </a>
@@ -189,7 +209,9 @@
                 href={item.href}
                 prefetch
                 cacheFor="1m"
-                onclick={() => (mobileOpen = false)}
+                draggable="false"
+                onmousedown={(event) => mouseDownNavigate(event, item.href, { closeMobile: true })}
+                onclick={(event) => ignoreMouseClickAfterMouseDown(event, { closeMobile: true })}
                 class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
               >
                 <svelte:component this={item.icon} class="size-4" />

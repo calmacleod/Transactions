@@ -4,6 +4,7 @@
 @plugin '@tailwindcss/forms';
 
 @source '../pages/**/*.{svelte,js,ts}';
+@source '../layouts/**/*.{svelte,js,ts}';
 @source '../lib/**/*.{svelte,js,ts}';
 
 @custom-variant dark (&:is(.dark *));
@@ -82,11 +83,45 @@
     max-width: 100%;
     min-height: 100%;
     overflow-x: hidden;
+    overscroll-behavior-x: none;
     background: var(--background);
   }
 
   body {
     color: var(--foreground);
+  }
+
+  button,
+  a,
+  input,
+  label,
+  select,
+  textarea,
+  [role="button"],
+  [data-slot="button"],
+  [data-app-chrome] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  [role="button"],
+  [data-slot="button"] {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+    touch-action: manipulation;
+    user-select: none;
+  }
+
+  button *,
+  [role="button"] *,
+  [data-slot="button"] *,
+  [data-app-chrome] a,
+  [data-app-chrome] a * {
+    -webkit-user-drag: none;
+    user-select: none;
   }
 
   strong {

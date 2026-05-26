@@ -72,6 +72,19 @@ test("sidebar active state follows Inertia navigation without reload", async ({ 
   await expect(transactionsLink).not.toHaveClass(/bg-primary/)
 })
 
+test("app chrome navigation starts on mouse down", async ({ page }) => {
+  await page.goto("/")
+
+  const transactionsLink = page.getByRole("link", { name: /^Transactions$/ }).first()
+  const box = await transactionsLink.boundingBox()
+  expect(box).not.toBeNull()
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await page.mouse.up()
+})
+
 test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
   await page.goto("/")
 
@@ -92,6 +105,7 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await expect(page.getByRole("columnheader", { name: "Confidence" })).toHaveCount(0)
   await expect(page.locator(".confidence-chip").first()).toBeVisible()
   await expectTransactionDetailsStayInDescriptionColumn(page)
+  await expectButtonsFeelNative(page)
 
   await expectNoViewportOverflow(page)
   await expectNoUnnamedVisibleButtons(page)
@@ -325,6 +339,28 @@ async function expectNoUnnamedVisibleButtons(page) {
   })
 
   expect(unnamedButtons).toEqual([])
+}
+
+async function expectButtonsFeelNative(page) {
+  const offenders = await page.locator("button:visible, [data-slot='button']:visible").evaluateAll((elements) => {
+    return elements
+      .map((element) => {
+        const styles = window.getComputedStyle(element)
+
+        return {
+          text: element.textContent?.trim(),
+          ariaLabel: element.getAttribute("aria-label"),
+          draggable: element.draggable,
+          userSelect: styles.userSelect,
+          webkitUserSelect: styles.webkitUserSelect,
+          touchAction: styles.touchAction,
+          html: element.outerHTML.slice(0, 180),
+        }
+      })
+      .filter((element) => element.draggable || !["none", "contain"].includes(element.userSelect) || element.touchAction !== "manipulation")
+  })
+
+  expect(offenders).toEqual([])
 }
 
 async function expectTransactionDetailsStayInDescriptionColumn(page) {
