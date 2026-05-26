@@ -37,7 +37,10 @@
         </CardHeader>
         <CardContent>
           <p class="text-sm leading-6 text-muted-foreground">{insight.body}</p>
-          <p class="mt-4 text-xs font-medium text-muted-foreground">{insight.starts_on} to {insight.ends_on}</p>
+          <div class="mt-4 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>{insight.starts_on} to {insight.ends_on}</span>
+            <Badge variant={insight.generation_source === "ai" ? "success" : "secondary"}>{insight.generation_source_label}</Badge>
+          </div>
         </CardContent>
       </Card>
     {/each}

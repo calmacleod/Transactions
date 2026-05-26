@@ -1,14 +1,19 @@
 module Ai
   class InsightGenerator
-    def initialize(model: ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano"))
+    def initialize(model: Ai::Controls.model)
       @model = model
     end
 
     def call(start_date: 4.months.ago.to_date.beginning_of_month, end_date: Date.current)
       transactions = ExpenseTransaction.includes(:category).between(start_date, end_date)
       payload = summary_payload(transactions)
-      insights = llm_insights(payload) if ai_configured?
-      insights = fallback_insights(payload) if insights.blank?
+      source = "automatic"
+      insights = llm_insights(payload) if Ai::Controls.enabled?(:insights)
+      if insights.present?
+        source = "ai"
+      else
+        insights = fallback_insights(payload)
+      end
 
       Insight.where(starts_on: start_date, ends_on: end_date).delete_all
       insights.map do |attributes|
@@ -18,6 +23,7 @@ module Ai
           severity: attributes.fetch(:severity, "info"),
           starts_on: start_date,
           ends_on: end_date,
+          generation_source: source,
           payload:
         )
       end
@@ -27,26 +33,28 @@ module Ai
 
     attr_reader :model
 
-    def ai_configured?
-      ENV.values_at("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY").any?(&:present?)
-    end
-
     def llm_insights(payload)
       response = RubyLLM.chat(model:).with_schema(ExpenseInsightsSchema).ask(<<~PROMPT)
         Generate 4 to 8 concise, useful personal finance insights from this recent transaction summary.
-        Always include the four standard angles when the data supports them: category concentration,
-        flexible cutback opportunities, repeat merchant habits, and weekday frequency patterns.
-        Add any other materially useful observations you see, especially month-to-month changes,
-        spikes, drops, new recurring spend, and realistic savings recommendations.
-        Ignore long-term yearly trends. Focus on the last few months and current month-to-month variation.
+        Prioritize observations that are actionable for personal accounting and budget control.
+        Include the supporting amount, month, category, merchant, or weekday whenever possible.
+        Prefer concrete comparisons over generic advice:
+        - category concentration and budget pressure
+        - flexible cutback opportunities
+        - repeat merchant habits
+        - weekday frequency patterns
+        - month-to-month spikes, drops, and new recurring spend
+        Do not mention model limitations. Do not invent categories or transactions outside the payload.
         Data: #{JSON.pretty_generate(payload)}
       PROMPT
 
+      Ai::Controls.record(feature: :insights, model:, response:)
       response.content.fetch("insights").map do |insight|
         insight.symbolize_keys.slice(:title, :body, :severity)
       end
     rescue StandardError => error
       Rails.logger.warn("RubyLLM insight generation failed: #{error.class}: #{error.message}")
+      Ai::Controls.record(feature: :insights, model:, successful: false, error:)
       nil
     end
 

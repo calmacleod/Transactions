@@ -1,8 +1,12 @@
 class TransactionFilter
   FILTER_KEYS = %w[
     start_date end_date quick_range category_id direction classified query
-    min_amount max_amount day_of_week
+    min_amount max_amount day_of_week subcategory_id sort sort_direction
   ].freeze
+  SORT_COLUMNS = {
+    "date" => "occurred_on",
+    "amount" => "amount_cents"
+  }.freeze
 
   QUICK_RANGES = {
     "month_to_date" => "Month to date",
@@ -25,15 +29,16 @@ class TransactionFilter
   end
 
   def call(scope = ExpenseTransaction.all)
-    relation = scope.includes(:category).recent
+    relation = scope.includes(:category)
     relation = apply_dates(relation)
     relation = relation.where(category_id: params["category_id"]) if params["category_id"].present?
+    relation = relation.joins(:subcategories).where(transaction_subcategories: { id: params["subcategory_id"] }).distinct if params["subcategory_id"].present?
     relation = relation.where(direction: params["direction"]) if params["direction"].present?
     relation = apply_classified(relation)
     relation = apply_text(relation)
     relation = apply_amounts(relation)
     relation = apply_day(relation)
-    relation
+    apply_sort(relation)
   end
 
   def start_date
@@ -49,6 +54,18 @@ class TransactionFilter
   end
 
   private
+
+  def apply_sort(relation)
+    relation.order(sort_column => sort_direction, id: sort_direction)
+  end
+
+  def sort_column
+    SORT_COLUMNS.fetch(params["sort"], "occurred_on")
+  end
+
+  def sort_direction
+    params["sort_direction"] == "asc" ? :asc : :desc
+  end
 
   def apply_dates(relation)
     relation = relation.where(occurred_on: start_date..) if start_date.present?

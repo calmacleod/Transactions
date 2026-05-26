@@ -19,6 +19,19 @@
   end
 end
 
+[
+  [ "Gift", "#db2777" ],
+  [ "Work", "#2563eb" ],
+  [ "Reimbursable", "#059669" ],
+  [ "Household", "#d97706" ],
+  [ "Recurring", "#7c3aed" ],
+  [ "One-off", "#64748b" ]
+].each do |name, color|
+  TransactionSubcategory.find_or_create_by!(name:) do |subcategory|
+    subcategory.color = color
+  end
+end
+
 RubyLlmModelImporter.load_cached! if RubyLlmModelImporter.model_table_ready?
 
 admin_email = ENV["ADMIN_EMAIL"]

@@ -18,7 +18,11 @@ class ApplicationController < ActionController::Base
       paths: {
         root: root_path,
         transactions: transactions_path,
+        spending: spending_path,
+        budgets: budgets_path,
+        subcategories: subcategories_path,
         insights: insights_path,
+        ai_controls: ai_controls_path,
         models: models_path,
         jobs: "/admin/jobs",
         session: session_path,
@@ -56,6 +60,8 @@ class ApplicationController < ActionController::Base
       occurred_on_label: transaction.occurred_on.strftime("%b %-d, %Y"),
       short_date_label: transaction.occurred_on.strftime("%b %-d"),
       description: transaction.description,
+      merchant_name: transaction.merchant_name,
+      description_detail: transaction.description_detail,
       amount_cents: transaction.amount_cents,
       signed_amount_cents: transaction.signed_amount_cents,
       amount_label: transaction.expense? ? money_from_cents(transaction.amount_cents) : "-#{money_from_cents(transaction.amount_cents)}",
@@ -63,9 +69,21 @@ class ApplicationController < ActionController::Base
       direction: transaction.direction,
       category_id: transaction.category_id,
       category: category_props(transaction.category),
+      subcategories: transaction.subcategories.by_name.map { |subcategory| subcategory_props(subcategory) },
+      notes: transaction.notes,
       classification_reason: transaction.classification_reason,
       confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending",
       update_path: transaction_path(transaction)
+    }
+  end
+
+  def subcategory_props(subcategory)
+    return nil if subcategory.blank?
+
+    {
+      id: subcategory.id,
+      name: subcategory.name,
+      color: subcategory.color.presence || "#71717a"
     }
   end
 
@@ -75,6 +93,8 @@ class ApplicationController < ActionController::Base
       title: insight.title,
       body: insight.body,
       severity: insight.severity,
+      generation_source: insight.generation_source,
+      generation_source_label: insight.generation_source == "ai" ? "AI generated" : "Automatic",
       starts_on: insight.starts_on&.iso8601,
       starts_on_label: insight.starts_on&.strftime("%b %Y"),
       ends_on: insight.ends_on&.iso8601

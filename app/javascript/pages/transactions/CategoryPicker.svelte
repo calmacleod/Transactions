@@ -5,12 +5,11 @@
 
   export let categories = []
   export let transaction
-  export let eager = false
   export let className = ""
   export let selectClass = ""
   export let onChange = () => {}
 
-  let editing = eager
+  let editing = false
   let selectRef = null
 
   $: selectedCategory = transaction.category || categories.find((category) => category.id === transaction.category_id) || { id: null, name: "Unclassified" }
@@ -22,16 +21,20 @@
     editing = true
     await tick()
     selectRef?.focus()
+    try {
+      selectRef?.showPicker?.()
+    } catch (_error) {
+      // Browser support and user-activation rules vary; focus still lands on the select.
+    }
   }
 
   function stopEditing() {
-    if (eager) return
     window.setTimeout(() => (editing = false), 0)
   }
 
   function handleChange(event) {
     onChange(transaction, event.currentTarget.value)
-    if (!eager) editing = false
+    editing = false
   }
 </script>
 
@@ -42,6 +45,7 @@
     class={selectClass}
     onchange={handleChange}
     onblur={stopEditing}
+    aria-label={`Change category for ${transaction.description}`}
   >
     <NativeSelectOption value="">Unclassified</NativeSelectOption>
     {#each categories as category}

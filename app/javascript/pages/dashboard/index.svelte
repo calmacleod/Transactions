@@ -261,6 +261,7 @@
               <Badge variant={badgeVariant(insight.severity)}>{insight.severity}</Badge>
             </div>
             <p class="mt-2 text-xs leading-5 text-muted-foreground">{insight.body}</p>
+            <Badge class="mt-3" variant={insight.generation_source === "ai" ? "success" : "secondary"}>{insight.generation_source_label}</Badge>
           </CardContent>
         </Card>
       {/each}

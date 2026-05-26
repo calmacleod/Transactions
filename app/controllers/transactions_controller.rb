@@ -6,35 +6,19 @@ class TransactionsController < ApplicationController
   helper_method :transaction_per_page_options
 
   def index
-    categories = Category.by_name
-    saved_queries = Current.session.user.saved_transaction_queries.ordered
-    selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
-    filter_params = merged_filter_params(selected_saved_query)
-    filter = TransactionFilter.new(filter_params)
-    filtered_transactions = filter.call
-    transactions_per_page = transactions_per_page()
-    pagy, transactions = pagy(:offset, filtered_transactions, limit: transactions_page_limit(filtered_transactions, transactions_per_page))
-    start_date = filter.start_date
-    end_date = filter.end_date
+    render inertia: transaction_index_props
+  end
 
-    render inertia: {
-      categories: category_options(categories),
-      saved_queries: saved_queries.map { |query| saved_query_props(query) },
-      selected_saved_query_id: selected_saved_query&.id,
-      filter_params: filter_params,
-      quick_ranges: TransactionFilter::QUICK_RANGES.map { |value, label| { value:, label: } },
-      filter_active: filter.active?,
-      date_summary: date_summary(start_date, end_date),
-      transactions: transactions.map { |transaction| transaction_props(transaction) },
-      pagination: pagination_props(pagy, filter_params, selected_saved_query),
-      per_page: transactions_per_page,
-      per_page_options: transaction_per_page_options.map { |label, value| { label:, value: } },
-      actions: {
-        index: transactions_path,
-        bulk_update: bulk_update_transactions_path,
-        save_query: saved_transaction_queries_path
-      }
-    }
+  def chat
+    filter_params = TransactionFilter.clean(params[:filters] || params)
+    filter = TransactionFilter.new(filter_params)
+    answer = Ai::TransactionChat.new.call(
+      question: params[:question].to_s,
+      transactions: filter.call,
+      filters: filter_params
+    )
+
+    render json: answer
   end
 
   def update
@@ -57,8 +41,46 @@ class TransactionsController < ApplicationController
 
   private
 
+  def transaction_index_props
+    categories = Category.by_name
+    saved_queries = Current.session.user.saved_transaction_queries.ordered
+    selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
+    filter_params = merged_filter_params(selected_saved_query)
+    filter = TransactionFilter.new(filter_params)
+    filtered_transactions = filter.call.includes(:subcategories)
+    transactions_per_page = transactions_per_page()
+    pagy, transactions = pagy(:offset, filtered_transactions, limit: transactions_page_limit(filtered_transactions, transactions_per_page))
+    start_date = filter.start_date
+    end_date = filter.end_date
+
+    {
+      categories: category_options(categories),
+      subcategories: TransactionSubcategory.by_name.map { |subcategory| subcategory_props(subcategory) },
+      saved_queries: saved_queries.map { |query| saved_query_props(query) },
+      selected_saved_query_id: selected_saved_query&.id,
+      filter_params: filter_params,
+      quick_ranges: TransactionFilter::QUICK_RANGES.map { |value, label| { value:, label: } },
+      filter_active: filter.active?,
+      date_summary: date_summary(start_date, end_date),
+      sort: {
+        field: filter_params["sort"].presence || "date",
+        direction: filter_params["sort_direction"].presence || "desc"
+      },
+      transactions: transactions.map { |transaction| transaction_props(transaction) },
+      pagination: pagination_props(pagy, filter_params, selected_saved_query),
+      per_page: transactions_per_page,
+      per_page_options: transaction_per_page_options.map { |label, value| { label:, value: } },
+      actions: {
+        index: transactions_path,
+        chat: chat_transactions_path,
+        bulk_update: bulk_update_transactions_path,
+        save_query: saved_transaction_queries_path
+      }
+    }
+  end
+
   def transaction_params
-    params.require(:expense_transaction).permit(:category_id)
+    params.require(:expense_transaction).permit(:category_id, :notes, subcategory_ids: [])
   end
 
   def bulk_transaction_params

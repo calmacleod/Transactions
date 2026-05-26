@@ -62,7 +62,7 @@ test("sidebar active state follows Inertia navigation without reload", async ({ 
   await expect(dashboardLink).toHaveClass(/bg-primary/)
 
   await transactionsLink.click()
-  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
   await expect(transactionsLink).toHaveClass(/bg-primary/)
   await expect(dashboardLink).not.toHaveClass(/bg-primary/)
 
@@ -81,7 +81,7 @@ test("app chrome navigation starts on mouse down", async ({ page }) => {
 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.down()
-  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
   await page.mouse.up()
 })
 
@@ -98,7 +98,7 @@ test("jobs navigation leaves the Inertia shell for Mission Control", async ({ pa
 test("transactions page keeps dense controls usable on desktop and mobile", async ({ page }) => {
   await page.goto("/transactions")
 
-  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Apply filters" })).toBeVisible()
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Description" })).toBeVisible()
@@ -114,7 +114,7 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await page.setViewportSize({ width: 390, height: 844 })
   await page.reload()
 
-  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
   await expect(page.getByLabel("Search")).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Description" })).toHaveCount(0)
 
@@ -124,11 +124,28 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await expect(mobileRow).toContainText("65%")
   await expect(mobileRow).toContainText(/NEIGHBOURHOOD RESTAURANT|LOCAL GROCERY MARKET/)
   await expect(mobileRow).toContainText(/\$[0-9]+\.[0-9]{2}/)
-  await expect(mobileRow.getByRole("combobox")).toBeVisible()
+  await expect(mobileRow.getByRole("button", { name: /Change category for/i })).toBeVisible()
 
-  await mobileRow.click({ position: { x: 44, y: 20 } })
+  await mobileRow.getByRole("checkbox").check()
   await expect(page.getByText("1 selected")).toBeVisible()
   await expectNoViewportOverflow(page)
+})
+
+test("transaction note and subcategory controls open from the row", async ({ page }) => {
+  await page.goto("/transactions")
+
+  const row = page.locator("[data-transaction-row-id]").nth(1)
+  await expect(row).toBeVisible()
+
+  await row.getByRole("button", { name: "Add note" }).click()
+  await expect(row.locator("textarea[placeholder='Personal notes']")).toBeVisible()
+
+  await row.getByRole("button", { name: "Add subcategory" }).click()
+  const subcategorySelect = row.locator("select").first()
+  await expect(subcategorySelect).toBeVisible()
+
+  await subcategorySelect.selectOption({ label: "Gift" })
+  await expect(row.getByText("Gift")).toBeVisible()
 })
 
 test("mobile title bar stays fixed without covering page content", async ({ page }) => {
@@ -207,51 +224,23 @@ test("transaction quick filters perform Inertia visits", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Last 30 days" })).toBeVisible()
 })
 
-test("transaction rows only shift-select during a left-button drag", async ({ page }) => {
+test("transaction rows do not select on plain row clicks", async ({ page }) => {
   await page.goto("/transactions")
 
   const rows = page.locator("[data-transaction-row-id]")
   await expect(rows.first()).toBeVisible()
 
   await rows.first().click({ position: { x: 120, y: 20 } })
+  await expect(page.getByText("1 selected")).toHaveCount(0)
+
+  await rows.first().getByRole("checkbox").check()
   await expect(page.getByText("1 selected")).toBeVisible()
-  await rows.first().click({ position: { x: 120, y: 20 } })
-  await expect(page.getByText("1 selected")).toHaveCount(0)
-
-  await page.keyboard.down("Shift")
-  await rows.first().hover()
-  await expect(page.getByText("1 selected")).toHaveCount(0)
-  await page.keyboard.up("Shift")
-
-  const firstBox = await rows.first().boundingBox()
-  const secondBox = await rows.nth(1).boundingBox()
-  expect(firstBox).not.toBeNull()
-  expect(secondBox).not.toBeNull()
-
-  await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2)
-  await page.keyboard.down("Shift")
-  await page.mouse.down()
-  await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height / 2, { steps: 8 })
-  await page.mouse.up()
-  await page.keyboard.up("Shift")
-
-  await expect(page.getByText("2 selected")).toBeVisible()
-
-  await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height / 2)
-  await page.keyboard.down("Shift")
-  await page.mouse.down()
-  await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2, { steps: 8 })
-  await page.mouse.up()
-  await page.keyboard.up("Shift")
-
-  await expect(page.locator("tbody input[type='checkbox']:checked")).toHaveCount(0)
-  await expect(page.getByText("2 selected")).toHaveCount(0)
 })
 
 test("selected transaction bulk actions float over the viewport", async ({ page }) => {
   await page.goto("/transactions")
 
-  await page.locator("[data-transaction-row-id]").first().click({ position: { x: 120, y: 20 } })
+  await page.locator("[data-transaction-row-id]").first().getByRole("checkbox").check()
 
   const bulkBar = page.getByText("1 selected").locator("xpath=ancestor::*[@data-slot='card'][1]")
   await expect(bulkBar).toBeVisible()
@@ -390,17 +379,17 @@ async function expectTransactionDetailsStayInDescriptionColumn(page) {
     return elements
       .map((element) => {
         const cells = element.querySelectorAll("td")
-        const reason = cells[2].querySelector("p.mt-1")
+        const description = cells[2].querySelector("p")
 
         return {
-          reasonClientWidth: reason.clientWidth,
-          reasonScrollWidth: reason.scrollWidth,
+          descriptionClientWidth: description?.clientWidth || 0,
+          descriptionScrollWidth: description?.scrollWidth || 0,
           descriptionRight: cells[2].getBoundingClientRect().right,
           categoryLeft: cells[3].getBoundingClientRect().left,
-          text: reason.textContent?.trim().slice(0, 100),
+          text: description?.textContent?.trim().slice(0, 100),
         }
       })
-      .filter((row) => row.reasonScrollWidth > row.reasonClientWidth + 1 || row.descriptionRight > row.categoryLeft + 1)
+      .filter((row) => row.descriptionScrollWidth > row.descriptionClientWidth + 1 || row.descriptionRight > row.categoryLeft + 1)
   })
 
   expect(overflowingRows).toEqual([])

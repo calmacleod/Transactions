@@ -11,10 +11,15 @@ Rails.application.routes.draw do
 
   resources :transactions, only: %i[index update] do
     patch :bulk_update, on: :collection
+    post :chat, on: :collection
   end
+  get "spending", to: "spending#index", as: :spending
+  resources :budgets, only: %i[index update]
+  resources :subcategories, only: %i[index create destroy]
   resources :saved_transaction_queries, only: %i[create destroy]
   resources :imports, only: :create
   resources :insights, only: %i[index create]
+  resource :ai_controls, only: %i[show update]
   resources :models, only: %i[index create]
   resource :classifications, only: :create
   resources :classification_runs, only: :show do

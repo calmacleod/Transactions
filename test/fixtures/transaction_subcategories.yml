@@ -1,0 +1,7 @@
+gift:
+  name: Gift
+  color: "#db2777"
+
+work:
+  name: Work
+  color: "#2563eb"

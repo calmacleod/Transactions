@@ -13,7 +13,7 @@ module Ai
       "Travel" => /hotel|air canada|westjet|airbnb|booking/i
     }.freeze
 
-    def initialize(model: ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano"))
+    def initialize(model: Ai::Controls.model)
       @model = model
     end
 
@@ -24,7 +24,7 @@ module Ai
     def classify(transaction)
       result = credit_classification(transaction) unless transaction.expense?
       result ||= rule_based_classification(transaction)
-      result = llm_classification(transaction) if result[:category] == "Uncategorized" && ai_configured?
+      result = llm_classification(transaction) if result[:category] == "Uncategorized" && Ai::Controls.enabled?(:classification)
       result ||= rule_based_classification(transaction)
       apply_result(transaction, result)
     end
@@ -33,13 +33,10 @@ module Ai
 
     attr_reader :model
 
-    def ai_configured?
-      ENV.values_at("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY").any?(&:present?)
-    end
-
     def llm_classification(transaction)
       response = RubyLLM.chat(model:).with_schema(TransactionClassificationSchema).ask(prompt_for(transaction))
       content = response.content
+      Ai::Controls.record(feature: :classification, model:, response:)
 
       {
         category: content.fetch("category"),
@@ -48,6 +45,7 @@ module Ai
       }
     rescue StandardError => error
       Rails.logger.warn("RubyLLM classification failed for transaction #{transaction.id}: #{error.class}: #{error.message}")
+      Ai::Controls.record(feature: :classification, model:, successful: false, error:)
       nil
     end
 

@@ -20,6 +20,22 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "sorts transactions by date and amount" do
+    sign_in_as users(:one)
+
+    get transactions_path, params: { sort: "date", sort_direction: "asc" }
+
+    assert_response :success
+    assert_equal [ "LOCAL GROCERY MARKET", "NEIGHBOURHOOD RESTAURANT" ], inertia_props["transactions"].map { |transaction| transaction["description"] }
+    assert_equal({ "field" => "date", "direction" => "asc" }, inertia_props["sort"])
+
+    get transactions_path, params: { sort: "amount", sort_direction: "desc" }
+
+    assert_response :success
+    assert_equal [ "NEIGHBOURHOOD RESTAURANT", "LOCAL GROCERY MARKET" ], inertia_props["transactions"].map { |transaction| transaction["description"] }
+    assert_equal({ "field" => "amount", "direction" => "desc" }, inertia_props["sort"])
+  end
+
   test "paginates transaction list" do
     sign_in_as users(:one)
     import_batch = import_batches(:statement)
@@ -142,6 +158,33 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to transactions_path
     assert_equal categories(:restaurants), transaction.reload.category
+  end
+
+  test "updates manual subcategories and notes" do
+    sign_in_as users(:one)
+    transaction = expense_transactions(:grocery)
+
+    patch transaction_path(transaction),
+      params: { expense_transaction: { subcategory_ids: [ transaction_subcategories(:gift).id, transaction_subcategories(:work).id ], notes: "Birthday present accounting note" } }
+
+    assert_redirected_to transactions_path
+    assert_equal [ "Gift", "Work" ], transaction.reload.subcategories.by_name.pluck(:name)
+    assert_equal "Birthday present accounting note", transaction.notes
+  end
+
+  test "passes filtered transaction context to chat endpoint" do
+    sign_in_as users(:one)
+    AiSetting.set("monthly_request_limit", "1")
+    AiRequest.create!(feature: "chat", model: "test-model")
+
+    post chat_transactions_path,
+      params: { question: "What did gifts cost?", filters: { subcategory_id: transaction_subcategories(:gift).id } },
+      as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal "automatic", body["source"]
+    assert_match "disabled", body["answer"]
   end
 
   test "bulk updates selected transaction categories" do

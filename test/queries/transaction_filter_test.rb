@@ -20,4 +20,10 @@ class TransactionFilterTest < ActiveSupport::TestCase
 
     assert_equal [ expense_transactions(:restaurant) ], result
   end
+
+  test "filters by manual subcategory" do
+    result = TransactionFilter.new("subcategory_id" => transaction_subcategories(:gift).id.to_s).call.to_a
+
+    assert_equal [ expense_transactions(:restaurant) ], result
+  end
 end

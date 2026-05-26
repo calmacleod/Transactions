@@ -8,11 +8,15 @@
   import Bot from "@lucide/svelte/icons/bot"
   import BriefcaseBusiness from "@lucide/svelte/icons/briefcase-business"
   import CreditCard from "@lucide/svelte/icons/credit-card"
+  import Gauge from "@lucide/svelte/icons/gauge"
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard"
   import Lightbulb from "@lucide/svelte/icons/lightbulb"
   import LogOut from "@lucide/svelte/icons/log-out"
   import Menu from "@lucide/svelte/icons/menu"
   import Moon from "@lucide/svelte/icons/moon"
+  import PiggyBank from "@lucide/svelte/icons/piggy-bank"
+  import Tags from "@lucide/svelte/icons/tags"
+  import TrendingUp from "@lucide/svelte/icons/trending-up"
   import Sun from "@lucide/svelte/icons/sun"
 
   const themeColors = {
@@ -54,9 +58,13 @@
     return [
       { label: "Dashboard", href: nextPaths.root || "/", icon: LayoutDashboard },
       { label: "Transactions", href: nextPaths.transactions || "/transactions", icon: CreditCard },
+      { label: "Spending", href: nextPaths.spending || "/spending", icon: TrendingUp },
+      { label: "Budgets", href: nextPaths.budgets || "/budgets", icon: PiggyBank },
+      { label: "Subcategories", href: nextPaths.subcategories || "/subcategories", icon: Tags },
       { label: "Insights", href: nextPaths.insights || "/insights", icon: Lightbulb },
+      { label: "AI controls", href: nextPaths.ai_controls || "/ai_controls", icon: Gauge },
       { label: "Models", href: nextPaths.models || "/models", icon: Bot },
-      { label: "Jobs", href: nextPaths.jobs || "/admin/jobs", icon: BriefcaseBusiness, fullReload: true },
+      { label: "Jobs", href: nextPaths.jobs || "/admin/jobs", icon: BriefcaseBusiness, fullReload: true, newTab: true },
     ]
   }
 
@@ -123,7 +131,7 @@
       <nav class="grid gap-1">
         {#each navItems as item}
           {#if item.fullReload}
-            <a href={item.href} data-turbo="false" draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+            <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
               <svelte:component this={item.icon} class="size-4" />
               <span>{item.label}</span>
             </a>
@@ -206,7 +214,7 @@
         <nav class="grid gap-1">
           {#each navItems as item}
             {#if item.fullReload}
-              <a href={item.href} data-turbo="false" draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+              <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>
               </a>

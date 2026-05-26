@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte"
+  import { onMount, tick } from "svelte"
   import { Link, router } from "@inertiajs/svelte"
   import { Badge } from "$lib/components/ui/badge"
   import { Button } from "$lib/components/ui/button"
@@ -10,11 +10,16 @@
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$lib/components/ui/table"
   import { withQuery } from "$lib/formatters"
   import Check from "@lucide/svelte/icons/check"
+  import ChevronDown from "@lucide/svelte/icons/chevron-down"
+  import ChevronUp from "@lucide/svelte/icons/chevron-up"
+  import MessageSquare from "@lucide/svelte/icons/message-square"
+  import NotebookPen from "@lucide/svelte/icons/notebook-pen"
   import Search from "@lucide/svelte/icons/search"
   import X from "@lucide/svelte/icons/x"
   import CategoryPicker from "./CategoryPicker.svelte"
 
   export let categories = []
+  export let subcategories = []
   export let saved_queries = []
   export let selected_saved_query_id = null
   export let filter_params = {}
@@ -23,6 +28,7 @@
   export let date_summary = ""
   export let transactions = []
   export let pagination
+  export let sort = { field: "date", direction: "desc" }
   export let per_page
   export let per_page_options = []
   export let actions
@@ -31,8 +37,14 @@
   let saveName = ""
   let selectedIds = new Set()
   let bulkCategoryId = ""
+  let chatQuestion = ""
+  let chatAnswer = ""
+  let chatSource = ""
+  let chatLoading = false
   let dragSelecting = false
   let dragSelectionMode = null
+  let editingNoteIds = new Set()
+  let editingSubcategoryIds = new Set()
   let shiftDown = false
   let lastShiftHoverId = null
   let suppressNextRowClick = false
@@ -98,6 +110,11 @@
 
   function applyFilters() {
     router.get(actions.index, compact(filters), { preserveState: true })
+  }
+
+  function preventAndRun(event, callback) {
+    event.preventDefault()
+    callback()
   }
 
   function clearFilters() {
@@ -192,8 +209,127 @@
     }
   }
 
+  function runRowControl(event, callback) {
+    event.stopPropagation()
+    callback()
+  }
+
   function updateCategory(transaction, categoryId) {
     router.patch(transaction.update_path, { expense_transaction: { category_id: categoryId } }, { preserveScroll: true })
+  }
+
+  function updateTransactionField(transaction, field, value) {
+    if ((transaction[field] || "") === (value || "")) return
+
+    transaction[field] = value
+    router.patch(transaction.update_path, { expense_transaction: { [field]: value } }, { preserveScroll: true, preserveState: true })
+  }
+
+  function sortPath(field) {
+    const currentField = sort?.field || "date"
+    const currentDirection = sort?.direction || "desc"
+    const nextDirection = currentField === field && currentDirection === "desc" ? "asc" : "desc"
+
+    return withQuery(actions.index, { ...filter_params, saved_query_id: selected_saved_query_id, limit: per_page, sort: field, sort_direction: nextDirection })
+  }
+
+  function toggleNoteEditor(transaction) {
+    const next = new Set(editingNoteIds)
+    next.has(transaction.id) ? next.delete(transaction.id) : next.add(transaction.id)
+    editingNoteIds = next
+  }
+
+  async function openSubcategoryEditor(transaction) {
+    const next = new Set(editingSubcategoryIds)
+    next.add(transaction.id)
+    editingSubcategoryIds = next
+
+    await tick()
+    const select = document.querySelector(`[data-subcategory-select-id="${transaction.id}"]`)
+    select?.focus()
+    try {
+      select?.showPicker?.()
+    } catch (_error) {
+      // Browser support and user-activation rules vary; focus still lands on the select.
+    }
+  }
+
+  function closeSubcategoryEditor(transaction) {
+    if (!editingSubcategoryIds.has(transaction.id)) return
+
+    window.setTimeout(() => {
+      const next = new Set(editingSubcategoryIds)
+      next.delete(transaction.id)
+      editingSubcategoryIds = next
+    }, 0)
+  }
+
+  function transactionSubcategoryIds(transaction) {
+    return (transaction.subcategories || []).map((subcategory) => subcategory.id)
+  }
+
+  function addSubcategory(transaction, subcategoryId) {
+    if (!subcategoryId) return
+
+    const selected = subcategories.find((subcategory) => `${subcategory.id}` === `${subcategoryId}`)
+    if (!selected) return
+
+    const currentIds = transactionSubcategoryIds(transaction)
+    const nextIds = currentIds.includes(selected.id) ? currentIds : [...currentIds, selected.id]
+    transaction.subcategories = subcategories.filter((subcategory) => nextIds.includes(subcategory.id))
+    updateTransactionSubcategories(transaction, nextIds)
+  }
+
+  function removeSubcategory(transaction, subcategoryId) {
+    const nextIds = transactionSubcategoryIds(transaction).filter((id) => id !== subcategoryId)
+    transaction.subcategories = (transaction.subcategories || []).filter((subcategory) => subcategory.id !== subcategoryId)
+    updateTransactionSubcategories(transaction, nextIds)
+  }
+
+  function updateTransactionSubcategories(transaction, nextIds) {
+    const next = new Set(editingSubcategoryIds)
+    next.delete(transaction.id)
+    editingSubcategoryIds = next
+    router.patch(transaction.update_path, { expense_transaction: { subcategory_ids: nextIds } }, { preserveScroll: true, preserveState: true })
+  }
+
+  function saveNote(transaction, value) {
+    updateTransactionField(transaction, "notes", value)
+    const next = new Set(editingNoteIds)
+    next.delete(transaction.id)
+    editingNoteIds = next
+  }
+
+  function sortIcon(field) {
+    if ((sort?.field || "date") !== field) return null
+    return sort?.direction === "asc" ? ChevronUp : ChevronDown
+  }
+
+  async function askChat() {
+    if (!chatQuestion.trim()) return
+    chatLoading = true
+    chatAnswer = ""
+    chatSource = ""
+
+    try {
+      const response = await fetch(actions.chat, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": document.querySelector("meta[name='csrf-token']")?.content || "",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({ question: chatQuestion, filters: compact(filter_params) }),
+      })
+      const data = await response.json()
+      chatAnswer = data.answer || "No answer returned."
+      chatSource = data.source || ""
+    } catch (_error) {
+      chatAnswer = "The chat request failed before Rails returned a response."
+      chatSource = "automatic"
+    } finally {
+      chatLoading = false
+    }
   }
 
   function bulkUpdate() {
@@ -253,7 +389,7 @@
     </CardHeader>
 
     <CardContent>
-      <form class="grid gap-4" on:submit|preventDefault={applyFilters}>
+      <form class="grid gap-4" onsubmit={(event) => preventAndRun(event, applyFilters)}>
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div class="space-y-1.5 xl:col-span-2">
             <Label for="query">Search</Label>
@@ -292,6 +428,15 @@
               <NativeSelectOption value="">All categories</NativeSelectOption>
               {#each categories as category}
                 <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>
+              {/each}
+            </NativeSelect>
+          </div>
+          <div class="space-y-1.5">
+            <Label for="subcategory">Subcategory</Label>
+            <NativeSelect id="subcategory" bind:value={filters.subcategory_id} class="w-full">
+              <NativeSelectOption value="">Any subcategory</NativeSelectOption>
+              {#each subcategories as subcategory}
+                <NativeSelectOption value={subcategory.id}>{subcategory.name}</NativeSelectOption>
               {/each}
             </NativeSelect>
           </div>
@@ -340,7 +485,7 @@
 
     <Card class={filter_active ? "" : "xl:col-start-2"}>
       <CardContent>
-        <form class="flex gap-2" on:submit|preventDefault={saveFilter}>
+        <form class="flex gap-2" onsubmit={(event) => preventAndRun(event, saveFilter)}>
           <Input bind:value={saveName} placeholder="Save this filter as..." class="min-w-0 flex-1" />
           <Button type="submit">Save</Button>
         </form>
@@ -353,13 +498,34 @@
       {#each saved_queries as query}
         <Badge variant="outline" class="h-8 gap-0 overflow-hidden p-0">
           <Link href={query.path} prefetch cacheFor="30s" class="px-3 py-1.5 hover:text-foreground">{query.name}</Link>
-          <button type="button" class="border-l border-border px-2.5 py-1.5 text-muted-foreground hover:text-foreground" aria-label={`Delete ${query.name}`} on:click={() => destroySavedQuery(query)}>
+          <button type="button" class="border-l border-border px-2.5 py-1.5 text-muted-foreground hover:text-foreground" aria-label={`Delete ${query.name}`} onclick={() => destroySavedQuery(query)}>
             <X class="size-3" />
           </button>
         </Badge>
       {/each}
     </section>
   {/if}
+
+  <Card class="mb-4">
+    <CardHeader class="border-b border-border">
+      <div class="flex items-center gap-2">
+        <MessageSquare class="size-4 text-primary" />
+        <CardTitle class="text-sm">Discuss filtered transactions</CardTitle>
+      </div>
+    </CardHeader>
+    <CardContent class="grid gap-3">
+      <form class="flex flex-col gap-2 lg:flex-row" onsubmit={(event) => preventAndRun(event, askChat)}>
+        <Input bind:value={chatQuestion} placeholder="Ask about the current filtered set..." class="min-w-0 flex-1" />
+        <Button type="submit" disabled={chatLoading}>{chatLoading ? "Asking..." : "Ask"}</Button>
+      </form>
+      {#if chatAnswer}
+        <div class="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm leading-6 text-foreground">
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{chatSource === "ai" ? "AI generated" : "Automatic"}</div>
+          {chatAnswer}
+        </div>
+      {/if}
+    </CardContent>
+  </Card>
 
   <Card class="mb-4 overflow-hidden">
     {#if !desktopLayout}
@@ -368,18 +534,46 @@
         {#each transactions as transaction}
           <div
             data-testid="mobile-transaction-row"
-            class={`grid cursor-pointer gap-2 px-3 py-3 ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""}`}
-            role="button"
-            tabindex="0"
+            class={`grid gap-2 px-3 py-2 ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""}`}
             aria-pressed={selectedIds.has(transaction.id)}
-            on:click={(event) => toggleTransactionFromRow(event, transaction)}
-            on:keydown={(event) => toggleTransactionFromRowKeydown(event, transaction)}
           >
             <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
-              <input type="checkbox" class="mt-0.5 size-4 rounded border-input accent-primary" aria-label={`Select ${transaction.description}`} checked={selectedIds.has(transaction.id)} on:change={() => toggleTransaction(transaction.id)} />
+              <input type="checkbox" class="mt-0.5 size-4 rounded border-input accent-primary" aria-label={`Select ${transaction.description}`} checked={selectedIds.has(transaction.id)} onchange={() => toggleTransaction(transaction.id)} />
               <div class="min-w-0">
                 <div class="flex min-w-0 items-center gap-2">
                   <span class="whitespace-nowrap text-xs font-medium text-muted-foreground">{transaction.occurred_on_label}</span>
+                </div>
+                <p class="mt-1 break-words text-sm font-medium leading-5 text-foreground" title={transaction.description}>{transaction.merchant_name || transaction.description}</p>
+              </div>
+              <p class={`money-value text-right text-sm font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</p>
+            </div>
+
+            <div class="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
+              <span aria-hidden="true"></span>
+              <div class="grid gap-2">
+                <CategoryPicker {categories} {transaction} className="h-9 w-full text-xs" selectClass="h-9 w-full text-xs" onChange={updateCategory} />
+                <div class="flex flex-wrap items-center gap-1.5">
+                  {#each transaction.subcategories || [] as subcategory}
+                    <span class="inline-flex h-6 items-center gap-1.5 rounded-full border border-border px-2 text-xs font-medium text-foreground">
+                      <span class="size-2 rounded-full" style={`background-color: ${subcategory.color}`}></span>
+                      {subcategory.name}
+                      <button type="button" class="text-muted-foreground hover:text-foreground" aria-label={`Remove ${subcategory.name}`} onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => removeSubcategory(transaction, subcategory.id))}>x</button>
+                    </span>
+                  {/each}
+                  {#if editingSubcategoryIds.has(transaction.id)}
+                    <NativeSelect value="" class="h-8 w-40 shrink-0 text-xs" data-subcategory-select-id={transaction.id} onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onchange={(event) => addSubcategory(transaction, event.currentTarget.value)} onblur={() => closeSubcategoryEditor(transaction)}>
+                      <NativeSelectOption value="">Add subcategory</NativeSelectOption>
+                      {#each subcategories as subcategory}
+                        {#if !transactionSubcategoryIds(transaction).includes(subcategory.id)}
+                          <NativeSelectOption value={subcategory.id}>{subcategory.name}</NativeSelectOption>
+                        {/if}
+                      {/each}
+                    </NativeSelect>
+                  {:else}
+                    <button type="button" class="inline-flex h-6 w-fit items-center gap-1.5 rounded-full border border-dashed border-border px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => openSubcategoryEditor(transaction))}>
+                      Add subcategory
+                    </button>
+                  {/if}
                   <span
                     class="mobile-confidence-chip inline-flex h-5 min-w-0 max-w-24 items-center truncate rounded-full px-2 text-[11px] font-medium"
                     style={confidenceStyle(transaction.confidence_label)}
@@ -387,15 +581,23 @@
                   >
                     {transaction.confidence_label}
                   </span>
+                  {#if !transaction.notes && !editingNoteIds.has(transaction.id)}
+                    <button type="button" class="inline-flex h-6 w-fit items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => toggleNoteEditor(transaction))}>
+                      <NotebookPen class="size-3.5" />
+                      Add note
+                    </button>
+                  {/if}
                 </div>
-                <p class="mt-1 line-clamp-2 text-sm font-medium leading-5 text-foreground">{transaction.description}</p>
+                {#if transaction.notes && !editingNoteIds.has(transaction.id)}
+                  <div class="flex items-start gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+                    <NotebookPen class="mt-0.5 size-3.5 shrink-0" />
+                    <p class="min-w-0 flex-1 break-words">{transaction.notes}</p>
+                    <button type="button" class="shrink-0 font-medium text-primary hover:underline" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => toggleNoteEditor(transaction))}>Edit</button>
+                  </div>
+                {:else if editingNoteIds.has(transaction.id)}
+                  <textarea class="min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" placeholder="Notes" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onblur={(event) => saveNote(transaction, event.currentTarget.value)}>{transaction.notes || ""}</textarea>
+                {/if}
               </div>
-              <p class={`money-value text-right text-sm font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</p>
-            </div>
-
-            <div class="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
-              <span aria-hidden="true"></span>
-              <CategoryPicker {categories} {transaction} eager selectClass="h-9 w-full text-xs" onChange={updateCategory} />
             </div>
           </div>
         {/each}
@@ -411,12 +613,26 @@
         <TableHeader>
           <TableRow>
             <TableHead class="w-16 pl-6 pr-4">
-              <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label="Select all visible transactions" checked={allVisibleSelected} on:change={toggleAll} />
+              <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label="Select all visible transactions" checked={allVisibleSelected} onchange={toggleAll} />
             </TableHead>
-            <TableHead class="w-36">Date</TableHead>
+            <TableHead class="w-36">
+              <Button href={sortPath("date")} variant="ghost" size="sm" class="-ml-2 h-7 px-2">
+                Date
+                {#if sortIcon("date")}
+                  <svelte:component this={sortIcon("date")} class="size-3.5" />
+                {/if}
+              </Button>
+            </TableHead>
             <TableHead>Description</TableHead>
             <TableHead class="w-56">Category</TableHead>
-            <TableHead class="w-32 text-right">Amount</TableHead>
+            <TableHead class="w-32 text-right">
+              <Button href={sortPath("amount")} variant="ghost" size="sm" class="ml-auto h-7 px-2">
+                Amount
+                {#if sortIcon("amount")}
+                  <svelte:component this={sortIcon("amount")} class="size-3.5" />
+                {/if}
+              </Button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -424,35 +640,70 @@
             {#each transactions as transaction}
               <TableRow
                 data-transaction-row-id={transaction.id}
-                class={`cursor-pointer ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
-                onclick={(event) => toggleTransactionFromRow(event, transaction)}
+                class={`${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
                 onpointerdown={(event) => startRowDrag(event, transaction)}
                 onpointerenter={(event) => hoverRow(event, transaction)}
                 onpointermove={(event) => hoverRow(event, transaction)}
               >
-                <TableCell class="w-16 pl-6 pr-4">
-                  <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label={`Select ${transaction.description}`} checked={selectedIds.has(transaction.id)} on:change={() => toggleTransaction(transaction.id)} />
+                <TableCell class="w-16 py-1.5 pl-6 pr-3">
+                  <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label={`Select ${transaction.description}`} checked={selectedIds.has(transaction.id)} onchange={() => toggleTransaction(transaction.id)} />
                 </TableCell>
-                <TableCell class="w-36 whitespace-nowrap text-muted-foreground">{transaction.occurred_on_label}</TableCell>
-                <TableCell class="min-w-0 whitespace-normal">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <p class="min-w-0 break-words font-medium text-foreground">{transaction.description}</p>
+                <TableCell class="w-32 whitespace-nowrap py-1.5 text-xs text-muted-foreground">{transaction.occurred_on_label}</TableCell>
+                <TableCell class="min-w-0 whitespace-normal py-1.5">
+                  <div class="min-w-0">
+                    <p class="min-w-0 break-words text-sm font-medium leading-5 text-foreground" title={transaction.description}>{transaction.merchant_name || transaction.description}</p>
+                  </div>
+                  <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                    {#each transaction.subcategories || [] as subcategory}
+                      <span class="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-border px-2 text-[11px] font-medium text-foreground">
+                        <span class="size-2 rounded-full" style={`background-color: ${subcategory.color}`}></span>
+                        {subcategory.name}
+                        <button type="button" class="text-muted-foreground hover:text-foreground" aria-label={`Remove ${subcategory.name}`} onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => removeSubcategory(transaction, subcategory.id))}>x</button>
+                      </span>
+                    {/each}
+                    {#if editingSubcategoryIds.has(transaction.id)}
+                      <NativeSelect value="" class="h-7 w-36 shrink-0 text-xs" data-subcategory-select-id={transaction.id} onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onchange={(event) => addSubcategory(transaction, event.currentTarget.value)} onblur={() => closeSubcategoryEditor(transaction)}>
+                        <NativeSelectOption value="">Add subcategory</NativeSelectOption>
+                        {#each subcategories as subcategory}
+                          {#if !transactionSubcategoryIds(transaction).includes(subcategory.id)}
+                            <NativeSelectOption value={subcategory.id}>{subcategory.name}</NativeSelectOption>
+                          {/if}
+                        {/each}
+                      </NativeSelect>
+                    {:else}
+                      <button type="button" class="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-border px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => openSubcategoryEditor(transaction))}>
+                          Add subcategory
+                      </button>
+                    {/if}
                     <span
-                      class="confidence-chip inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium"
+                      class="confidence-chip inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium"
                       style={confidenceStyle(transaction.confidence_label)}
                       data-pending={transaction.confidence_label === "Pending" ? "true" : undefined}
+                      title={transaction.classification_reason || undefined}
                     >
                       {transaction.confidence_label}
                     </span>
+                    {#if !transaction.notes && !editingNoteIds.has(transaction.id)}
+                      <button type="button" class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => toggleNoteEditor(transaction))}>
+                        <NotebookPen class="size-3.5" />
+                        Add note
+                      </button>
+                    {/if}
                   </div>
-                  {#if transaction.classification_reason}
-                    <p class="mt-1 max-w-full break-words text-xs leading-5 text-muted-foreground">{transaction.classification_reason}</p>
+                  {#if transaction.notes && !editingNoteIds.has(transaction.id)}
+                    <div class="mt-1 flex items-start gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+                      <NotebookPen class="mt-0.5 size-3.5 shrink-0" />
+                      <p class="min-w-0 flex-1 break-words">{transaction.notes}</p>
+                      <button type="button" class="shrink-0 font-medium text-primary hover:underline" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => toggleNoteEditor(transaction))}>Edit</button>
+                    </div>
+                  {:else if editingNoteIds.has(transaction.id)}
+                    <textarea class="mt-2 min-h-14 w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" placeholder="Personal notes" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onblur={(event) => saveNote(transaction, event.currentTarget.value)}>{transaction.notes || ""}</textarea>
                   {/if}
                 </TableCell>
-                <TableCell class="w-56">
-                  <CategoryPicker {categories} {transaction} className="w-48" selectClass="w-48" onChange={updateCategory} />
+                <TableCell class="w-48 py-1.5">
+                  <CategoryPicker {categories} {transaction} className="h-7 w-40 text-xs" selectClass="h-7 w-40 text-xs" onChange={updateCategory} />
                 </TableCell>
-                <TableCell class={`money-value pr-6 text-right font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</TableCell>
+                <TableCell class={`money-value py-1.5 pr-6 text-right text-sm font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</TableCell>
               </TableRow>
             {/each}
           {:else}
@@ -474,7 +725,7 @@
         {/if}
       </p>
 
-      <form class="flex items-center gap-2 lg:ml-auto" on:change={(event) => router.get(withQuery(actions.index, { ...filter_params, saved_query_id: selected_saved_query_id, limit: event.currentTarget.limit.value }))}>
+      <form class="flex items-center gap-2 lg:ml-auto" onchange={(event) => router.get(withQuery(actions.index, { ...filter_params, saved_query_id: selected_saved_query_id, limit: event.currentTarget.limit.value }))}>
         <Label for="limit">Rows</Label>
         <NativeSelect id="limit" name="limit" value={per_page} class="w-24">
           {#each per_page_options as option}
@@ -507,7 +758,7 @@
           <p class="text-xs text-muted-foreground">Total <span class="money-value font-semibold text-foreground">{formatSigned(selectedTotal)}</span></p>
         </div>
 
-        <form class="flex flex-col gap-2 sm:flex-row sm:items-end" on:submit|preventDefault={bulkUpdate}>
+        <form class="flex flex-col gap-2 sm:flex-row sm:items-end" onsubmit={(event) => preventAndRun(event, bulkUpdate)}>
           <div class="space-y-1.5">
             <Label for="bulk-category">Reclassify</Label>
             <NativeSelect id="bulk-category" bind:value={bulkCategoryId} class="w-full sm:w-56">
