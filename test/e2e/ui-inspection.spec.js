@@ -161,7 +161,8 @@ test("pwa manifest, icon, and service worker registration are intact", async ({ 
   expect(manifest.display).toBe("standalone")
   expect(manifest.start_url).toBe("/")
   expect(manifest.scope).toBe("/")
-  expect(manifest.theme_color).toBe("#0f172a")
+  expect(manifest.theme_color).toBe("#fafaf6")
+  expect(manifest.background_color).toBe("#fafaf6")
   expect(manifest.icons).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ src: "/icon-20260526.svg", type: "image/svg+xml", sizes: "any" }),
@@ -273,13 +274,16 @@ test("selected transaction bulk actions float over the viewport", async ({ page 
 test("theme toggle persists dark mode in local storage", async ({ page }) => {
   await page.goto("/")
 
+  await expect.poll(() => currentThemeColor(page)).toBe("#fafaf6")
   await page.getByRole("button", { name: "Switch to dark mode" }).click()
   await expect(page.locator("html")).toHaveClass(/dark/)
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("transactions-theme"))).toBe("dark")
+  await expect.poll(() => currentThemeColor(page)).toBe("#100d06")
 
   await page.reload()
   await expect(page.locator("html")).toHaveClass(/dark/)
   await expect(page.getByRole("button", { name: "Switch to light mode" })).toBeVisible()
+  await expect.poll(() => currentThemeColor(page)).toBe("#100d06")
 })
 
 test("secondary pages render without blank or broken Inertia content", async ({ page }) => {
@@ -310,6 +314,10 @@ async function expectNoViewportOverflow(page) {
 
   expect(overflow.documentWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewportWidth + 1)
   expect(overflow.bodyWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewportWidth + 1)
+}
+
+async function currentThemeColor(page) {
+  return page.evaluate(() => document.querySelector('meta[name="theme-color"]')?.getAttribute("content"))
 }
 
 async function expectElementFitsItsBox(page, selector) {

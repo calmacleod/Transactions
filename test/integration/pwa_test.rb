@@ -9,9 +9,10 @@ class PwaTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, 'content="width=device-width,initial-scale=1,viewport-fit=cover"'
     assert_includes response.body, 'rel="manifest" href="/manifest.json"'
-    assert_includes response.body, 'name="color-scheme" content="light"'
-    assert_includes response.body, 'name="theme-color" content="#0f172a"'
-    assert_includes response.body, 'name="msapplication-TileColor" content="#0f172a"'
+    assert_includes response.body, 'name="color-scheme" content="light dark"'
+    assert_includes response.body, 'name="theme-color" content="#fafaf6"'
+    assert_includes response.body, 'name="msapplication-TileColor" content="#fafaf6"'
+    assert_includes response.body, 'const darkThemeColor = "#100d06"'
     assert_includes response.body, 'name="apple-mobile-web-app-capable" content="yes"'
     assert_includes response.body, 'name="apple-mobile-web-app-status-bar-style" content="black-translucent"'
   end
@@ -25,9 +26,9 @@ class PwaTest < ActionDispatch::IntegrationTest
     assert_equal "Transactions", manifest.fetch("short_name")
     assert_equal "/", manifest.fetch("start_url")
     assert_equal "standalone", manifest.fetch("display")
-    assert_equal "#0f172a", manifest.fetch("theme_color")
-    assert_equal "#f8fafc", manifest.fetch("background_color")
-    assert manifest.fetch("icons").any? { |icon| icon["src"] == "/icon.svg" && icon["sizes"] == "any" }
+    assert_equal "#fafaf6", manifest.fetch("theme_color")
+    assert_equal "#fafaf6", manifest.fetch("background_color")
+    assert manifest.fetch("icons").any? { |icon| icon["src"] == "/icon-20260526.svg" && icon["sizes"] == "any" }
     assert manifest.fetch("icons").any? { |icon| icon["sizes"] == "512x512" && icon["purpose"] == "maskable" }
   end
 

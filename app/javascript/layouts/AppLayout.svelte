@@ -15,6 +15,10 @@
   import Moon from "@lucide/svelte/icons/moon"
   import Sun from "@lucide/svelte/icons/sun"
 
+  const themeColors = {
+    light: "#fafaf6",
+    dark: "#100d06",
+  }
   const navLinkClass = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
   const mountedNavPrefetch = ["hover", "mount"]
   const page = usePage()
@@ -59,6 +63,8 @@
   function setTheme(value) {
     theme = value === "dark" ? "dark" : "light"
     document.documentElement.classList.toggle("dark", theme === "dark")
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[theme])
+    document.querySelector('meta[name="msapplication-TileColor"]')?.setAttribute("content", themeColors[theme])
     window.localStorage.setItem("transactions-theme", theme)
   }
 
