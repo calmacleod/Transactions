@@ -8,7 +8,6 @@
   import { Label } from "$lib/components/ui/label"
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$lib/components/ui/table"
-  import Layout from "../Layout.svelte"
   import { withQuery } from "$lib/formatters"
   import Check from "@lucide/svelte/icons/check"
   import Search from "@lucide/svelte/icons/search"
@@ -50,6 +49,10 @@
 
     const selectRowUnderPointer = (event) => {
       if (!dragSelecting) return
+      if ((event.buttons & 1) === 0) {
+        stopDrag()
+        return
+      }
 
       const row = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-transaction-row-id]")
       if (!row) return
@@ -148,18 +151,16 @@
   }
 
   function hoverRow(event, transaction) {
-    const shiftActive = event.shiftKey || event.getModifierState?.("Shift") || shiftDown
-    if (!dragSelecting && !shiftActive) return
-
-    shiftDown = shiftActive
-    if (dragSelecting) {
-      applyTransactionSelection(transaction.id, dragSelectionMode)
-    } else if (lastShiftHoverId !== transaction.id) {
-      lastShiftHoverId = transaction.id
-      toggleTransaction(transaction.id)
-    } else {
+    if (!dragSelecting) return
+    if ((event.buttons & 1) === 0) {
+      dragSelecting = false
+      dragSelectionMode = null
+      lastShiftHoverId = null
       return
     }
+
+    shiftDown = event.shiftKey || event.getModifierState?.("Shift") || shiftDown
+    applyTransactionSelection(transaction.id, dragSelectionMode)
     event.preventDefault()
   }
 
@@ -222,7 +223,6 @@
   }
 </script>
 
-<Layout>
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Transaction ledger</p>
@@ -402,16 +402,16 @@
     </div>
 
     <div class="hidden md:block">
-      <Table class="min-w-[64rem]">
+      <Table class="min-w-[64rem] table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead class="w-16 pl-6 pr-4">
               <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label="Select all visible transactions" checked={allVisibleSelected} on:change={toggleAll} />
             </TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead class="w-36">Date</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead class="text-right">Amount</TableHead>
+            <TableHead class="w-56">Category</TableHead>
+            <TableHead class="w-32 text-right">Amount</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -419,7 +419,7 @@
             {#each transactions as transaction}
               <TableRow
                 data-transaction-row-id={transaction.id}
-                class={`cursor-pointer ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${shiftDown || dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
+                class={`cursor-pointer ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
                 onclick={(event) => toggleTransactionFromRow(event, transaction)}
                 onpointerdown={(event) => startRowDrag(event, transaction)}
                 onpointerenter={(event) => hoverRow(event, transaction)}
@@ -428,10 +428,10 @@
                 <TableCell class="w-16 pl-6 pr-4">
                   <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label={`Select ${transaction.description}`} checked={selectedIds.has(transaction.id)} on:change={() => toggleTransaction(transaction.id)} />
                 </TableCell>
-                <TableCell class="whitespace-nowrap text-muted-foreground">{transaction.occurred_on_label}</TableCell>
-                <TableCell>
+                <TableCell class="w-36 whitespace-nowrap text-muted-foreground">{transaction.occurred_on_label}</TableCell>
+                <TableCell class="min-w-0 whitespace-normal">
                   <div class="flex flex-wrap items-center gap-2">
-                    <p class="font-medium text-foreground">{transaction.description}</p>
+                    <p class="min-w-0 break-words font-medium text-foreground">{transaction.description}</p>
                     <span
                       class="confidence-chip inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium"
                       style={confidenceStyle(transaction.confidence_label)}
@@ -441,10 +441,10 @@
                     </span>
                   </div>
                   {#if transaction.classification_reason}
-                    <p class="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">{transaction.classification_reason}</p>
+                    <p class="mt-1 max-w-full break-words text-xs leading-5 text-muted-foreground">{transaction.classification_reason}</p>
                   {/if}
                 </TableCell>
-                <TableCell>
+                <TableCell class="w-56">
                   <NativeSelect value={transaction.category_id || ""} class="w-48" onchange={(event) => updateCategory(transaction, event.currentTarget.value)}>
                     <NativeSelectOption value="">Unclassified</NativeSelectOption>
                     {#each categories as category}
@@ -525,4 +525,3 @@
       </CardContent>
     </Card>
   {/if}
-</Layout>

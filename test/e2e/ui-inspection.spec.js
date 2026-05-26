@@ -52,6 +52,26 @@ test("internal navigation links prefetch Inertia payloads", async ({ page }) => 
   await prefetchRequest
 })
 
+test("sidebar active state follows Inertia navigation without reload", async ({ page }) => {
+  await page.goto("/")
+
+  const dashboardLink = page.getByRole("link", { name: /^Dashboard$/ }).first()
+  const transactionsLink = page.getByRole("link", { name: /^Transactions$/ }).first()
+  const insightsLink = page.getByRole("link", { name: /^Insights$/ }).first()
+
+  await expect(dashboardLink).toHaveClass(/bg-primary/)
+
+  await transactionsLink.click()
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(transactionsLink).toHaveClass(/bg-primary/)
+  await expect(dashboardLink).not.toHaveClass(/bg-primary/)
+
+  await insightsLink.click()
+  await expect(page.getByRole("heading", { name: "Insights" })).toBeVisible()
+  await expect(insightsLink).toHaveClass(/bg-primary/)
+  await expect(transactionsLink).not.toHaveClass(/bg-primary/)
+})
+
 test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
   await page.goto("/")
 
@@ -71,6 +91,7 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await expect(page.getByRole("columnheader", { name: "Description" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Confidence" })).toHaveCount(0)
   await expect(page.locator(".confidence-chip").first()).toBeVisible()
+  await expectTransactionDetailsStayInDescriptionColumn(page)
 
   await expectNoViewportOverflow(page)
   await expectNoUnnamedVisibleButtons(page)
@@ -170,7 +191,7 @@ test("transaction quick filters perform Inertia visits", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Last 30 days" })).toBeVisible()
 })
 
-test("transaction rows support shift hover and drag selection", async ({ page }) => {
+test("transaction rows only shift-select during a left-button drag", async ({ page }) => {
   await page.goto("/transactions")
 
   const rows = page.locator("[data-transaction-row-id]")
@@ -183,10 +204,8 @@ test("transaction rows support shift hover and drag selection", async ({ page })
 
   await page.keyboard.down("Shift")
   await rows.first().hover()
-  await expect(page.getByText("1 selected")).toBeVisible()
-  await page.keyboard.up("Shift")
-  await page.getByText("1 selected").locator("xpath=ancestor::*[@data-slot='card'][1]").getByRole("button", { name: "Clear" }).click()
   await expect(page.getByText("1 selected")).toHaveCount(0)
+  await page.keyboard.up("Shift")
 
   const firstBox = await rows.first().boundingBox()
   const secondBox = await rows.nth(1).boundingBox()
@@ -216,9 +235,7 @@ test("transaction rows support shift hover and drag selection", async ({ page })
 test("selected transaction bulk actions float over the viewport", async ({ page }) => {
   await page.goto("/transactions")
 
-  await page.keyboard.down("Shift")
-  await page.locator("[data-transaction-row-id]").first().hover()
-  await page.keyboard.up("Shift")
+  await page.locator("[data-transaction-row-id]").first().click({ position: { x: 120, y: 20 } })
 
   const bulkBar = page.getByText("1 selected").locator("xpath=ancestor::*[@data-slot='card'][1]")
   await expect(bulkBar).toBeVisible()
@@ -308,6 +325,30 @@ async function expectNoUnnamedVisibleButtons(page) {
   })
 
   expect(unnamedButtons).toEqual([])
+}
+
+async function expectTransactionDetailsStayInDescriptionColumn(page) {
+  const rows = page.locator("[data-transaction-row-id]")
+  await expect(rows.first()).toBeVisible()
+
+  const overflowingRows = await rows.evaluateAll((elements) => {
+    return elements
+      .map((element) => {
+        const cells = element.querySelectorAll("td")
+        const reason = cells[2].querySelector("p.mt-1")
+
+        return {
+          reasonClientWidth: reason.clientWidth,
+          reasonScrollWidth: reason.scrollWidth,
+          descriptionRight: cells[2].getBoundingClientRect().right,
+          categoryLeft: cells[3].getBoundingClientRect().left,
+          text: reason.textContent?.trim().slice(0, 100),
+        }
+      })
+      .filter((row) => row.reasonScrollWidth > row.reasonClientWidth + 1 || row.descriptionRight > row.categoryLeft + 1)
+  })
+
+  expect(overflowingRows).toEqual([])
 }
 
 async function measureFixedHeader(page, header, heading) {

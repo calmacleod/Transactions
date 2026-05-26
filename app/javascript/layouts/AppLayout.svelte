@@ -16,28 +16,45 @@
   import Sun from "@lucide/svelte/icons/sun"
 
   const navLinkClass = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+  const mountedNavPrefetch = ["hover", "mount"]
   const page = usePage()
 
-  $: auth = page.props.auth || {}
-  $: paths = page.props.paths || {}
-  $: flash = page.props.flash || {}
-  $: currentPath = page.url || "/"
-  $: navItems = [
-    { label: "Dashboard", href: paths.root || "/", icon: LayoutDashboard },
-    { label: "Transactions", href: paths.transactions || "/transactions", icon: CreditCard },
-    { label: "Insights", href: paths.insights || "/insights", icon: Lightbulb },
-    { label: "Models", href: paths.models || "/models", icon: Bot },
-    { label: "Jobs", href: paths.jobs || "/admin/jobs", icon: BriefcaseBusiness, fullReload: true },
-  ]
+  let auth = page.props.auth || {}
+  let paths = page.props.paths || {}
+  let flash = page.props.flash || {}
+  let currentPath = page.url || "/"
+  let navItems = navItemsFor(paths)
 
   let mobileOpen = false
   let theme = "light"
 
   onMount(() => {
+    syncPageState(page)
+    const stopTrackingNavigation = router.on("navigate", (event) => syncPageState(event.detail.page))
     const savedTheme = window.localStorage.getItem("transactions-theme")
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
     setTheme(savedTheme || (prefersDark ? "dark" : "light"))
+
+    return () => stopTrackingNavigation()
   })
+
+  function syncPageState(nextPage) {
+    auth = nextPage.props.auth || {}
+    paths = nextPage.props.paths || {}
+    flash = nextPage.props.flash || {}
+    currentPath = nextPage.url || window.location.pathname + window.location.search || "/"
+    navItems = navItemsFor(paths)
+  }
+
+  function navItemsFor(nextPaths) {
+    return [
+      { label: "Dashboard", href: nextPaths.root || "/", icon: LayoutDashboard },
+      { label: "Transactions", href: nextPaths.transactions || "/transactions", icon: CreditCard },
+      { label: "Insights", href: nextPaths.insights || "/insights", icon: Lightbulb },
+      { label: "Models", href: nextPaths.models || "/models", icon: Bot },
+      { label: "Jobs", href: nextPaths.jobs || "/admin/jobs", icon: BriefcaseBusiness, fullReload: true },
+    ]
+  }
 
   function setTheme(value) {
     theme = value === "dark" ? "dark" : "light"
@@ -53,9 +70,13 @@
     router.delete(paths.session)
   }
 
-  function isActive(href) {
-    if (href === paths.root || href === "/") return currentPath === "/" || currentPath.startsWith("/?")
-    return currentPath === href || currentPath.startsWith(`${href}?`)
+  function isActive(href, path, rootPath = "/") {
+    if (href === rootPath || href === "/") return path === "/" || path.startsWith("/?")
+    return path === href || path.startsWith(`${href}?`)
+  }
+
+  function navPrefetchMode(item) {
+    return item.fullReload ? false : mountedNavPrefetch
   }
 </script>
 
@@ -79,16 +100,16 @@
       <nav class="grid gap-1">
         {#each navItems as item}
           {#if item.fullReload}
-            <a href={item.href} data-turbo="false" class={`${navLinkClass} ${isActive(item.href) ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+            <a href={item.href} data-turbo="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
               <svelte:component this={item.icon} class="size-4" />
               <span>{item.label}</span>
             </a>
           {:else}
             <Link
               href={item.href}
-              prefetch
-              cacheFor="30s"
-              class={`${navLinkClass} ${isActive(item.href) ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+              prefetch={navPrefetchMode(item)}
+              cacheFor="1m"
+              class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
             >
               <svelte:component this={item.icon} class="size-4" />
               <span>{item.label}</span>
@@ -159,7 +180,7 @@
         <nav class="grid gap-1">
           {#each navItems as item}
             {#if item.fullReload}
-              <a href={item.href} data-turbo="false" class={`${navLinkClass} ${isActive(item.href) ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+              <a href={item.href} data-turbo="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>
               </a>
@@ -167,9 +188,9 @@
               <Link
                 href={item.href}
                 prefetch
-                cacheFor="30s"
+                cacheFor="1m"
                 onclick={() => (mobileOpen = false)}
-                class={`${navLinkClass} ${isActive(item.href) ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
               >
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>

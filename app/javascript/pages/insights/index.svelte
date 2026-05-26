@@ -3,7 +3,6 @@
   import { Badge } from "$lib/components/ui/badge"
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
-  import Layout from "../Layout.svelte"
   import { badgeVariant } from "$lib/formatters"
   import Lightbulb from "@lucide/svelte/icons/lightbulb"
   import RefreshCcw from "@lucide/svelte/icons/refresh-ccw"
@@ -12,7 +11,6 @@
   export let actions
 </script>
 
-<Layout>
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Recent analysis</p>
@@ -44,4 +42,3 @@
       </Card>
     {/each}
   </div>
-</Layout>

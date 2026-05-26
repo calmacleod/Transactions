@@ -5,7 +5,6 @@
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { Progress } from "$lib/components/ui/progress"
   import { Table, TableBody, TableCell, TableRow } from "$lib/components/ui/table"
-  import Layout from "../Layout.svelte"
   import CategoryBadge from "../components/CategoryBadge.svelte"
   import ClassificationRun from "../components/ClassificationRun.svelte"
   import { badgeVariant } from "$lib/formatters"
@@ -52,7 +51,6 @@
   }
 </script>
 
-<Layout>
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div class="max-w-3xl">
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Expense control</p>
@@ -268,4 +266,3 @@
       {/each}
     </div>
   </section>
-</Layout>

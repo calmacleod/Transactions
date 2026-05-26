@@ -7,7 +7,6 @@
   import { Label } from "$lib/components/ui/label"
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$lib/components/ui/table"
-  import Layout from "../Layout.svelte"
   import Braces from "@lucide/svelte/icons/braces"
   import Eye from "@lucide/svelte/icons/eye"
   import RefreshCcw from "@lucide/svelte/icons/refresh-ccw"
@@ -35,7 +34,6 @@
   }
 </script>
 
-<Layout>
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">RubyLLM registry</p>
@@ -149,4 +147,3 @@
   {#if capped}
     <p class="mt-4 text-sm text-muted-foreground">Showing the first 250 matching models. Narrow the filters to inspect a smaller set.</p>
   {/if}
-</Layout>
