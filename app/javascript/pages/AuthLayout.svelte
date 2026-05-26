@@ -1,0 +1,30 @@
+<script>
+  import { usePage } from "@inertiajs/svelte"
+
+  const page = usePage()
+  $: flash = page.props.flash || {}
+</script>
+
+<main class="min-h-screen bg-background px-4 py-8 text-foreground">
+  <div class="mx-auto flex min-h-[80vh] max-w-md items-center">
+    <div class="w-full">
+      {#if flash.notice}
+        <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.notice}</div>
+      {/if}
+
+      {#if flash.alert}
+        <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{flash.alert}</div>
+      {/if}
+
+      <div class="mb-6 flex items-center gap-3">
+        <span class="size-9 rounded-lg bg-primary shadow-sm"></span>
+        <div>
+          <p class="text-sm font-semibold text-foreground">Transactions</p>
+          <p class="text-xs text-muted-foreground">Expense control</p>
+        </div>
+      </div>
+
+      <slot />
+    </div>
+  </div>
+</main>

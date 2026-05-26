@@ -1,5 +1,0 @@
-<%= turbo_frame_tag "classification_run", data: classification_run&.active? ? { controller: "poll", poll_interval_value: 2000, poll_url_value: classification_run_path(classification_run) } : {} do %>
-  <% if classification_run.present? %>
-    <%= render "classification_runs/classification_run", classification_run: classification_run %>
-  <% end %>
-<% end %>

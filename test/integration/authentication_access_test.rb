@@ -13,9 +13,10 @@ class AuthenticationAccessTest < ActionDispatch::IntegrationTest
     get root_path
 
     assert_response :success
-    assert_includes response.body, "Spending dashboard"
-    assert_includes response.body, "Day-of-week frequency"
-    assert_includes response.body, "Cutback targets"
+    page = inertia_page
+    assert_equal "dashboard/index", page["component"]
+    assert page["props"]["metrics"]
+    assert page["props"]["recommendations"]
   end
 
   test "redirects anonymous visitors away from job management" do
@@ -38,6 +39,7 @@ class AuthenticationAccessTest < ActionDispatch::IntegrationTest
     get new_session_path
 
     assert_response :success
-    assert_select "input[type=email][placeholder]", false
+    assert_equal "sessions/new", inertia_page["component"]
+    assert_empty inertia_props["email_address"].to_s
   end
 end

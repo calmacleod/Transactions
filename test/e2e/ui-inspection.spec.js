@@ -1,0 +1,228 @@
+import { expect, test } from "@playwright/test"
+
+test.beforeEach(async ({ page }) => {
+  const browserErrors = []
+
+  page.on("pageerror", (error) => browserErrors.push(error.message))
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text())
+  })
+
+  page.browserErrors = browserErrors
+  await signIn(page)
+})
+
+test.afterEach(async ({ page }) => {
+  expect(page.browserErrors).toEqual([])
+})
+
+test("dashboard renders without runtime errors and exposes primary controls", async ({ page }) => {
+  await page.goto("/")
+
+  await expect(page.getByRole("heading", { name: "Spending dashboard" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Classify pending" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Generate insights" })).toBeVisible()
+  await expect(page.getByRole("link", { name: /Month spend/i })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Category allocation" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Latest transactions" })).toBeVisible()
+
+  await expectNoViewportOverflow(page)
+  await expectNoUnnamedVisibleButtons(page)
+})
+
+test("dashboard desktop layout does not clip the latest transaction table", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 768 })
+  await page.goto("/")
+
+  const latestPanel = page.getByTestId("latest-transactions-panel")
+  await expect(latestPanel).toBeVisible()
+
+  await expectElementFitsItsBox(page, "[data-testid='latest-transactions-scroll']")
+  await expectNoViewportOverflow(page)
+})
+
+test("internal navigation links prefetch Inertia payloads", async ({ page }) => {
+  await page.goto("/")
+
+  const prefetchRequest = page.waitForRequest((request) => {
+    return request.url().includes("/transactions") && request.headers().purpose === "prefetch"
+  })
+
+  await page.getByRole("link", { name: /^Transactions$/ }).first().hover()
+  await prefetchRequest
+})
+
+test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
+  await page.goto("/")
+
+  await page.getByRole("link", { name: /^Jobs$/ }).click()
+
+  await expect(page).toHaveURL(/\/admin\/jobs/)
+  await expect(page.locator("#app")).toHaveCount(0)
+  await expect(page.locator("body")).toContainText("Pending jobs")
+})
+
+test("transactions page keeps dense controls usable on desktop and mobile", async ({ page }) => {
+  await page.goto("/transactions")
+
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Apply filters" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Description" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Confidence" })).toHaveCount(0)
+  await expect(page.locator(".confidence-chip").first()).toBeVisible()
+
+  await expectNoViewportOverflow(page)
+  await expectNoUnnamedVisibleButtons(page)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+
+  await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
+  await expect(page.getByLabel("Search")).toBeVisible()
+  await expectNoViewportOverflow(page)
+})
+
+test("transaction quick filters perform Inertia visits", async ({ page }) => {
+  await page.goto("/transactions")
+
+  await page.getByRole("button", { name: "Last 30 days" }).click()
+
+  await expect(page).toHaveURL(/quick_range=last_30_days/)
+  await expect(page.getByRole("button", { name: "Last 30 days" })).toBeVisible()
+})
+
+test("transaction rows support shift hover and drag selection", async ({ page }) => {
+  await page.goto("/transactions")
+
+  const rows = page.locator("[data-transaction-row-id]")
+  await expect(rows.first()).toBeVisible()
+
+  await page.keyboard.down("Shift")
+  await rows.first().hover()
+  await expect(page.getByText("1 selected")).toBeVisible()
+  await page.keyboard.up("Shift")
+  await page.getByText("1 selected").locator("xpath=ancestor::*[@data-slot='card'][1]").getByRole("button", { name: "Clear" }).click()
+  await expect(page.getByText("1 selected")).toHaveCount(0)
+
+  const firstBox = await rows.first().boundingBox()
+  const secondBox = await rows.nth(1).boundingBox()
+  expect(firstBox).not.toBeNull()
+  expect(secondBox).not.toBeNull()
+
+  await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2)
+  await page.keyboard.down("Shift")
+  await page.mouse.down()
+  await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.keyboard.up("Shift")
+
+  await expect(page.getByText("2 selected")).toBeVisible()
+
+  await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height / 2)
+  await page.keyboard.down("Shift")
+  await page.mouse.down()
+  await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + firstBox.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.keyboard.up("Shift")
+
+  await expect(page.locator("tbody input[type='checkbox']:checked")).toHaveCount(0)
+  await expect(page.getByText("2 selected")).toHaveCount(0)
+})
+
+test("selected transaction bulk actions float over the viewport", async ({ page }) => {
+  await page.goto("/transactions")
+
+  await page.keyboard.down("Shift")
+  await page.locator("[data-transaction-row-id]").first().hover()
+  await page.keyboard.up("Shift")
+
+  const bulkBar = page.getByText("1 selected").locator("xpath=ancestor::*[@data-slot='card'][1]")
+  await expect(bulkBar).toBeVisible()
+
+  const position = await bulkBar.evaluate((element) => {
+    const styles = window.getComputedStyle(element)
+    const rect = element.getBoundingClientRect()
+
+    return {
+      position: styles.position,
+      bottomGap: window.innerHeight - rect.bottom,
+      top: rect.top,
+    }
+  })
+
+  expect(position.position).toBe("fixed")
+  expect(position.bottomGap).toBeLessThan(32)
+  expect(position.top).toBeGreaterThan(0)
+})
+
+test("theme toggle persists dark mode in local storage", async ({ page }) => {
+  await page.goto("/")
+
+  await page.getByRole("button", { name: "Switch to dark mode" }).click()
+  await expect(page.locator("html")).toHaveClass(/dark/)
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("transactions-theme"))).toBe("dark")
+
+  await page.reload()
+  await expect(page.locator("html")).toHaveClass(/dark/)
+  await expect(page.getByRole("button", { name: "Switch to light mode" })).toBeVisible()
+})
+
+test("secondary pages render without blank or broken Inertia content", async ({ page }) => {
+  for (const path of ["/insights", "/models"]) {
+    await page.goto(path)
+    await expect(page.locator("#app")).not.toBeEmpty()
+    await expectNoViewportOverflow(page)
+    await expectNoUnnamedVisibleButtons(page)
+  }
+})
+
+async function signIn(page) {
+  await page.goto("/session/new")
+  await page.getByLabel("Email").fill("one@example.com")
+  await page.getByLabel("Password").fill("password")
+  await page.getByRole("button", { name: "Sign in" }).click()
+  await expect(page.getByRole("heading", { name: "Spending dashboard" })).toBeVisible()
+}
+
+async function expectNoViewportOverflow(page) {
+  const overflow = await page.evaluate(() => {
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      bodyWidth: document.body.scrollWidth,
+    }
+  })
+
+  expect(overflow.documentWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewportWidth + 1)
+  expect(overflow.bodyWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewportWidth + 1)
+}
+
+async function expectElementFitsItsBox(page, selector) {
+  const measurements = await page.locator(selector).evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      rectWidth: rect.width,
+      text: element.textContent?.trim().replace(/\s+/g, " ").slice(0, 120),
+    }
+  })
+
+  expect(measurements.scrollWidth, JSON.stringify(measurements)).toBeLessThanOrEqual(measurements.clientWidth + 1)
+}
+
+async function expectNoUnnamedVisibleButtons(page) {
+  const unnamedButtons = await page.locator("button:visible").evaluateAll((buttons) => {
+    return buttons
+      .map((button) => ({
+        text: button.textContent?.trim(),
+        ariaLabel: button.getAttribute("aria-label"),
+        title: button.getAttribute("title"),
+        html: button.outerHTML.slice(0, 160),
+      }))
+      .filter((button) => !button.text && !button.ariaLabel && !button.title)
+  })
+
+  expect(unnamedButtons).toEqual([])
+}

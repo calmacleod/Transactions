@@ -8,8 +8,9 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
     get classification_run_path(run)
 
     assert_response :success
-    assert_includes response.body, "4"
-    assert_includes response.body, "10 processed"
+    props = inertia_props.fetch("classification_run")
+    assert_equal 4, props["processed_count"]
+    assert_equal 10, props["total_count"]
   end
 
   test "requests cancellation" do
@@ -33,17 +34,14 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "canceling", run.reload.status
   end
 
-  test "requests cancellation with turbo stream" do
+  test "requests cancellation through Inertia redirect" do
     sign_in_as users(:one)
     run = ClassificationRun.create!(status: "running")
 
-    patch cancel_classification_run_path(run), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    patch cancel_classification_run_path(run), headers: { "X-Inertia" => "true" }
 
-    assert_response :success
-    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_redirected_to root_path
     assert_equal "canceling", run.reload.status
-    assert_includes response.body, "turbo-stream action=\"replace\" target=\"classification_run\""
-    assert_includes response.body, "Classification stop requested."
   end
 
   test "dismisses classification progress for the session" do
@@ -57,17 +55,15 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
     get root_path
 
     assert_response :success
-    assert_no_match %r{<h2 class="panel-title">Classification</h2>}, response.body
+    assert_nil inertia_props["classification_run"]
   end
 
-  test "dismisses classification progress with turbo stream" do
+  test "dismisses classification progress through Inertia redirect" do
     sign_in_as users(:one)
     run = ClassificationRun.create!(status: "complete", total_count: 0, finished_at: Time.current)
 
-    patch dismiss_classification_run_path(run), headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    patch dismiss_classification_run_path(run), headers: { "X-Inertia" => "true" }
 
-    assert_response :success
-    assert_equal "text/vnd.turbo-stream.html", response.media_type
-    assert_includes response.body, "turbo-stream action=\"replace\" target=\"classification_run\""
+    assert_redirected_to root_path
   end
 end

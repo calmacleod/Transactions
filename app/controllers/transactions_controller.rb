@@ -6,44 +6,53 @@ class TransactionsController < ApplicationController
   helper_method :transaction_per_page_options
 
   def index
-    @categories = Category.by_name
-    @saved_queries = Current.session.user.saved_transaction_queries.ordered
-    @selected_saved_query = @saved_queries.find_by(id: params[:saved_query_id])
-    @filter_params = merged_filter_params
-    @filter = TransactionFilter.new(@filter_params)
-    filtered_transactions = @filter.call
-    @transactions_per_page = transactions_per_page
-    @pagy, @transactions = pagy(:offset, filtered_transactions, limit: transactions_page_limit(filtered_transactions))
-    @start_date = @filter.start_date
-    @end_date = @filter.end_date
+    categories = Category.by_name
+    saved_queries = Current.session.user.saved_transaction_queries.ordered
+    selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
+    filter_params = merged_filter_params(selected_saved_query)
+    filter = TransactionFilter.new(filter_params)
+    filtered_transactions = filter.call
+    transactions_per_page = transactions_per_page()
+    pagy, transactions = pagy(:offset, filtered_transactions, limit: transactions_page_limit(filtered_transactions, transactions_per_page))
+    start_date = filter.start_date
+    end_date = filter.end_date
+
+    render inertia: {
+      categories: category_options(categories),
+      saved_queries: saved_queries.map { |query| saved_query_props(query) },
+      selected_saved_query_id: selected_saved_query&.id,
+      filter_params: filter_params,
+      quick_ranges: TransactionFilter::QUICK_RANGES.map { |value, label| { value:, label: } },
+      filter_active: filter.active?,
+      date_summary: date_summary(start_date, end_date),
+      transactions: transactions.map { |transaction| transaction_props(transaction) },
+      pagination: pagination_props(pagy, filter_params, selected_saved_query),
+      per_page: transactions_per_page,
+      per_page_options: transaction_per_page_options.map { |label, value| { label:, value: } },
+      actions: {
+        index: transactions_path,
+        bulk_update: bulk_update_transactions_path,
+        save_query: saved_transaction_queries_path
+      }
+    }
   end
 
   def update
-    @transaction = ExpenseTransaction.find(params[:id])
-    @transaction.update!(transaction_params)
-    @categories = Category.by_name
+    transaction = ExpenseTransaction.find(params[:id])
+    transaction.update!(transaction_params)
 
-    respond_to do |format|
-      format.turbo_stream { head :no_content }
-      format.html { redirect_back fallback_location: transactions_path, notice: "Transaction updated." }
-    end
+    redirect_back fallback_location: transactions_path, notice: "Transaction updated."
   end
 
   def bulk_update
-    @categories = Category.by_name
-    @transactions = ExpenseTransaction.where(id: bulk_transaction_ids)
     category_id = bulk_category_id
 
-    @transactions.find_each do |transaction|
+    transactions = ExpenseTransaction.where(id: bulk_transaction_ids)
+    transactions.find_each do |transaction|
       transaction.update!(category_id:)
     end
 
-    @transactions = ExpenseTransaction.includes(:category).where(id: bulk_transaction_ids)
-
-    respond_to do |format|
-      format.turbo_stream
-      format.html { redirect_back fallback_location: transactions_path, notice: "Updated #{helpers.pluralize(@transactions.size, "transaction")}." }
-    end
+    redirect_back fallback_location: transactions_path, notice: "Updated #{helpers.pluralize(transactions.size, "transaction")}."
   end
 
   private
@@ -88,16 +97,79 @@ class TransactionsController < ApplicationController
     end
   end
 
-  def transactions_page_limit(filtered_transactions)
-    return [ filtered_transactions.count, 1 ].max if @transactions_per_page == ALL_PER_PAGE
+  def transactions_page_limit(filtered_transactions, transactions_per_page)
+    return [ filtered_transactions.count, 1 ].max if transactions_per_page == ALL_PER_PAGE
 
-    @transactions_per_page
+    transactions_per_page
   end
 
-  def merged_filter_params
-    saved_filters = @selected_saved_query&.filters || {}
+  def merged_filter_params(selected_saved_query)
+    saved_filters = selected_saved_query&.filters || {}
     request_filters = TransactionFilter.clean(params)
 
     saved_filters.merge(request_filters)
+  end
+
+  def saved_query_props(saved_query)
+    {
+      id: saved_query.id,
+      name: saved_query.name,
+      path: transactions_path(saved_query_id: saved_query.id),
+      destroy_path: saved_transaction_query_path(saved_query)
+    }
+  end
+
+  def date_summary(start_date, end_date)
+    if start_date.present? && end_date.present?
+      "Showing #{start_date.strftime("%b %-d, %Y")} to #{end_date.strftime("%b %-d, %Y")}"
+    elsif start_date.present?
+      "Showing records from #{start_date.strftime("%b %-d, %Y")}"
+    elsif end_date.present?
+      "Showing records through #{end_date.strftime("%b %-d, %Y")}"
+    else
+      "Showing filtered records"
+    end
+  end
+
+  def pagination_props(pagy, filter_params, selected_saved_query)
+    base_params = filter_params.dup
+    base_params[:saved_query_id] = selected_saved_query.id if selected_saved_query.present?
+    base_params[:limit] = params[:limit] if params[:limit].present?
+
+    {
+      count: pagy.count,
+      from: pagy.count.positive? ? pagy.from : 0,
+      to: pagy.count.positive? ? pagy.to : 0,
+      page: pagy.page,
+      pages: pagy.pages,
+      prev_path: pagy.page > 1 ? transactions_path(base_params.merge(page: pagy.page - 1)) : nil,
+      next_path: pagy.page < pagy.pages ? transactions_path(base_params.merge(page: pagy.page + 1)) : nil,
+      pages_series: pagination_series(pagy).map do |page|
+        if page == :gap
+          { gap: true }
+        else
+          {
+            label: page.to_s,
+            current: page == pagy.page,
+            gap: false,
+            path: transactions_path(base_params.merge(page:))
+          }
+        end
+      end
+    }
+  end
+
+  def pagination_series(pagy)
+    return (1..pagy.pages).to_a if pagy.pages <= 7
+
+    visible_pages = [ 1, pagy.pages, pagy.page - 1, pagy.page, pagy.page + 1 ]
+    visible_pages += [ 2, 3, 4 ] if pagy.page <= 4
+    visible_pages += [ pagy.pages - 3, pagy.pages - 2, pagy.pages - 1 ] if pagy.page >= pagy.pages - 3
+    visible_pages = visible_pages.select { |page| page.between?(1, pagy.pages) }.uniq.sort
+
+    visible_pages.each_with_object([]) do |page, series|
+      series << :gap if series.any? && page > series.last.to_i + 1
+      series << page
+    end
   end
 end

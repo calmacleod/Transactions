@@ -9,8 +9,9 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_operator Model.count, :>, 0
-    assert_includes response.body, "RubyLLM registry"
-    assert_includes response.body, "Available models"
+    props = inertia_props
+    assert_operator props["models"].size, :>, 0
+    assert_operator props["stats"]["available_models"], :>, 0
   end
 
   test "refreshes RubyLLM models" do

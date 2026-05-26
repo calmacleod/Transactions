@@ -4,6 +4,13 @@ class PasswordsController < ApplicationController
   rate_limit to: 10, within: 3.minutes, only: :create, with: -> { redirect_to new_password_path, alert: "Try again later." }
 
   def new
+    render inertia: {
+      email_address: params[:email_address],
+      actions: {
+        passwords: passwords_path,
+        new_session: new_session_path
+      }
+    }
   end
 
   def create
@@ -15,6 +22,12 @@ class PasswordsController < ApplicationController
   end
 
   def edit
+    render inertia: {
+      token: params[:token],
+      actions: {
+        password: password_path(params[:token])
+      }
+    }
   end
 
   def update

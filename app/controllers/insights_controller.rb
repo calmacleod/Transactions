@@ -1,6 +1,11 @@
   class InsightsController < ApplicationController
     def index
-      @insights = Insight.recent
+      render inertia: {
+        insights: Insight.recent.map { |insight| insight_props(insight) },
+        actions: {
+          regenerate: insights_path
+        }
+      }
     end
 
     def create

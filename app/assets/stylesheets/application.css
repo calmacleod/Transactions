@@ -409,6 +409,33 @@ body {
   min-width: 38rem;
 }
 
+.table-scroll[data-table-size="latest"] .dense-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.table-scroll[data-table-size="latest"] .dense-table td {
+  padding-inline: 0.625rem;
+}
+
+.table-scroll[data-table-size="latest"] .dense-table td:nth-child(1) {
+  width: 4.5rem;
+}
+
+.table-scroll[data-table-size="latest"] .dense-table td:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-scroll[data-table-size="latest"] .dense-table td:nth-child(3) {
+  width: 8.75rem;
+}
+
+.table-scroll[data-table-size="latest"] .dense-table td:nth-child(4) {
+  width: 5.75rem;
+}
+
 .table-scroll[data-table-size="wide"] .dense-table {
   min-width: 64rem;
 }

@@ -8,18 +8,25 @@ A Rails 8 + SQLite expense tracker for headerless credit card CSV exports.
 - Local SQLite storage for transactions, import batches, categories, and generated insights.
 - RubyLLM-backed transaction classification with structured output.
 - RubyLLM-backed spending insight generation with a rule-based fallback when no AI provider key is configured.
-- Tailwind-powered dashboard and transaction review UI.
+- Inertia Rails + Svelte dashboard and transaction review UI using local shadcn-svelte style components.
 - Rails-generated Docker, Thruster, Solid Queue/Cache/Cable, and Kamal configuration.
 
 ## Setup
 
 ```bash
 bundle install
+npm install
 bin/rails db:setup
 bin/dev
 ```
 
 Open `http://localhost:3000`.
+
+Run the browser UI checks with:
+
+```bash
+npm run test:e2e
+```
 
 ## Admin Login
 

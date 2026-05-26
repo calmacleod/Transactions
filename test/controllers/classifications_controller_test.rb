@@ -25,16 +25,13 @@ class ClassificationsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
   end
 
-  test "queues transaction classification with turbo stream" do
+  test "queues transaction classification through Inertia redirect" do
     sign_in_as users(:one)
 
     assert_difference -> { ClassificationRun.count }, 1 do
-      post classifications_path, headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      post classifications_path, headers: { "X-Inertia" => "true" }
     end
 
-    assert_response :success
-    assert_equal "text/vnd.turbo-stream.html", response.media_type
-    assert_includes response.body, "turbo-stream action=\"replace\" target=\"classification_run\""
-    assert_includes response.body, "Queued fast classification"
+    assert_redirected_to root_path
   end
 end

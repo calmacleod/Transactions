@@ -21,44 +21,12 @@
     <link rel="apple-touch-icon" href="/icon.png">
     <link rel="manifest" href="<%= pwa_manifest_path(format: :json) %>">
 
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
+    <%= vite_client_tag %>
+    <%= vite_javascript_tag "inertia" %>
+    <%= inertia_ssr_head %>
   </head>
 
   <body class="text-zinc-950 antialiased">
-    <div class="app-shell">
-      <aside class="app-sidebar">
-        <div class="app-sidebar-top">
-          <%= link_to root_path, class: "app-brand" do %>
-            <span class="app-brand-mark"></span>
-            <span>Transactions</span>
-          <% end %>
-
-          <% if authenticated? %>
-            <div class="app-sign-out">
-              <%= button_to "Sign out", session_path, method: :delete %>
-            </div>
-          <% end %>
-        </div>
-
-        <% if authenticated? %>
-          <nav class="app-nav">
-            <%= link_to "Dashboard", root_path %>
-            <%= link_to "Transactions", transactions_path %>
-            <%= link_to "Insights", insights_path %>
-            <%= link_to "Models", models_path %>
-            <%= link_to "Jobs", "/admin/jobs" %>
-          </nav>
-        <% end %>
-      </aside>
-
-      <main class="app-main">
-        <%= turbo_frame_tag "flash" do %>
-          <%= render "shared/flash" %>
-        <% end %>
-
-        <%= yield %>
-      </main>
-    </div>
+    <%= yield %>
   </body>
 </html>

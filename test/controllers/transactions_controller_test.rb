@@ -7,10 +7,9 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     get transactions_path, params: { start_date: "2026-05-21", end_date: "2026-05-21" }
 
     assert_response :success
-    assert_includes response.body, "Showing"
-    assert_includes response.body, "May 21, 2026"
-    assert_includes response.body, "NEIGHBOURHOOD RESTAURANT"
-    assert_no_match "LOCAL GROCERY MARKET", response.body
+    props = inertia_props
+    assert_equal "Showing May 21, 2026 to May 21, 2026", props["date_summary"]
+    assert_equal [ "NEIGHBOURHOOD RESTAURANT" ], props["transactions"].map { |transaction| transaction["description"] }
   end
 
   test "ignores invalid date filters" do
@@ -40,13 +39,37 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     get transactions_path
 
     assert_response :success
-    assert_includes response.body, "Showing <span>1-25</span> of <span>32</span>"
-    assert_includes response.body, 'data-turbo-frame="transactions_list"'
+    assert_equal({ "count" => 32, "from" => 1, "to" => 25 }, inertia_props["pagination"].slice("count", "from", "to"))
 
     get transactions_path, params: { page: 2 }
 
     assert_response :success
-    assert_includes response.body, "Showing <span>26-32</span> of <span>32</span>"
+    assert_equal({ "count" => 32, "from" => 26, "to" => 32 }, inertia_props["pagination"].slice("count", "from", "to"))
+  end
+
+  test "collapses long pagination series with gaps" do
+    sign_in_as users(:one)
+    import_batch = import_batches(:statement)
+
+    300.times do |index|
+      ExpenseTransaction.create!(
+        occurred_on: Date.new(2026, 5, 1) + index.days,
+        description: "Long pagination transaction #{index}",
+        amount_cents: 1000 + index,
+        direction: "debit",
+        external_id: "long-pagination-row-#{index}",
+        raw_data: {},
+        import_batch: import_batch
+      )
+    end
+
+    get transactions_path, params: { page: 6 }
+
+    assert_response :success
+    series = inertia_props["pagination"]["pages_series"]
+    assert series.any? { |page| page["gap"] }
+    assert_operator series.size, :<, inertia_props["pagination"]["pages"]
+    assert_equal %w[1 5 6 7 13], series.reject { |page| page["gap"] }.map { |page| page["label"] }
   end
 
   test "persists selected transaction page size for the session" do
@@ -68,18 +91,18 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     get transactions_path, params: { limit: 50 }
 
     assert_response :success
-    assert_includes response.body, "Showing <span>1-50</span> of <span>60</span>"
-    assert_includes response.body, '<option selected="selected" value="50">50</option>'
+    assert_equal({ "count" => 60, "from" => 1, "to" => 50 }, inertia_props["pagination"].slice("count", "from", "to"))
+    assert_equal 50, inertia_props["per_page"]
 
     get transactions_path
 
     assert_response :success
-    assert_includes response.body, "Showing <span>1-50</span> of <span>60</span>"
+    assert_equal({ "count" => 60, "from" => 1, "to" => 50 }, inertia_props["pagination"].slice("count", "from", "to"))
 
     get transactions_path, params: { limit: 500 }
 
     assert_response :success
-    assert_includes response.body, "Showing <span>1-50</span> of <span>60</span>"
+    assert_equal({ "count" => 60, "from" => 1, "to" => 50 }, inertia_props["pagination"].slice("count", "from", "to"))
   end
 
   test "can show all filtered transactions and persist that page size" do
@@ -101,29 +124,27 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     get transactions_path, params: { limit: "all" }
 
     assert_response :success
-    assert_includes response.body, "Showing <span>1-60</span> of <span>60</span>"
-    assert_includes response.body, '<option selected="selected" value="all">All</option>'
+    assert_equal({ "count" => 60, "from" => 1, "to" => 60 }, inertia_props["pagination"].slice("count", "from", "to"))
+    assert_equal "all", inertia_props["per_page"]
 
     get transactions_path
 
     assert_response :success
-    assert_includes response.body, "Showing <span>1-60</span> of <span>60</span>"
+    assert_equal({ "count" => 60, "from" => 1, "to" => 60 }, inertia_props["pagination"].slice("count", "from", "to"))
   end
 
-  test "updates transaction category with turbo stream" do
+  test "updates transaction category" do
     sign_in_as users(:one)
     transaction = expense_transactions(:grocery)
 
     patch transaction_path(transaction),
-      params: { expense_transaction: { category_id: categories(:restaurants).id } },
-      headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      params: { expense_transaction: { category_id: categories(:restaurants).id } }
 
-    assert_response :no_content
+    assert_redirected_to transactions_path
     assert_equal categories(:restaurants), transaction.reload.category
-    assert_empty response.body
   end
 
-  test "bulk updates selected transaction categories with turbo stream" do
+  test "bulk updates selected transaction categories" do
     sign_in_as users(:one)
     grocery = expense_transactions(:grocery)
     restaurant = expense_transactions(:restaurant)
@@ -134,15 +155,11 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
           category_id: categories(:groceries).id,
           transaction_ids: [ grocery.id, restaurant.id ]
         }
-      },
-      headers: { "Accept" => "text/vnd.turbo-stream.html" }
+      }
 
-    assert_response :success
-    assert_equal "text/vnd.turbo-stream.html", response.media_type
+    assert_redirected_to transactions_path
     assert_equal categories(:groceries), grocery.reload.category
     assert_equal categories(:groceries), restaurant.reload.category
-    assert_includes response.body, "turbo-stream action=\"replace\" target=\"expense_transaction_#{grocery.id}\""
-    assert_includes response.body, "turbo-stream action=\"replace\" target=\"expense_transaction_#{restaurant.id}\""
   end
 
   test "bulk update can clear selected transaction categories" do
