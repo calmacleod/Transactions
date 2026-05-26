@@ -118,7 +118,7 @@
     {/if}
   </aside>
 
-  <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur xl:hidden">
+  <header class="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/95 px-4 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur xl:hidden">
     <Button variant="outline" size="icon" aria-label="Open navigation" onclick={() => (mobileOpen = true)}>
       <Menu class="size-4" />
     </Button>
@@ -198,7 +198,7 @@
     </SheetContent>
   </Sheet>
 
-  <main class="min-w-0 px-4 py-5 sm:px-6 lg:px-8 xl:ml-64">
+  <main class="min-w-0 px-4 pb-5 pt-[calc(4.5rem+env(safe-area-inset-top))] sm:px-6 lg:px-8 xl:ml-64 xl:py-5">
     <div class="mx-auto w-full max-w-[1500px]">
       {#if flash.notice}
         <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.notice}</div>

@@ -83,6 +83,69 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await expectNoViewportOverflow(page)
 })
 
+test("mobile title bar stays fixed without covering page content", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/transactions")
+
+  const header = page.locator("header").first()
+  const heading = page.getByRole("heading", { name: "Transactions" })
+
+  await expect(header).toBeVisible()
+  await expect(heading).toBeVisible()
+
+  const initial = await measureFixedHeader(page, header, heading)
+  expect(initial.position).toBe("fixed")
+  expect(initial.headerTop).toBeLessThanOrEqual(1)
+  expect(initial.headingTop).toBeGreaterThan(initial.headerBottom)
+
+  await page.evaluate(() => window.scrollTo(0, 640))
+
+  const scrolled = await measureFixedHeader(page, header, heading)
+  expect(scrolled.position).toBe("fixed")
+  expect(scrolled.headerTop).toBeLessThanOrEqual(1)
+  expect(scrolled.headerBottom).toBeCloseTo(initial.headerBottom, 1)
+})
+
+test("pwa manifest, icon, and service worker registration are intact", async ({ page, request }) => {
+  const manifestResponse = await request.get("/manifest.json")
+  expect(manifestResponse.ok()).toBe(true)
+
+  const manifest = await manifestResponse.json()
+  expect(manifest.display).toBe("standalone")
+  expect(manifest.start_url).toBe("/")
+  expect(manifest.scope).toBe("/")
+  expect(manifest.theme_color).toBe("#0f172a")
+  expect(manifest.icons).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ src: "/icon.svg", type: "image/svg+xml", sizes: "any" }),
+      expect.objectContaining({ src: "/icon.png", type: "image/png", sizes: "512x512", purpose: "maskable" }),
+    ])
+  )
+
+  const iconResponse = await request.get("/icon.png")
+  expect(iconResponse.ok()).toBe(true)
+  expect(iconResponse.headers()["content-type"]).toContain("image/png")
+
+  const serviceWorkerResponse = await request.get("/service-worker.js")
+  expect(serviceWorkerResponse.ok()).toBe(true)
+  expect(await serviceWorkerResponse.text()).toContain("transactions-pwa-v2")
+
+  await page.goto("/")
+
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        if (!("serviceWorker" in navigator)) return "unsupported"
+
+        const registration = await navigator.serviceWorker.getRegistration()
+        const worker = registration?.active || registration?.waiting || registration?.installing
+
+        return worker?.scriptURL || "missing"
+      })
+    })
+    .toContain("/service-worker.js")
+})
+
 test("transaction quick filters perform Inertia visits", async ({ page }) => {
   await page.goto("/transactions")
 
@@ -225,4 +288,20 @@ async function expectNoUnnamedVisibleButtons(page) {
   })
 
   expect(unnamedButtons).toEqual([])
+}
+
+async function measureFixedHeader(page, header, heading) {
+  const position = await header.evaluate((element) => window.getComputedStyle(element).position)
+  const headerBox = await header.boundingBox()
+  const headingBox = await heading.boundingBox()
+
+  expect(headerBox).not.toBeNull()
+  expect(headingBox).not.toBeNull()
+
+  return {
+    position,
+    headerTop: headerBox.y,
+    headerBottom: headerBox.y + headerBox.height,
+    headingTop: headingBox.y,
+  }
 }

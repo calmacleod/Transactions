@@ -1,4 +1,4 @@
-const CACHE_NAME = "transactions-pwa-v1"
+const CACHE_NAME = "transactions-pwa-v2"
 const STATIC_ASSETS = [
   "/icon.png",
   "/icon.svg",
