@@ -420,7 +420,7 @@
               <TableRow
                 data-transaction-row-id={transaction.id}
                 class={`cursor-pointer ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${shiftDown || dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
-                on:click={(event) => toggleTransactionFromRow(event, transaction)}
+                onclick={(event) => toggleTransactionFromRow(event, transaction)}
                 onpointerdown={(event) => startRowDrag(event, transaction)}
                 onpointerenter={(event) => hoverRow(event, transaction)}
                 onpointermove={(event) => hoverRow(event, transaction)}
