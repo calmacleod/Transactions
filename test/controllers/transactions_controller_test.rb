@@ -10,6 +10,7 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     props = inertia_props
     assert_equal "Showing May 21, 2026 to May 21, 2026", props["date_summary"]
     assert_equal [ "NEIGHBOURHOOD RESTAURANT" ], props["transactions"].map { |transaction| transaction["description"] }
+    assert_equal ai_chats_path, props.dig("actions", "chats")
   end
 
   test "ignores invalid date filters" do
@@ -181,10 +182,52 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
       params: { question: "What did gifts cost?", filters: { subcategory_id: transaction_subcategories(:gift).id } },
       as: :json
 
-    assert_response :success
+    assert_response :accepted
     body = JSON.parse(response.body)
     assert_equal "automatic", body["source"]
     assert_match "disabled", body["answer"]
+    assert_equal "complete", body["messages"].last["status"]
+  end
+
+  test "creates chat context from selected transactions" do
+    sign_in_as users(:one)
+    AiSetting.set("monthly_request_limit", "1")
+    AiRequest.create!(feature: "chat", model: "test-model")
+
+    post chat_transactions_path,
+      params: {
+        question: "What stands out?",
+        transaction_ids: [ expense_transactions(:grocery).id ]
+      },
+      as: :json
+
+    assert_response :accepted
+    chat = users(:one).ai_chats.last
+    assert_equal [ expense_transactions(:grocery).id ], chat.expense_transaction_ids
+  end
+
+  test "queues enabled chat requests for async RubyLLM processing" do
+    old_key = ENV["OPENAI_API_KEY"]
+    ENV["OPENAI_API_KEY"] = "present"
+    sign_in_as users(:one)
+    AiSetting.set("monthly_request_limit", "100")
+
+    assert_enqueued_with(job: ProcessAiChatMessageJob) do
+      post chat_transactions_path,
+        params: {
+          question: "What stands out?",
+          transaction_ids: [ expense_transactions(:grocery).id ]
+        },
+        as: :json
+    end
+
+    assert_response :accepted
+    body = JSON.parse(response.body)
+    assert_equal "queued", body["source"]
+    assert_equal %w[user assistant], body["messages"].last(2).map { |message| message["role"] }
+    assert_equal "queued", body["messages"].last["status"]
+  ensure
+    old_key.nil? ? ENV.delete("OPENAI_API_KEY") : ENV["OPENAI_API_KEY"] = old_key
   end
 
   test "bulk updates selected transaction categories" do

@@ -1,6 +1,9 @@
 <script>
   import { onMount, tick } from "svelte"
+  import { createConsumer } from "@rails/actioncable"
   import { Link, router } from "@inertiajs/svelte"
+  import DOMPurify from "dompurify"
+  import { marked } from "marked"
   import { Badge } from "$lib/components/ui/badge"
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
@@ -12,6 +15,7 @@
   import Check from "@lucide/svelte/icons/check"
   import ChevronDown from "@lucide/svelte/icons/chevron-down"
   import ChevronUp from "@lucide/svelte/icons/chevron-up"
+  import History from "@lucide/svelte/icons/history"
   import MessageSquare from "@lucide/svelte/icons/message-square"
   import NotebookPen from "@lucide/svelte/icons/notebook-pen"
   import Search from "@lucide/svelte/icons/search"
@@ -41,6 +45,21 @@
   let chatAnswer = ""
   let chatSource = ""
   let chatLoading = false
+  let chatOpen = false
+  let currentChatId = null
+  let currentChatTitle = ""
+  let chatMessages = []
+  let chatTransactionIds = []
+  let chatTransactions = []
+  let chatReferencedTransactions = []
+  let chatFocusedTransactionId = null
+  let chatSubscription = null
+  let chatHistoryOpen = false
+  let chatHistory = []
+  let chatHistoryLoading = false
+  let chatHistoryLoaded = false
+  let cableConsumer = null
+  let filtersOpen = filter_active
   let dragSelecting = false
   let dragSelectionMode = null
   let editingNoteIds = new Set()
@@ -53,6 +72,11 @@
   $: selectedTransactions = transactions.filter((transaction) => selectedIds.has(transaction.id))
   $: selectedTotal = selectedTransactions.reduce((sum, transaction) => sum + Number(transaction.signed_amount_cents || 0), 0)
   $: allVisibleSelected = transactions.length > 0 && transactions.every((transaction) => selectedIds.has(transaction.id))
+  $: activeFilterLabels = Object.entries(compact(filter_params))
+    .filter(([key]) => !["sort", "sort_direction"].includes(key))
+    .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`)
+  $: referencedTransactionIds = referencedIdsFromMessages(chatMessages)
+  $: referencedTransactions = mergedReferencedTransactions(chatReferencedTransactions, chatTransactions, referencedTransactionIds)
 
   onMount(() => {
     const layoutMedia = window.matchMedia("(min-width: 768px)")
@@ -97,8 +121,11 @@
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", stopDrag)
     updateLayout()
+    cableConsumer = createConsumer()
 
     return () => {
+      chatSubscription?.unsubscribe()
+      cableConsumer?.disconnect()
       document.removeEventListener("pointermove", selectRowUnderPointer)
       document.removeEventListener("pointerup", stopDrag)
       layoutMedia.removeEventListener("change", updateLayout)
@@ -305,11 +332,67 @@
     return sort?.direction === "asc" ? ChevronUp : ChevronDown
   }
 
+  function openChat(transactionIds = []) {
+    chatOpen = true
+    chatQuestion = ""
+    chatAnswer = ""
+    chatSource = ""
+    chatMessages = []
+    currentChatId = null
+    currentChatTitle = ""
+    chatTransactionIds = transactionIds
+    chatTransactions = transactions.filter((transaction) => transactionIds.includes(transaction.id))
+    chatReferencedTransactions = []
+    chatFocusedTransactionId = null
+  }
+
+  async function openChatHistory() {
+    chatHistoryOpen = true
+    await loadChatHistory(true)
+  }
+
+  async function loadChatHistory(force = false) {
+    if (!actions.chats || (chatHistoryLoaded && !force)) return
+
+    chatHistoryLoading = true
+    try {
+      const response = await fetch(actions.chats, { headers: { "Accept": "application/json" } })
+      if (!response.ok) return
+
+      const data = await response.json()
+      chatHistory = data.chats || []
+      chatHistoryLoaded = true
+    } finally {
+      chatHistoryLoading = false
+    }
+  }
+
+  async function openExistingChat(chatId) {
+    chatHistoryOpen = false
+    chatOpen = true
+    chatAnswer = ""
+    chatSource = ""
+    chatLoading = false
+    currentChatId = chatId
+    chatFocusedTransactionId = null
+    await loadChat(chatId)
+    subscribeToChat(chatId)
+  }
+
   async function askChat() {
-    if (!chatQuestion.trim()) return
+    const question = chatQuestion.trim()
+    if (!question) return
+    chatOpen = true
     chatLoading = true
     chatAnswer = ""
     chatSource = ""
+    const temporaryId = `pending-${Date.now()}`
+    chatMessages = [
+      ...chatMessages,
+      { id: `${temporaryId}-user`, role: "user", content: question, status: "complete", metadata: {} },
+      { id: `${temporaryId}-assistant`, role: "assistant", content: "", status: "queued", metadata: {} },
+    ]
+    chatQuestion = ""
 
     try {
       const response = await fetch(actions.chat, {
@@ -319,17 +402,181 @@
           "X-CSRF-Token": document.querySelector("meta[name='csrf-token']")?.content || "",
           "Accept": "application/json",
         },
-        body: JSON.stringify({ question: chatQuestion, filters: compact(filter_params) }),
+        body: JSON.stringify({
+          question,
+          filters: compact(filter_params),
+          transaction_ids: chatTransactionIds.length ? chatTransactionIds : Array.from(selectedIds),
+          chat_id: currentChatId,
+        }),
       })
       const data = await response.json()
-      chatAnswer = data.answer || "No answer returned."
+      currentChatId = data.chat_id || currentChatId
+      chatMessages = data.messages || chatMessages
+      chatAnswer = data.answer || ""
       chatSource = data.source || ""
+      if (currentChatId) {
+        subscribeToChat(currentChatId)
+        loadChatHistory(true)
+      }
     } catch (_error) {
       chatAnswer = "The chat request failed before Rails returned a response."
       chatSource = "automatic"
+      chatMessages = chatMessages.map((message) => message.id === `${temporaryId}-assistant` ? { ...message, status: "failed", content: chatAnswer } : message)
     } finally {
       chatLoading = false
     }
+  }
+
+  function subscribeToChat(chatId) {
+    if (!cableConsumer || chatSubscription?.chatId === chatId) return
+
+    chatSubscription?.unsubscribe()
+    chatSubscription = cableConsumer.subscriptions.create(
+      { channel: "AiChatChannel", chat_id: chatId },
+      {
+        received(data) {
+          handleChatEvent(data)
+        },
+      }
+    )
+    chatSubscription.chatId = chatId
+    refreshChat(chatId)
+  }
+
+  async function refreshChat(chatId) {
+    if (!chatId) return
+
+    await loadChat(chatId)
+  }
+
+  async function loadChat(chatId) {
+    if (!actions.chat_template || !chatId) return
+
+    const response = await fetch(actions.chat_template.replace(":id", chatId), { headers: { "Accept": "application/json" } })
+    if (!response.ok) return
+
+    const data = await response.json()
+    currentChatTitle = data.title || currentChatTitle
+    chatTransactionIds = data.transaction_ids || chatTransactionIds
+    chatTransactions = data.transactions || chatTransactions
+    chatReferencedTransactions = data.referenced_transactions || chatReferencedTransactions
+    chatMessages = data.messages || chatMessages
+  }
+
+  function handleChatEvent(data) {
+    if (data.type === "message" || data.type === "message_update") {
+      upsertChatMessage(data.message)
+      if (data.type === "message_update" && data.message?.role === "assistant" && data.message?.status === "complete") {
+        refreshChat(currentChatId)
+      }
+    }
+  }
+
+  function upsertChatMessage(message) {
+    const index = chatMessages.findIndex((existing) => existing.id === message.id)
+    if (index === -1) {
+      chatMessages = [...chatMessages, message]
+    } else {
+      chatMessages = chatMessages.map((existing, position) => position === index ? message : existing)
+    }
+  }
+
+  function messageText(message) {
+    if (message.content) return message.content
+    if (message.role === "assistant" && ["queued", "thinking"].includes(message.status)) return "Thinking..."
+    if (message.role === "tool" && message.status === "thinking") return "Running tool..."
+    return ""
+  }
+
+  function messageClasses(message) {
+    if (message.role === "user") return "ml-auto max-w-[85%] bg-primary text-primary-foreground"
+    if (message.role === "tool") return "mx-auto max-w-[90%] border border-dashed border-border bg-muted/60 text-muted-foreground"
+    return "mr-auto max-w-[90%] bg-background text-foreground"
+  }
+
+  function messageRoleLabel(message) {
+    if (message.role === "user") return "You"
+    if (message.role === "tool") return message.metadata?.name ? message.metadata.name.replaceAll("_", " ") : "Tool"
+    return "Assistant"
+  }
+
+  function renderMarkdown(message) {
+    const source = messageText(message)
+    if (!source) return ""
+
+    const html = marked.parse(source, { gfm: true, breaks: true, async: false })
+    const sanitized = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+
+    return sanitized.replace(/\[\[transaction:(\d+)\]\]/gi, (_match, id) => {
+      const safeId = Number.parseInt(id, 10)
+      if (!Number.isFinite(safeId)) return ""
+
+      return `<button type="button" class="chat-transaction-reference" data-transaction-reference-id="${safeId}">${transactionReferenceLabel(safeId)}</button>`
+    })
+  }
+
+  function referencedIdsFromMessages(messages) {
+    const ids = new Set()
+
+    messages.forEach((message) => {
+      ;(message.metadata?.referenced_transaction_ids || []).forEach((id) => ids.add(Number(id)))
+      for (const match of message.content?.matchAll(/\[\[transaction:(\d+)\]\]/gi) || []) {
+        ids.add(Number(match[1]))
+      }
+    })
+
+    return Array.from(ids).filter(Number.isFinite)
+  }
+
+  function mergedReferencedTransactions(serverTransactions, attachedTransactions, ids) {
+    const byId = new Map()
+    ;[...serverTransactions, ...attachedTransactions].forEach((transaction) => {
+      if (ids.includes(transaction.id)) byId.set(transaction.id, transaction)
+    })
+
+    return ids.map((id) => byId.get(id)).filter(Boolean)
+  }
+
+  function transactionReferenceLabel(id) {
+    const transaction = [...chatReferencedTransactions, ...chatTransactions].find((item) => item.id === id)
+    if (!transaction) return `Transaction #${id}`
+
+    return `${transaction.short_date_label} · ${transaction.amount_label}`
+  }
+
+  function handleRenderedMessageClick(event) {
+    const reference = event.target.closest?.("[data-transaction-reference-id]")
+    if (!reference) return
+
+    const id = Number.parseInt(reference.dataset.transactionReferenceId, 10)
+    if (!Number.isFinite(id)) return
+
+    event.preventDefault()
+    chatFocusedTransactionId = id
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-chat-transaction-id="${id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    })
+  }
+
+  function focusChatTransaction(id) {
+    chatFocusedTransactionId = id
+  }
+
+  function openSelectedChat() {
+    const transactionIds = Array.from(selectedIds)
+    openChat(transactionIds)
+    selectedIds = new Set()
+  }
+
+  function transactionDescription(transaction) {
+    return transaction.merchant_name || transaction.description
+  }
+
+  function transactionCategoryLabel(transaction) {
+    const category = transaction.category?.name || "Unclassified"
+    const subcategories = (transaction.subcategories || []).map((subcategory) => subcategory.name)
+
+    return [category, ...subcategories].join(" / ")
   }
 
   function bulkUpdate() {
@@ -384,10 +631,25 @@
         {#each quick_ranges as range}
           <Button type="button" size="sm" variant={filter_params.quick_range === range.value ? "default" : "outline"} onclick={() => quickRange(range.value)}>{range.label}</Button>
         {/each}
-        <Button type="button" size="sm" variant="ghost" class="ml-auto" onclick={clearFilters}>Clear</Button>
+        <Button type="button" size="sm" variant="outline" class="ml-auto" onclick={() => (filtersOpen = !filtersOpen)}>
+          {filtersOpen ? "Hide filters" : "Show filters"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onclick={clearFilters}>Clear</Button>
       </div>
+      {#if !filtersOpen}
+        <div class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {#if activeFilterLabels.length}
+            {#each activeFilterLabels as label}
+              <Badge variant="secondary">{label}</Badge>
+            {/each}
+          {:else}
+            <span>No filters applied</span>
+          {/if}
+        </div>
+      {/if}
     </CardHeader>
 
+    {#if filtersOpen}
     <CardContent>
       <form class="grid gap-4" onsubmit={(event) => preventAndRun(event, applyFilters)}>
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
@@ -474,6 +736,7 @@
         </div>
       </form>
     </CardContent>
+    {/if}
   </Card>
 
   <section class="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -510,13 +773,18 @@
     <CardHeader class="border-b border-border">
       <div class="flex items-center gap-2">
         <MessageSquare class="size-4 text-primary" />
-        <CardTitle class="text-sm">Discuss filtered transactions</CardTitle>
+        <CardTitle class="text-sm">Discuss transactions</CardTitle>
       </div>
     </CardHeader>
     <CardContent class="grid gap-3">
       <form class="flex flex-col gap-2 lg:flex-row" onsubmit={(event) => preventAndRun(event, askChat)}>
-        <Input bind:value={chatQuestion} placeholder="Ask about the current filtered set..." class="min-w-0 flex-1" />
+        <Input bind:value={chatQuestion} placeholder={selectedIds.size ? `Ask about ${selectedIds.size} selected transactions...` : "Ask about the current filtered set..."} class="min-w-0 flex-1" onfocus={() => { if (selectedIds.size) chatTransactionIds = Array.from(selectedIds) }} />
         <Button type="submit" disabled={chatLoading}>{chatLoading ? "Asking..." : "Ask"}</Button>
+        <Button type="button" variant="outline" onclick={() => openChat(Array.from(selectedIds))}>{selectedIds.size ? "Open selected chat" : "Open chat"}</Button>
+        <Button type="button" variant="outline" onclick={openChatHistory}>
+          <History class="size-4" />
+          Past chats
+        </Button>
       </form>
       {#if chatAnswer}
         <div class="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm leading-6 text-foreground">
@@ -526,6 +794,142 @@
       {/if}
     </CardContent>
   </Card>
+
+  {#if chatHistoryOpen}
+    <div class="fixed inset-0 z-50 grid place-items-end bg-background/70 p-3 backdrop-blur-sm lg:p-6" role="dialog" aria-modal="true" aria-label="Past transaction chats" tabindex="-1" onclick={() => (chatHistoryOpen = false)} onkeydown={(event) => { if (event.key === "Escape") chatHistoryOpen = false }}>
+      <Card class="flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden" onclick={(event) => event.stopPropagation()}>
+        <CardHeader class="border-b border-border">
+          <div class="flex items-center gap-3">
+            <History class="size-4 text-primary" />
+            <div class="min-w-0 flex-1">
+              <CardTitle class="text-sm">Past chats</CardTitle>
+              <p class="mt-1 text-xs text-muted-foreground">Reopen a saved transaction conversation.</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" aria-label="Close past chats" onclick={() => (chatHistoryOpen = false)}>
+              <X class="size-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent class="min-h-0 overflow-y-auto p-0">
+          {#if chatHistoryLoading && !chatHistory.length}
+            <p class="px-4 py-8 text-center text-sm text-muted-foreground">Loading chats...</p>
+          {:else if chatHistory.length}
+            <div class="divide-y divide-border">
+              {#each chatHistory as chat}
+                <button type="button" class="grid w-full gap-1 px-4 py-3 text-left hover:bg-muted/60" onclick={() => openExistingChat(chat.id)}>
+                  <div class="flex min-w-0 items-center justify-between gap-3">
+                    <span class="truncate text-sm font-medium text-foreground">{chat.title}</span>
+                    <span class="shrink-0 text-xs text-muted-foreground">{chat.updated_at_label}</span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{chat.transaction_count} transactions</span>
+                    <span>{chat.message_count} messages</span>
+                    {#if chat.model}
+                      <span>{chat.model}</span>
+                    {/if}
+                  </div>
+                  {#if chat.last_message}
+                    <p class="line-clamp-2 text-xs leading-5 text-muted-foreground">{chat.last_message}</p>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <p class="px-4 py-8 text-center text-sm text-muted-foreground">No saved chats yet.</p>
+          {/if}
+        </CardContent>
+      </Card>
+    </div>
+  {/if}
+
+  {#if chatOpen}
+    <div class="fixed inset-0 z-50 grid place-items-end bg-background/70 p-3 backdrop-blur-sm lg:p-6" role="dialog" aria-modal="true" aria-label="Transaction chat" tabindex="-1" onclick={() => (chatOpen = false)} onkeydown={(event) => { if (event.key === "Escape") chatOpen = false }}>
+      <Card class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden" onclick={(event) => event.stopPropagation()}>
+        <CardHeader class="border-b border-border">
+          <div class="flex items-center gap-3">
+            <MessageSquare class="size-4 text-primary" />
+            <div class="min-w-0 flex-1">
+              <CardTitle class="truncate text-sm">{currentChatTitle || "Transaction chat"}</CardTitle>
+              <p class="mt-1 text-xs text-muted-foreground">
+                {chatTransactionIds.length ? `${chatTransactionIds.length} selected records attached` : "Filtered records attached"}
+                {#if referencedTransactions.length}
+                  · {referencedTransactions.length} referenced
+                {/if}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" aria-label="Close chat" onclick={() => (chatOpen = false)}>
+              <X class="size-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent class="grid min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-4">
+          <div class="flex min-h-0 flex-col gap-3">
+            <div class="min-h-72 flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
+              {#if chatMessages.length}
+                {#each chatMessages as message}
+                  <div class={`rounded-lg px-3 py-2 text-sm leading-6 shadow-xs ${messageClasses(message)}`} data-status={message.status}>
+                    <div class="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide opacity-70">
+                      <span>{messageRoleLabel(message)}</span>
+                      {#if ["queued", "thinking"].includes(message.status)}
+                        <span class="inline-flex size-2 rounded-full bg-current opacity-70 animate-pulse"></span>
+                      {/if}
+                    </div>
+                    {#if message.role === "assistant"}
+                      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                      <div class="chat-markdown prose prose-sm max-w-none dark:prose-invert" onclick={handleRenderedMessageClick}>
+                        {@html renderMarkdown(message)}
+                      </div>
+                    {:else if message.role === "tool"}
+                      <p class="text-xs uppercase tracking-wide">{messageText(message)}</p>
+                    {:else}
+                      <p class="whitespace-pre-wrap">{messageText(message)}</p>
+                    {/if}
+                  </div>
+                {/each}
+              {:else if chatAnswer}
+                <div class="mr-auto max-w-[90%] rounded-lg bg-background px-3 py-2 text-sm leading-6 text-foreground">{chatAnswer}</div>
+              {:else}
+                <p class="px-2 py-8 text-center text-sm text-muted-foreground">Ask a question to start a saved conversation with these records attached.</p>
+              {/if}
+            </div>
+            <form class="flex flex-col gap-2 sm:flex-row" onsubmit={(event) => preventAndRun(event, askChat)}>
+              <Input bind:value={chatQuestion} placeholder="Ask a follow-up..." class="min-w-0 flex-1" />
+              <Button type="submit" disabled={chatLoading}>{chatLoading ? "Asking..." : "Send"}</Button>
+            </form>
+          </div>
+
+          <aside class="min-h-0 overflow-hidden rounded-lg border border-border bg-background">
+            <div class="border-b border-border px-3 py-2">
+              <h2 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Referenced transactions</h2>
+            </div>
+            <div class="max-h-56 space-y-2 overflow-y-auto p-2 lg:max-h-full">
+              {#if referencedTransactions.length}
+                {#each referencedTransactions as transaction}
+                  <button
+                    type="button"
+                    class={`grid w-full gap-1 rounded-md border px-2 py-2 text-left transition-colors ${chatFocusedTransactionId === transaction.id ? "border-primary/50 bg-accent/70" : "border-border bg-muted/30 hover:bg-muted"}`}
+                    data-chat-transaction-id={transaction.id}
+                    onclick={() => focusChatTransaction(transaction.id)}
+                  >
+                    <div class="flex min-w-0 items-center justify-between gap-2">
+                      <span class="truncate text-xs font-medium text-foreground">{transactionDescription(transaction)}</span>
+                      <span class={`money-value shrink-0 text-xs font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</span>
+                    </div>
+                    <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span>{transaction.short_date_label}</span>
+                      <span>{transactionCategoryLabel(transaction)}</span>
+                    </div>
+                  </button>
+                {/each}
+              {:else}
+                <p class="px-2 py-6 text-center text-xs leading-5 text-muted-foreground">No specific transactions have been cited in this chat yet.</p>
+              {/if}
+            </div>
+          </aside>
+        </CardContent>
+      </Card>
+    </div>
+  {/if}
 
   <Card class="mb-4 overflow-hidden">
     {#if !desktopLayout}
@@ -750,8 +1154,8 @@
     </div>
   </Card>
 
-  {#if selectedIds.size}
-    <Card class="fixed bottom-4 left-4 right-4 z-50 border-primary/30 shadow-2xl xl:left-[calc(16rem+1rem)]">
+  {#if selectedIds.size && !chatOpen && !chatHistoryOpen}
+    <Card class="fixed bottom-4 left-4 right-4 z-40 border-primary/30 shadow-2xl xl:left-[calc(16rem+1rem)]">
       <CardContent class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p class="text-sm font-semibold text-foreground">{selectedIds.size} selected</p>
@@ -771,6 +1175,10 @@
           <Button type="submit">
             <Check class="size-4" />
             Apply
+          </Button>
+          <Button type="button" variant="outline" onclick={openSelectedChat}>
+            <MessageSquare class="size-4" />
+            Chat
           </Button>
           <Button type="button" variant="outline" onclick={() => (selectedIds = new Set())}>Clear</Button>
         </form>

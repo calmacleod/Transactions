@@ -40,7 +40,18 @@ class ModelsController < ApplicationController
     redirect_to models_path, alert: "Model refresh failed: #{error.message}"
   end
 
+  def update
+    model = Model.find(params[:id])
+    model.update!(model_params)
+
+    redirect_back fallback_location: models_path, notice: "#{model.name} #{model.favorite? ? "favorited" : "removed from favorites"}."
+  end
+
   private
+
+  def model_params
+    params.require(:model).permit(:favorite)
+  end
 
   def model_props(model)
     input_price = model.input_price_per_million
@@ -52,6 +63,8 @@ class ModelsController < ApplicationController
       model_id: model.model_id,
       family: model.family,
       provider: model.provider,
+      favorite: model.favorite?,
+      update_path: model_path(model),
       input_modalities: model.input_modalities.presence || [ "unknown" ],
       output_modalities: model.output_modalities.presence || [ "unknown" ],
       capabilities: model.capabilities,

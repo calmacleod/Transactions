@@ -10,11 +10,50 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_26_090004) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
+  create_table "ai_chat_messages", force: :cascade do |t|
+    t.integer "ai_chat_id", null: false
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.integer "estimated_cost_microdollars", default: 0, null: false
+    t.integer "input_tokens"
+    t.json "metadata", default: {}, null: false
+    t.string "model"
+    t.integer "output_tokens"
+    t.string "role", null: false
+    t.string "status", default: "complete", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_chat_id", "created_at"], name: "index_ai_chat_messages_on_ai_chat_id_and_created_at"
+    t.index ["ai_chat_id"], name: "index_ai_chat_messages_on_ai_chat_id"
+    t.index ["status"], name: "index_ai_chat_messages_on_status"
+  end
+
+  create_table "ai_chat_transactions", force: :cascade do |t|
+    t.integer "ai_chat_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "expense_transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["ai_chat_id", "expense_transaction_id"], name: "index_ai_chat_transactions_uniqueness", unique: true
+    t.index ["ai_chat_id"], name: "index_ai_chat_transactions_on_ai_chat_id"
+    t.index ["expense_transaction_id"], name: "index_ai_chat_transactions_on_expense_transaction_id"
+  end
+
+  create_table "ai_chats", force: :cascade do |t|
+    t.json "context_filters", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.string "model"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["created_at"], name: "index_ai_chats_on_created_at"
+    t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
   create_table "ai_requests", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "error_message"
     t.integer "estimated_cost_cents", default: 0, null: false
+    t.integer "estimated_cost_microdollars", default: 0, null: false
     t.string "feature", null: false
     t.integer "input_tokens"
     t.string "model"
@@ -105,6 +144,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090004) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "insight_transactions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "expense_transaction_id", null: false
+    t.integer "insight_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["expense_transaction_id"], name: "index_insight_transactions_on_expense_transaction_id"
+    t.index ["insight_id", "expense_transaction_id"], name: "idx_on_insight_id_expense_transaction_id_1eace887e5", unique: true
+    t.index ["insight_id"], name: "index_insight_transactions_on_insight_id"
+  end
+
   create_table "insights", force: :cascade do |t|
     t.text "body"
     t.datetime "created_at", null: false
@@ -124,6 +173,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090004) do
     t.integer "context_window"
     t.datetime "created_at", null: false
     t.string "family"
+    t.boolean "favorite", default: false, null: false
     t.date "knowledge_cutoff"
     t.integer "max_output_tokens"
     t.json "metadata", default: {}
@@ -135,6 +185,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090004) do
     t.string "provider", null: false
     t.datetime "updated_at", null: false
     t.index ["family"], name: "index_models_on_family"
+    t.index ["favorite"], name: "index_models_on_favorite"
     t.index ["provider", "model_id"], name: "index_models_on_provider_and_model_id", unique: true
     t.index ["provider"], name: "index_models_on_provider"
   end
@@ -174,10 +225,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090004) do
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
   end
 
+  add_foreign_key "ai_chat_messages", "ai_chats"
+  add_foreign_key "ai_chat_transactions", "ai_chats"
+  add_foreign_key "ai_chat_transactions", "expense_transactions"
+  add_foreign_key "ai_chats", "users"
   add_foreign_key "expense_transaction_subcategories", "expense_transactions"
   add_foreign_key "expense_transaction_subcategories", "transaction_subcategories"
   add_foreign_key "expense_transactions", "categories"
   add_foreign_key "expense_transactions", "import_batches"
+  add_foreign_key "insight_transactions", "expense_transactions"
+  add_foreign_key "insight_transactions", "insights"
   add_foreign_key "saved_transaction_queries", "users"
   add_foreign_key "sessions", "users"
 end

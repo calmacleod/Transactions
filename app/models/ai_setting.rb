@@ -1,6 +1,9 @@
 class AiSetting < ApplicationRecord
   DEFAULTS = {
     "model" => ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano"),
+    "classification_model" => ENV.fetch("RUBYLLM_CLASSIFICATION_MODEL", ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano")),
+    "insights_model" => ENV.fetch("RUBYLLM_INSIGHTS_MODEL", ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano")),
+    "chat_model" => ENV.fetch("RUBYLLM_CHAT_MODEL", ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano")),
     "classification_enabled" => "true",
     "insights_enabled" => "true",
     "chat_enabled" => "true",
@@ -25,6 +28,12 @@ class AiSetting < ApplicationRecord
   end
 
   def self.values
-    DEFAULTS.keys.index_with { |key| get(key) }
+    DEFAULTS.keys.index_with do |key|
+      if key.end_with?("_model")
+        find_by(key:)&.value.presence || ENV["RUBYLLM_#{key.delete_suffix('_model').upcase}_MODEL"].presence || get("model")
+      else
+        get(key)
+      end
+    end
   end
 end

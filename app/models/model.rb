@@ -1,7 +1,7 @@
 class Model < ApplicationRecord
   acts_as_model
 
-  scope :ordered, -> { order(:provider, :name) }
+  scope :ordered, -> { order(favorite: :desc, provider: :asc, name: :asc) }
   scope :by_provider, ->(provider) { provider.present? ? where(provider:) : all }
   scope :matching, ->(query) {
     next all if query.blank?

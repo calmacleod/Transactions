@@ -1,7 +1,7 @@
   class InsightsController < ApplicationController
     def index
       render inertia: {
-        insights: Insight.recent.map { |insight| insight_props(insight) },
+        insights: Insight.recent.includes(expense_transactions: [ :category, :subcategories ]).map { |insight| insight_props(insight) },
         actions: {
           regenerate: insights_path
         }

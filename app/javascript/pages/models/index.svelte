@@ -11,6 +11,7 @@
   import Eye from "@lucide/svelte/icons/eye"
   import RefreshCcw from "@lucide/svelte/icons/refresh-ccw"
   import Server from "@lucide/svelte/icons/server"
+  import Star from "@lucide/svelte/icons/star"
   import Sparkles from "@lucide/svelte/icons/sparkles"
 
   export let stats
@@ -31,6 +32,10 @@
 
   function applyFilters() {
     router.get(actions.index, Object.fromEntries(Object.entries(form).filter(([, value]) => value)))
+  }
+
+  function toggleFavorite(model) {
+    router.patch(model.update_path, { model: { favorite: !model.favorite } }, { preserveScroll: true })
   }
 </script>
 
@@ -107,6 +112,7 @@
       <Table class="min-w-[70rem]">
         <TableHeader>
           <TableRow>
+            <TableHead class="w-14"></TableHead>
             <TableHead>Model</TableHead>
             <TableHead>Provider</TableHead>
             <TableHead>I/O</TableHead>
@@ -118,6 +124,11 @@
         <TableBody>
           {#each models as model}
             <TableRow>
+              <TableCell>
+                <Button type="button" variant="ghost" size="icon" aria-label={model.favorite ? `Unfavorite ${model.name}` : `Favorite ${model.name}`} onclick={() => toggleFavorite(model)}>
+                  <Star class={`size-4 ${model.favorite ? "fill-primary text-primary" : "text-muted-foreground"}`} />
+                </Button>
+              </TableCell>
               <TableCell>
                 <p class="font-semibold text-foreground">{model.name}</p>
                 <p class="mt-1 font-mono text-xs text-muted-foreground">{model.model_id}</p>

@@ -13,7 +13,7 @@ module Ai
       "Travel" => /hotel|air canada|westjet|airbnb|booking/i
     }.freeze
 
-    def initialize(model: Ai::Controls.model)
+    def initialize(model: Ai::Controls.model_for(:classification))
       @model = model
     end
 
@@ -34,9 +34,8 @@ module Ai
     attr_reader :model
 
     def llm_classification(transaction)
-      response = RubyLLM.chat(model:).with_schema(TransactionClassificationSchema).ask(prompt_for(transaction))
+      response = Ai::RubyLlmClient.new(feature: :classification, model:).ask(prompt_for(transaction), schema: TransactionClassificationSchema)
       content = response.content
-      Ai::Controls.record(feature: :classification, model:, response:)
 
       {
         category: content.fetch("category"),
@@ -45,7 +44,6 @@ module Ai
       }
     rescue StandardError => error
       Rails.logger.warn("RubyLLM classification failed for transaction #{transaction.id}: #{error.class}: #{error.message}")
-      Ai::Controls.record(feature: :classification, model:, successful: false, error:)
       nil
     end
 

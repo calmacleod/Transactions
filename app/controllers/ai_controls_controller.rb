@@ -16,9 +16,11 @@ class AiControlsController < ApplicationController
   def ai_controls_props
     requests = AiRequest.recent.limit(20)
     this_month = AiRequest.this_month
+    favorite_models = Model.ordered.where(favorite: true).limit(20)
 
     {
       settings: AiSetting.values,
+      favorite_models: favorite_models.map { |model| model_option_props(model) },
       provider_status: {
         configured: Ai::Controls.provider_configured?,
         openai: ENV["OPENAI_API_KEY"].present?,
@@ -28,7 +30,7 @@ class AiControlsController < ApplicationController
       usage: {
         month_count: this_month.count,
         month_success_count: this_month.successful.count,
-        estimated_cost_label: money_from_cents(this_month.sum(:estimated_cost_cents)),
+        estimated_cost_label: money_from_microdollars(total_microdollars(this_month)),
         monthly_request_limit: Ai::Controls.monthly_request_limit,
         remaining_requests: remaining_requests(this_month.count)
       },
@@ -48,7 +50,7 @@ class AiControlsController < ApplicationController
   end
 
   def settings_params
-    params.require(:ai_settings).permit(:model, :classification_enabled, :insights_enabled, :chat_enabled, :monthly_request_limit)
+    params.require(:ai_settings).permit(:model, :classification_model, :insights_model, :chat_model, :classification_enabled, :insights_enabled, :chat_enabled, :monthly_request_limit)
   end
 
   def remaining_requests(month_count)
@@ -66,9 +68,33 @@ class AiControlsController < ApplicationController
       successful: request.successful,
       input_tokens: request.input_tokens,
       output_tokens: request.output_tokens,
-      estimated_cost_label: money_from_cents(request.estimated_cost_cents),
+      estimated_cost_label: money_from_microdollars(request_microdollars(request)),
       error_message: request.error_message,
       created_at_label: request.created_at.strftime("%b %-d, %H:%M")
     }
+  end
+
+  def model_option_props(model)
+    {
+      id: model.id,
+      label: "#{model.name} (#{model.model_id})",
+      model_id: model.model_id,
+      provider: model.provider
+    }
+  end
+
+  def money_from_microdollars(microdollars)
+    helpers.number_to_currency(microdollars.to_i / 1_000_000.0)
+  end
+
+  def total_microdollars(scope)
+    microdollars = scope.sum(:estimated_cost_microdollars)
+    return microdollars if microdollars.positive?
+
+    scope.sum(:estimated_cost_cents) * 10_000
+  end
+
+  def request_microdollars(request)
+    request.estimated_cost_microdollars.to_i.positive? ? request.estimated_cost_microdollars : request.estimated_cost_cents.to_i * 10_000
   end
 end

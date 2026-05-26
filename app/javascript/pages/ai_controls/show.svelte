@@ -8,6 +8,7 @@
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
 
   export let settings
+  export let favorite_models = []
   export let provider_status
   export let usage
   export let feature_statuses = []
@@ -19,6 +20,16 @@
   function save() {
     router.patch(actions.update, { ai_settings: form })
   }
+
+  function modelInput(id, key, label) {
+    return { id, key, label, value: form[key] || form.model }
+  }
+
+  $: modelInputs = [
+    modelInput("classification-model", "classification_model", "Classification model"),
+    modelInput("insights-model", "insights_model", "Insights model"),
+    modelInput("chat-model", "chat_model", "Chat model"),
+  ]
 </script>
 
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -38,8 +49,21 @@
     <CardContent>
       <form class="grid gap-4" on:submit|preventDefault={save}>
         <div class="space-y-1.5">
-          <Label for="ai-model">Model</Label>
-          <Input id="ai-model" bind:value={form.model} placeholder="gpt-5-nano" />
+          <Label for="ai-model">Default model</Label>
+          <Input id="ai-model" bind:value={form.model} placeholder="gpt-5-nano" list="favorite-models" />
+          <datalist id="favorite-models">
+            {#each favorite_models as model}
+              <option value={model.model_id}>{model.label}</option>
+            {/each}
+          </datalist>
+        </div>
+        <div class="grid gap-3 md:grid-cols-3">
+          {#each modelInputs as input}
+            <div class="space-y-1.5">
+              <Label for={input.id}>{input.label}</Label>
+              <Input id={input.id} bind:value={form[input.key]} placeholder={form.model || "gpt-5-nano"} list="favorite-models" />
+            </div>
+          {/each}
         </div>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="space-y-1.5">

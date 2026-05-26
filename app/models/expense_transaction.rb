@@ -3,6 +3,10 @@ class ExpenseTransaction < ApplicationRecord
   belongs_to :import_batch, optional: true
   has_many :expense_transaction_subcategories, dependent: :destroy
   has_many :subcategories, through: :expense_transaction_subcategories, source: :transaction_subcategory
+  has_many :insight_transactions, dependent: :destroy
+  has_many :insights, through: :insight_transactions
+  has_many :ai_chat_transactions, dependent: :destroy
+  has_many :ai_chats, through: :ai_chat_transactions
 
   validates :occurred_on, :description, :amount_cents, :direction, :external_id, presence: true
   validates :external_id, uniqueness: true

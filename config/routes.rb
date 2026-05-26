@@ -8,6 +8,7 @@ Rails.application.routes.draw do
   root "dashboard#index"
 
   mount MissionControl::Jobs::Engine, at: "/admin/jobs"
+  mount ActionCable.server, at: "/cable"
 
   resources :transactions, only: %i[index update] do
     patch :bulk_update, on: :collection
@@ -19,8 +20,9 @@ Rails.application.routes.draw do
   resources :saved_transaction_queries, only: %i[create destroy]
   resources :imports, only: :create
   resources :insights, only: %i[index create]
+  resources :ai_chats, only: %i[index show]
   resource :ai_controls, only: %i[show update]
-  resources :models, only: %i[index create]
+  resources :models, only: %i[index create update]
   resource :classifications, only: :create
   resources :classification_runs, only: :show do
     patch :cancel, on: :member

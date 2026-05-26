@@ -20,4 +20,21 @@ class AiControlsTest < ActiveSupport::TestCase
 
     assert_equal 125, cents
   end
+
+  test "reads token counts and cost directly from RubyLLM message responses" do
+    cost = Struct.new(:total).new(0.00125)
+    response = Struct.new(:input_tokens, :output_tokens, :cost).new(500_000, 250_000, cost)
+
+    assert_equal 500_000, Ai::Controls.token_count(response, :input_tokens)
+    assert_equal 250_000, Ai::Controls.token_count(response, :output_tokens)
+    assert_equal 1_250, Ai::Controls.estimated_cost_microdollars("any-model", response)
+  end
+
+  test "resolves feature specific models with default fallback" do
+    AiSetting.set("model", "default-model")
+    AiSetting.set("chat_model", "chat-model")
+
+    assert_equal "chat-model", Ai::Controls.model_for(:chat)
+    assert_equal "default-model", Ai::Controls.model_for(:insights)
+  end
 end

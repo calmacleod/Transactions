@@ -161,4 +161,70 @@
     border-color: var(--border);
     color: var(--muted-foreground);
   }
+
+  .chat-markdown {
+    color: inherit;
+  }
+
+  .chat-markdown :where(p, ul, ol, table, blockquote, pre) {
+    margin-block: 0.55rem;
+  }
+
+  .chat-markdown :where(p:first-child, ul:first-child, ol:first-child, table:first-child, blockquote:first-child, pre:first-child) {
+    margin-top: 0;
+  }
+
+  .chat-markdown :where(p:last-child, ul:last-child, ol:last-child, table:last-child, blockquote:last-child, pre:last-child) {
+    margin-bottom: 0;
+  }
+
+  .chat-markdown :where(table) {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+  }
+
+  .chat-markdown :where(th, td) {
+    border-bottom: 1px solid var(--border);
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+  }
+
+  .chat-markdown :where(th) {
+    background: color-mix(in oklch, var(--muted) 70%, transparent);
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .chat-markdown :where(code) {
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklch, var(--muted) 70%, transparent);
+    padding: 0.1rem 0.25rem;
+  }
+
+  .chat-transaction-reference {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.35rem;
+    max-width: 100%;
+    margin-inline: 0.1rem;
+    padding-inline: 0.4rem;
+    border: 1px solid color-mix(in oklch, var(--primary) 42%, var(--border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklch, var(--accent) 70%, transparent);
+    color: var(--accent-foreground);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    vertical-align: baseline;
+    white-space: nowrap;
+  }
+
+  .chat-transaction-reference:hover {
+    background: color-mix(in oklch, var(--accent) 92%, transparent);
+    border-color: var(--primary);
+  }
 }

@@ -97,7 +97,8 @@ class ApplicationController < ActionController::Base
       generation_source_label: insight.generation_source == "ai" ? "AI generated" : "Automatic",
       starts_on: insight.starts_on&.iso8601,
       starts_on_label: insight.starts_on&.strftime("%b %Y"),
-      ends_on: insight.ends_on&.iso8601
+      ends_on: insight.ends_on&.iso8601,
+      transactions: insight.expense_transactions.includes(:category, :subcategories).recent.limit(25).map { |transaction| transaction_props(transaction) }
     }
   end
 

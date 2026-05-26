@@ -1,6 +1,6 @@
 module Ai
   class InsightGenerator
-    def initialize(model: Ai::Controls.model)
+    def initialize(model: Ai::Controls.model_for(:insights))
       @model = model
     end
 
@@ -15,9 +15,10 @@ module Ai
         insights = fallback_insights(payload)
       end
 
-      Insight.where(starts_on: start_date, ends_on: end_date).delete_all
+      Insight.where(starts_on: start_date, ends_on: end_date).destroy_all
       insights.map do |attributes|
-        Insight.create!(
+        transaction_ids = Array(attributes[:transaction_ids]).map(&:to_i) & payload[:transaction_ids]
+        insight = Insight.create!(
           title: attributes.fetch(:title),
           body: attributes.fetch(:body),
           severity: attributes.fetch(:severity, "info"),
@@ -26,6 +27,8 @@ module Ai
           generation_source: source,
           payload:
         )
+        insight.expense_transaction_ids = transaction_ids
+        insight
       end
     end
 
@@ -34,10 +37,11 @@ module Ai
     attr_reader :model
 
     def llm_insights(payload)
-      response = RubyLLM.chat(model:).with_schema(ExpenseInsightsSchema).ask(<<~PROMPT)
+      response = Ai::RubyLlmClient.new(feature: :insights, model:).ask(<<~PROMPT, schema: ExpenseInsightsSchema)
         Generate 4 to 8 concise, useful personal finance insights from this recent transaction summary.
         Prioritize observations that are actionable for personal accounting and budget control.
-        Include the supporting amount, month, category, merchant, or weekday whenever possible.
+        Include the supporting dollar amount, month, category, merchant, or weekday whenever possible.
+        Attach transaction_ids from the provided records when specific transactions support the insight.
         Prefer concrete comparisons over generic advice:
         - category concentration and budget pressure
         - flexible cutback opportunities
@@ -45,16 +49,14 @@ module Ai
         - weekday frequency patterns
         - month-to-month spikes, drops, and new recurring spend
         Do not mention model limitations. Do not invent categories or transactions outside the payload.
-        Data: #{JSON.pretty_generate(payload)}
+        Data: #{JSON.pretty_generate(llm_payload(payload))}
       PROMPT
 
-      Ai::Controls.record(feature: :insights, model:, response:)
       response.content.fetch("insights").map do |insight|
-        insight.symbolize_keys.slice(:title, :body, :severity)
+        insight.symbolize_keys.slice(:title, :body, :severity, :transaction_ids)
       end
     rescue StandardError => error
       Rails.logger.warn("RubyLLM insight generation failed: #{error.class}: #{error.message}")
-      Ai::Controls.record(feature: :insights, model:, successful: false, error:)
       nil
     end
 
@@ -71,7 +73,8 @@ module Ai
         insights << {
           title: "#{top_category.first} leads spending",
           body: "#{top_category.first} accounts for #{money(top_category.second)} of #{money(payload[:expense_total_cents])} in expenses for this period.",
-          severity: "info"
+          severity: "info",
+          transaction_ids: payload.dig(:supporting_transaction_ids, :category_totals, top_category.first)
         }
       end
 
@@ -80,7 +83,8 @@ module Ai
         insights << {
           title: "Best cutback target: #{top_discretionary.first}",
           body: "A 20% reduction in #{top_discretionary.first.downcase} spending would save about #{money(savings)} for this period.",
-          severity: "warning"
+          severity: "warning",
+          transaction_ids: payload.dig(:supporting_transaction_ids, :category_totals, top_discretionary.first)
         }
       end
 
@@ -88,7 +92,8 @@ module Ai
         insights << {
           title: "Largest merchant: #{top_merchant.first.titleize}",
           body: "Transactions at #{top_merchant.first.titleize} total #{money(top_merchant.second)}. Consider setting a cap for this merchant next month.",
-          severity: "warning"
+          severity: "warning",
+          transaction_ids: payload.dig(:supporting_transaction_ids, :merchant_totals, top_merchant.first)
         }
       end
 
@@ -96,7 +101,8 @@ module Ai
         insights << {
           title: "#{busiest_day.first} has the most purchases",
           body: "#{busiest_day.second[:count]} purchases landed on #{busiest_day.first}, totaling #{money(busiest_day.second[:cents])}. This can reveal recurring routines worth reviewing.",
-          severity: "info"
+          severity: "info",
+          transaction_ids: payload.dig(:supporting_transaction_ids, :weekday_totals, busiest_day.first)
         }
       end
 
@@ -122,6 +128,7 @@ module Ai
         },
         generated_on: Date.current,
         transaction_count: transaction_records.size,
+        transaction_ids: transaction_records.map(&:id),
         expense_total_cents: expense_transactions.sum(&:amount_cents),
         credit_total_cents: transaction_records.reject(&:expense?).sum(&:amount_cents),
         month_totals: month_groups.sort.to_h.transform_keys { |month| month.strftime("%Y-%m") }
@@ -137,7 +144,9 @@ module Ai
         merchant_totals: expense_transactions.group_by { |transaction| normalized_merchant(transaction.description) }
                                              .transform_values { |items| items.sum(&:amount_cents) },
         weekday_totals: expense_transactions.group_by { |transaction| transaction.occurred_on.strftime("%A") }
-                                            .transform_values { |items| { count: items.size, cents: items.sum(&:amount_cents) } }
+                                            .transform_values { |items| { count: items.size, cents: items.sum(&:amount_cents) } },
+        sample_transactions: expense_transactions.sort_by { |transaction| -transaction.amount_cents }.first(100).map { |transaction| Ai::TransactionPayload.record(transaction) },
+        supporting_transaction_ids: supporting_transaction_ids(expense_transactions)
       }
     end
 
@@ -147,6 +156,29 @@ module Ai
 
     def money(cents)
       "$#{format('%.2f', cents.to_d / 100)}"
+    end
+
+    def llm_payload(payload)
+      payload.except(:expense_total_cents, :credit_total_cents).merge(
+        expense_total_dollars: money(payload[:expense_total_cents]),
+        credit_total_dollars: money(payload[:credit_total_cents]),
+        month_totals: payload[:month_totals].transform_values { |cents| money(cents) },
+        category_month_totals: payload[:category_month_totals].transform_values { |months| months.transform_values { |cents| money(cents) } },
+        category_totals: payload[:category_totals].transform_values { |cents| money(cents) },
+        merchant_totals: payload[:merchant_totals].transform_values { |cents| money(cents) },
+        weekday_totals: payload[:weekday_totals].transform_values { |totals| totals.merge(dollars: money(totals[:cents])).except(:cents) }
+      )
+    end
+
+    def supporting_transaction_ids(transactions)
+      {
+        category_totals: transactions.group_by { |transaction| transaction.category&.name || "Uncategorized" }
+                                     .transform_values { |items| items.sort_by { |transaction| -transaction.amount_cents }.first(10).map(&:id) },
+        merchant_totals: transactions.group_by { |transaction| normalized_merchant(transaction.description) }
+                                    .transform_values { |items| items.sort_by { |transaction| -transaction.amount_cents }.first(10).map(&:id) },
+        weekday_totals: transactions.group_by { |transaction| transaction.occurred_on.strftime("%A") }
+                                    .transform_values { |items| items.sort_by { |transaction| -transaction.amount_cents }.first(10).map(&:id) }
+      }
     end
   end
 end

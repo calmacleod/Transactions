@@ -12,13 +12,33 @@ class TransactionsController < ApplicationController
   def chat
     filter_params = TransactionFilter.clean(params[:filters] || params)
     filter = TransactionFilter.new(filter_params)
-    answer = Ai::TransactionChat.new.call(
-      question: params[:question].to_s,
-      transactions: filter.call,
-      filters: filter_params
-    )
+    transactions = filtered_chat_transactions(filter)
+    chat = current_chat(filter_params, transactions)
+    user_message = chat.messages.create!(role: "user", content: params[:question].to_s, status: "complete")
+    assistant_message = chat.messages.create!(role: "assistant", content: "", status: "queued", model: Ai::Controls.model_for(:chat))
+    chat.touch
 
-    render json: answer
+    AiChatChannel.broadcast_message(chat, user_message)
+    AiChatChannel.broadcast_message(chat, assistant_message)
+
+    chat_enabled = Ai::Controls.enabled?(:chat)
+    if chat_enabled
+      ProcessAiChatMessageJob.perform_later(chat.id, assistant_message.id)
+    else
+      assistant_message.update!(
+        status: "complete",
+        content: "AI chat is disabled, over the monthly request limit, or no provider key is configured."
+      )
+      AiChatChannel.broadcast_message_update(chat, assistant_message)
+    end
+
+    render json: {
+      source: chat_enabled ? "queued" : "automatic",
+      answer: chat_enabled ? nil : assistant_message.content,
+      chat_id: chat.id,
+      assistant_message_id: assistant_message.id,
+      messages: chat_messages(chat)
+    }, status: :accepted
   end
 
   def update
@@ -74,7 +94,9 @@ class TransactionsController < ApplicationController
         index: transactions_path,
         chat: chat_transactions_path,
         bulk_update: bulk_update_transactions_path,
-        save_query: saved_transaction_queries_path
+        save_query: saved_transaction_queries_path,
+        chat_template: ai_chat_path(":id"),
+        chats: ai_chats_path
       }
     }
   end
@@ -193,5 +215,41 @@ class TransactionsController < ApplicationController
       series << :gap if series.any? && page > series.last.to_i + 1
       series << page
     end
+  end
+
+  def filtered_chat_transactions(filter)
+    scope = filter.call.includes(:category, :subcategories)
+    transaction_ids = Array(params[:transaction_ids]).compact_blank
+
+    transaction_ids.present? ? scope.where(id: transaction_ids) : scope
+  end
+
+  def current_chat(filter_params, transactions)
+    if params[:chat_id].present?
+      return Current.session.user.ai_chats.find(params[:chat_id])
+    end
+
+    records = transactions.limit(500).to_a
+    chat = Current.session.user.ai_chats.create!(
+      title: chat_title(records, filter_params),
+      model: Ai::Controls.model_for(:chat),
+      context_filters: filter_params
+    )
+    chat.expense_transactions = records
+    chat
+  end
+
+  def chat_title(records, filter_params)
+    if records.any?
+      "#{helpers.pluralize(records.size, "transaction")} from #{records.map(&:occurred_on).compact.min&.strftime("%b %-d")} to #{records.map(&:occurred_on).compact.max&.strftime("%b %-d")}"
+    elsif filter_params.present?
+      "Filtered transaction chat"
+    else
+      "Transaction chat"
+    end
+  end
+
+  def chat_messages(chat)
+    chat.messages.ordered.map { |message| AiChatChannel.message_payload(message) }
   end
 end

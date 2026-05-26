@@ -23,4 +23,14 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to models_path
   end
+
+  test "updates model favorite status" do
+    sign_in_as users(:one)
+    model = Model.create!(provider: "openai", model_id: "favorite-model", name: "Favorite Model")
+
+    patch model_path(model), params: { model: { favorite: "true" } }
+
+    assert_redirected_to models_path
+    assert_equal true, model.reload.favorite?
+  end
 end
