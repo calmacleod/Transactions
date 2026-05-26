@@ -1,14 +1,6 @@
-const CACHE_NAME = "transactions-pwa-v2"
-const STATIC_ASSETS = [
-  "/icon.png",
-  "/icon.svg",
-  "/manifest.json"
-]
+const CACHE_NAME = "transactions-pwa-v3"
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  )
   self.skipWaiting()
 })
 
@@ -26,13 +18,6 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return
 
   const url = new URL(request.url)
-
-  if (STATIC_ASSETS.includes(url.pathname)) {
-    event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request))
-    )
-    return
-  }
 
   if (request.mode === "navigate") {
     event.respondWith(fetch(request))

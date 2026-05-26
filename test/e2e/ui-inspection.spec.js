@@ -129,18 +129,21 @@ test("pwa manifest, icon, and service worker registration are intact", async ({ 
   expect(manifest.theme_color).toBe("#0f172a")
   expect(manifest.icons).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ src: "/icon.svg", type: "image/svg+xml", sizes: "any" }),
-      expect.objectContaining({ src: "/icon.png", type: "image/png", sizes: "512x512", purpose: "maskable" }),
+      expect.objectContaining({ src: "/icon-20260526.svg", type: "image/svg+xml", sizes: "any" }),
+      expect.objectContaining({ src: "/icon-20260526.png", type: "image/png", sizes: "512x512", purpose: "maskable" }),
     ])
   )
 
-  const iconResponse = await request.get("/icon.png")
+  const iconResponse = await request.get("/icon-20260526.png")
   expect(iconResponse.ok()).toBe(true)
   expect(iconResponse.headers()["content-type"]).toContain("image/png")
 
   const serviceWorkerResponse = await request.get("/service-worker.js")
   expect(serviceWorkerResponse.ok()).toBe(true)
-  expect(await serviceWorkerResponse.text()).toContain("transactions-pwa-v2")
+  const serviceWorker = await serviceWorkerResponse.text()
+  expect(serviceWorker).toContain("transactions-pwa-v3")
+  expect(serviceWorker).not.toContain("/manifest.json")
+  expect(serviceWorker).not.toContain("/icon.png")
 
   await page.goto("/")
 
