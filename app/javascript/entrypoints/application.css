@@ -110,7 +110,8 @@
     white-space: nowrap;
   }
 
-  .confidence-chip {
+  .confidence-chip,
+  .mobile-confidence-chip {
     --confidence: 0%;
     background:
       linear-gradient(90deg, color-mix(in oklch, var(--primary) 82%, transparent) var(--confidence), transparent var(--confidence)),
@@ -119,7 +120,8 @@
     color: var(--foreground);
   }
 
-  .confidence-chip[data-pending="true"] {
+  .confidence-chip[data-pending="true"],
+  .mobile-confidence-chip[data-pending="true"] {
     --confidence: 0%;
     border-color: var(--border);
     color: var(--muted-foreground);

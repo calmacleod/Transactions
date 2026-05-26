@@ -35,6 +35,7 @@
   let dragSelectionMode = null
   let shiftDown = false
   let lastShiftHoverId = null
+  let suppressNextRowClick = false
 
   $: selectedTransactions = transactions.filter((transaction) => selectedIds.has(transaction.id))
   $: selectedTotal = selectedTransactions.reduce((sum, transaction) => sum + Number(transaction.signed_amount_cents || 0), 0)
@@ -142,6 +143,7 @@
     shiftDown = true
     lastShiftHoverId = transaction.id
     applyTransactionSelection(transaction.id, dragSelectionMode)
+    suppressNextRowClick = true
     event.preventDefault()
   }
 
@@ -159,6 +161,27 @@
       return
     }
     event.preventDefault()
+  }
+
+  function toggleTransactionFromRow(event, transaction) {
+    if (suppressNextRowClick) {
+      suppressNextRowClick = false
+      return false
+    }
+
+    if (!(event.target instanceof Element)) return false
+    if (event.target.closest("a, button, input, label, select, textarea")) return false
+
+    toggleTransaction(transaction.id)
+    return true
+  }
+
+  function toggleTransactionFromRowKeydown(event, transaction) {
+    if (!["Enter", " "].includes(event.key)) return
+
+    if (toggleTransactionFromRow(event, transaction)) {
+      event.preventDefault()
+    }
   }
 
   function updateCategory(transaction, categoryId) {
@@ -331,8 +354,54 @@
     </section>
   {/if}
 
-  <Card class="mb-4">
-    <div class="overflow-x-auto">
+  <Card class="mb-4 overflow-hidden">
+    <div class="divide-y divide-border md:hidden" data-testid="mobile-transactions-list">
+      {#if transactions.length}
+        {#each transactions as transaction}
+          <div
+            data-testid="mobile-transaction-row"
+            class={`grid cursor-pointer gap-2 px-3 py-3 ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""}`}
+            role="button"
+            tabindex="0"
+            aria-pressed={selectedIds.has(transaction.id)}
+            on:click={(event) => toggleTransactionFromRow(event, transaction)}
+            on:keydown={(event) => toggleTransactionFromRowKeydown(event, transaction)}
+          >
+            <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
+              <input type="checkbox" class="mt-0.5 size-4 rounded border-input accent-primary" aria-label={`Select ${transaction.description}`} checked={selectedIds.has(transaction.id)} on:change={() => toggleTransaction(transaction.id)} />
+              <div class="min-w-0">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="whitespace-nowrap text-xs font-medium text-muted-foreground">{transaction.occurred_on_label}</span>
+                  <span
+                    class="mobile-confidence-chip inline-flex h-5 min-w-0 max-w-24 items-center truncate rounded-full px-2 text-[11px] font-medium"
+                    style={confidenceStyle(transaction.confidence_label)}
+                    data-pending={transaction.confidence_label === "Pending" ? "true" : undefined}
+                  >
+                    {transaction.confidence_label}
+                  </span>
+                </div>
+                <p class="mt-1 line-clamp-2 text-sm font-medium leading-5 text-foreground">{transaction.description}</p>
+              </div>
+              <p class={`money-value text-right text-sm font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</p>
+            </div>
+
+            <div class="grid grid-cols-[1rem_minmax(0,1fr)] gap-2">
+              <span aria-hidden="true"></span>
+              <NativeSelect value={transaction.category_id || ""} class="h-9 w-full text-xs" onchange={(event) => updateCategory(transaction, event.currentTarget.value)}>
+                <NativeSelectOption value="">Unclassified</NativeSelectOption>
+                {#each categories as category}
+                  <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>
+                {/each}
+              </NativeSelect>
+            </div>
+          </div>
+        {/each}
+      {:else}
+        <p class="px-4 py-8 text-center text-sm text-muted-foreground">No matching transactions.</p>
+      {/if}
+    </div>
+
+    <div class="hidden md:block">
       <Table class="min-w-[64rem]">
         <TableHeader>
           <TableRow>
@@ -350,7 +419,8 @@
             {#each transactions as transaction}
               <TableRow
                 data-transaction-row-id={transaction.id}
-                class={`${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${shiftDown || dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
+                class={`cursor-pointer ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${shiftDown || dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
+                on:click={(event) => toggleTransactionFromRow(event, transaction)}
                 onpointerdown={(event) => startRowDrag(event, transaction)}
                 onpointerenter={(event) => hoverRow(event, transaction)}
                 onpointermove={(event) => hoverRow(event, transaction)}

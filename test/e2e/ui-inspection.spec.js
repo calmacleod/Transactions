@@ -80,6 +80,18 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
 
   await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible()
   await expect(page.getByLabel("Search")).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Description" })).toHaveCount(0)
+
+  const mobileRow = page.getByTestId("mobile-transaction-row").first()
+  await expect(mobileRow).toBeVisible()
+  await expect(mobileRow).toContainText(/May \d{1,2}, 2026/)
+  await expect(mobileRow).toContainText("65%")
+  await expect(mobileRow).toContainText(/NEIGHBOURHOOD RESTAURANT|LOCAL GROCERY MARKET/)
+  await expect(mobileRow).toContainText(/\$[0-9]+\.[0-9]{2}/)
+  await expect(mobileRow.getByRole("combobox")).toBeVisible()
+
+  await mobileRow.click({ position: { x: 44, y: 20 } })
+  await expect(page.getByText("1 selected")).toBeVisible()
   await expectNoViewportOverflow(page)
 })
 
@@ -160,6 +172,11 @@ test("transaction rows support shift hover and drag selection", async ({ page })
 
   const rows = page.locator("[data-transaction-row-id]")
   await expect(rows.first()).toBeVisible()
+
+  await rows.first().click({ position: { x: 120, y: 20 } })
+  await expect(page.getByText("1 selected")).toBeVisible()
+  await rows.first().click({ position: { x: 120, y: 20 } })
+  await expect(page.getByText("1 selected")).toHaveCount(0)
 
   await page.keyboard.down("Shift")
   await rows.first().hover()
