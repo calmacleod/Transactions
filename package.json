@@ -3,11 +3,16 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "lint:svelte": "svelte-check --tsconfig ./tsconfig.json",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@types/node": "^24.12.4",
+    "csstype": "^3.2.3",
+    "svelte-check": "^4.4.8",
+    "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "vite-plugin-ruby": "^5.2.2"
   },

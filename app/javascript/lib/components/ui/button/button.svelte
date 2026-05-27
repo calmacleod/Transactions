@@ -69,12 +69,13 @@
 			return false;
 		}
 	};
+
+	let linkProps = $derived(restProps as Record<string, unknown>);
 </script>
 
 {#if href}
 	{#if isInternalHref(href)}
 		<Link
-			bind:this={ref}
 			data-slot="button"
 			class={cn(buttonVariants({ variant, size }), className)}
 			href={disabled ? undefined : href}
@@ -84,7 +85,7 @@
 			draggable="false"
 			{prefetch}
 			{cacheFor}
-			{...restProps}
+			{...linkProps}
 		>
 			{@render children?.()}
 		</Link>
