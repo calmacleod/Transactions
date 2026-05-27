@@ -24,7 +24,7 @@
     dark: "#100d06",
   }
   const navLinkClass = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-  const navPrefetch = "hover"
+  const navPrefetch = ["hover", "mount"]
   const page = usePage()
 
   let auth = page.props.auth || {}
