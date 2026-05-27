@@ -99,17 +99,22 @@ test("app chrome navigation starts on mouse down", async ({ page }) => {
 test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
   await page.goto("/")
 
+  const jobsPagePromise = page.waitForEvent("popup")
   await page.getByRole("link", { name: /^Jobs$/ }).click()
+  const jobsPage = await jobsPagePromise
+  await jobsPage.waitForLoadState()
 
-  await expect(page).toHaveURL(/\/admin\/jobs/)
-  await expect(page.locator("#app")).toHaveCount(0)
-  await expect(page.locator("body")).toContainText("Pending jobs")
+  await expect(jobsPage).toHaveURL(/\/admin\/jobs/)
+  await expect(jobsPage.locator("#app")).toHaveCount(0)
+  await expect(jobsPage.locator("body")).toContainText("Pending jobs")
+  await jobsPage.close()
 })
 
 test("transactions page keeps dense controls usable on desktop and mobile", async ({ page }) => {
   await page.goto("/transactions")
 
   await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Show filters" }).click()
   await expect(page.getByRole("button", { name: "Apply filters" })).toBeVisible()
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Description" })).toBeVisible()
@@ -126,6 +131,7 @@ test("transactions page keeps dense controls usable on desktop and mobile", asyn
   await page.reload()
 
   await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Show filters" }).click()
   await expect(page.getByLabel("Search")).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Description" })).toHaveCount(0)
 
@@ -164,7 +170,7 @@ test("mobile title bar stays fixed without covering page content", async ({ page
   await page.goto("/transactions")
 
   const header = page.locator("header").first()
-  const heading = page.getByRole("heading", { name: "Transactions" })
+  const heading = page.getByRole("heading", { name: "Transactions", exact: true })
 
   await expect(header).toBeVisible()
   await expect(heading).toBeVisible()
