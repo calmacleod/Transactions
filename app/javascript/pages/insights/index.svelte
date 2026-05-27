@@ -20,7 +20,7 @@
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Insights</h1>
       <p class="mt-2 text-sm text-muted-foreground">Month-to-month observations generated from imported transactions.</p>
     </div>
-    <Button onclick={() => router.post(actions.regenerate)}>
+    <Button onclick={() => router.post(actions.regenerate, {}, { preserveScroll: true, preserveState: true })}>
       <RefreshCcw class="size-4" />
       Regenerate
     </Button>

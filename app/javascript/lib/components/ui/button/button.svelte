@@ -40,6 +40,8 @@
 			size?: ButtonSize;
 			prefetch?: boolean | "mount" | "hover" | "click" | Array<"mount" | "hover" | "click">;
 			cacheFor?: number | string | string[];
+			preserveScroll?: boolean;
+			preserveState?: boolean | null;
 		};
 </script>
 

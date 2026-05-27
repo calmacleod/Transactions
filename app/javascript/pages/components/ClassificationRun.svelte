@@ -41,9 +41,9 @@
 
       <div class="flex flex-wrap gap-2">
         {#if current.cancellable}
-          <Button variant="outline" size="sm" onclick={() => router.patch(current.cancel_path)}>Stop</Button>
+          <Button variant="outline" size="sm" onclick={() => router.patch(current.cancel_path, {}, { preserveScroll: true, preserveState: true })}>Stop</Button>
         {/if}
-        <Button variant="outline" size="sm" onclick={() => router.patch(current.dismiss_path)}>Dismiss</Button>
+        <Button variant="outline" size="sm" onclick={() => router.patch(current.dismiss_path, {}, { preserveScroll: true, preserveState: true })}>Dismiss</Button>
       </div>
     </CardHeader>
 

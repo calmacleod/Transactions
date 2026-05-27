@@ -241,6 +241,22 @@ test("transaction quick filters perform Inertia visits", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Last 30 days" })).toBeVisible()
 })
 
+test("transaction sort links can be toggled repeatedly", async ({ page }) => {
+  await page.goto("/transactions")
+
+  const dateSort = page.getByRole("button", { name: /^Date$/ })
+  await dateSort.scrollIntoViewIfNeeded()
+  const scrollBeforeSort = await page.evaluate(() => window.scrollY)
+
+  await dateSort.click()
+  await expect(page).toHaveURL(/sort_direction=asc/)
+  await expect.poll(() => page.evaluate((expected) => Math.abs(window.scrollY - expected), scrollBeforeSort)).toBeLessThanOrEqual(20)
+
+  await dateSort.click()
+  await expect(page).toHaveURL(/sort_direction=desc/)
+  await expect.poll(() => page.evaluate((expected) => Math.abs(window.scrollY - expected), scrollBeforeSort)).toBeLessThanOrEqual(20)
+})
+
 test("transaction rows do not select on plain row clicks", async ({ page }) => {
   await page.goto("/transactions")
 

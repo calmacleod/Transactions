@@ -47,7 +47,7 @@
 
   function importCsv() {
     if (!csvFile) return
-    router.post(actions.import, { csv_file: csvFile }, { forceFormData: true })
+    router.post(actions.import, { csv_file: csvFile }, { forceFormData: true, preserveScroll: true, preserveState: true })
   }
 </script>
 
@@ -59,11 +59,11 @@
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <Button onclick={() => router.post(actions.classify)}>
+      <Button onclick={() => router.post(actions.classify, {}, { preserveScroll: true, preserveState: true })}>
         <WandSparkles class="size-4" />
         Classify pending
       </Button>
-      <Button variant="outline" onclick={() => router.post(actions.generate_insights)}>
+      <Button variant="outline" onclick={() => router.post(actions.generate_insights, {}, { preserveScroll: true, preserveState: true })}>
         <Sparkles class="size-4" />
         Generate insights
       </Button>

@@ -1,7 +1,7 @@
 <script>
   import { onMount, tick } from "svelte"
   import { createConsumer } from "@rails/actioncable"
-  import { Link, router } from "@inertiajs/svelte"
+  import { router } from "@inertiajs/svelte"
   import DOMPurify from "dompurify"
   import { marked } from "marked"
   import { Badge } from "$lib/components/ui/badge"
@@ -136,7 +136,7 @@
   })
 
   function applyFilters() {
-    router.get(actions.index, compact(filters), { preserveState: true })
+    visitTransactions(actions.index, compact(filters))
   }
 
   function preventAndRun(event, callback) {
@@ -145,14 +145,60 @@
   }
 
   function clearFilters() {
-    router.get(actions.index)
+    visitTransactions(actions.index)
   }
 
   function quickRange(value) {
     const params = { ...filter_params, quick_range: value }
     delete params.start_date
     delete params.end_date
-    router.get(actions.index, params)
+    visitTransactions(actions.index, params)
+  }
+
+  function visitTransactions(url, data = {}) {
+    const scrollPosition = { x: window.scrollX, y: window.scrollY }
+
+    router.get(url, data, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: (page) => syncTransactionProps(page.props),
+      onFinish: () => restoreScrollPosition(scrollPosition),
+    })
+  }
+
+  function visitTransactionsPath(path) {
+    const scrollPosition = { x: window.scrollX, y: window.scrollY }
+
+    router.visit(path, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: (page) => syncTransactionProps(page.props),
+      onFinish: () => restoreScrollPosition(scrollPosition),
+    })
+  }
+
+  function syncTransactionProps(nextProps) {
+    categories = nextProps.categories || categories
+    subcategories = nextProps.subcategories || subcategories
+    saved_queries = nextProps.saved_queries || saved_queries
+    selected_saved_query_id = nextProps.selected_saved_query_id || null
+    filter_params = nextProps.filter_params || {}
+    quick_ranges = nextProps.quick_ranges || quick_ranges
+    filter_active = Boolean(nextProps.filter_active)
+    date_summary = nextProps.date_summary || ""
+    transactions = nextProps.transactions || []
+    pagination = nextProps.pagination || pagination
+    sort = nextProps.sort || sort
+    per_page = nextProps.per_page || per_page
+    per_page_options = nextProps.per_page_options || per_page_options
+    actions = nextProps.actions || actions
+    filters = { ...filter_params, saved_query_id: selected_saved_query_id || "" }
+  }
+
+  function restoreScrollPosition(position) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo(position.x, position.y))
+    })
   }
 
   function compact(values) {
@@ -242,7 +288,7 @@
   }
 
   function updateCategory(transaction, categoryId) {
-    router.patch(transaction.update_path, { expense_transaction: { category_id: categoryId } }, { preserveScroll: true })
+    router.patch(transaction.update_path, { expense_transaction: { category_id: categoryId } }, { preserveScroll: true, preserveState: true })
   }
 
   function updateTransactionField(transaction, field, value) {
@@ -258,6 +304,10 @@
     const nextDirection = currentField === field && currentDirection === "desc" ? "asc" : "desc"
 
     return withQuery(actions.index, { ...filter_params, saved_query_id: selected_saved_query_id, limit: per_page, sort: field, sort_direction: nextDirection })
+  }
+
+  function sortTransactions(field) {
+    visitTransactionsPath(sortPath(field))
   }
 
   function toggleNoteEditor(transaction) {
@@ -585,16 +635,16 @@
         category_id: bulkCategoryId,
         transaction_ids: Array.from(selectedIds),
       },
-    })
+    }, { preserveScroll: true, preserveState: true })
   }
 
   function saveFilter() {
     if (!saveName.trim()) return
-    router.post(actions.save_query, { name: saveName, filters: compact(filter_params) })
+    router.post(actions.save_query, { name: saveName, filters: compact(filter_params) }, { preserveScroll: true, preserveState: true })
   }
 
   function destroySavedQuery(query) {
-    router.delete(query.destroy_path)
+    router.delete(query.destroy_path, { preserveScroll: true, preserveState: true })
   }
 
   function formatSigned(cents) {
@@ -760,7 +810,7 @@
     <section class="mb-4 flex flex-wrap gap-2">
       {#each saved_queries as query}
         <Badge variant="outline" class="h-8 gap-0 overflow-hidden p-0">
-          <Link href={query.path} prefetch cacheFor="30s" class="px-3 py-1.5 hover:text-foreground">{query.name}</Link>
+          <button type="button" class="px-3 py-1.5 hover:text-foreground" onclick={() => visitTransactionsPath(query.path)}>{query.name}</button>
           <button type="button" class="border-l border-border px-2.5 py-1.5 text-muted-foreground hover:text-foreground" aria-label={`Delete ${query.name}`} onclick={() => destroySavedQuery(query)}>
             <X class="size-3" />
           </button>
@@ -1020,7 +1070,7 @@
               <input type="checkbox" class="size-4 rounded border-input accent-primary" aria-label="Select all visible transactions" checked={allVisibleSelected} onchange={toggleAll} />
             </TableHead>
             <TableHead class="w-36">
-              <Button href={sortPath("date")} variant="ghost" size="sm" class="-ml-2 h-7 px-2">
+              <Button type="button" variant="ghost" size="sm" class="-ml-2 h-7 px-2" onclick={() => sortTransactions("date")}>
                 Date
                 {#if sortIcon("date")}
                   <svelte:component this={sortIcon("date")} class="size-3.5" />
@@ -1030,7 +1080,7 @@
             <TableHead>Description</TableHead>
             <TableHead class="w-56">Category</TableHead>
             <TableHead class="w-32 text-right">
-              <Button href={sortPath("amount")} variant="ghost" size="sm" class="ml-auto h-7 px-2">
+              <Button type="button" variant="ghost" size="sm" class="ml-auto h-7 px-2" onclick={() => sortTransactions("amount")}>
                 Amount
                 {#if sortIcon("amount")}
                   <svelte:component this={sortIcon("amount")} class="size-3.5" />
@@ -1129,7 +1179,7 @@
         {/if}
       </p>
 
-      <form class="flex items-center gap-2 lg:ml-auto" onchange={(event) => router.get(withQuery(actions.index, { ...filter_params, saved_query_id: selected_saved_query_id, limit: event.currentTarget.limit.value }))}>
+      <form class="flex items-center gap-2 lg:ml-auto" onchange={(event) => visitTransactionsPath(withQuery(actions.index, { ...filter_params, saved_query_id: selected_saved_query_id, limit: event.currentTarget.limit.value }))}>
         <Label for="limit">Rows</Label>
         <NativeSelect id="limit" name="limit" value={per_page} class="w-24">
           {#each per_page_options as option}
@@ -1140,15 +1190,15 @@
 
       {#if pagination.pages > 1}
         <nav class="flex flex-wrap gap-1" aria-label="Transactions pages">
-          {#if pagination.prev_path}<Button href={pagination.prev_path} variant="outline" size="sm">Previous</Button>{/if}
+          {#if pagination.prev_path}<Button type="button" variant="outline" size="sm" onclick={() => visitTransactionsPath(pagination.prev_path)}>Previous</Button>{/if}
           {#each pagination.pages_series as page}
             {#if page.gap}
               <span class="px-2 py-1">...</span>
             {:else}
-              <Button href={page.path} variant={page.current ? "default" : "outline"} size="sm" aria-current={page.current ? "page" : undefined}>{page.label}</Button>
+              <Button type="button" variant={page.current ? "default" : "outline"} size="sm" aria-current={page.current ? "page" : undefined} onclick={() => visitTransactionsPath(page.path)}>{page.label}</Button>
             {/if}
           {/each}
-          {#if pagination.next_path}<Button href={pagination.next_path} variant="outline" size="sm">Next</Button>{/if}
+          {#if pagination.next_path}<Button type="button" variant="outline" size="sm" onclick={() => visitTransactionsPath(pagination.next_path)}>Next</Button>{/if}
         </nav>
       {/if}
     </div>

@@ -18,7 +18,7 @@
   let form = { ...settings }
 
   function save() {
-    router.patch(actions.update, { ai_settings: form })
+    router.patch(actions.update, { ai_settings: form }, { preserveScroll: true, preserveState: true })
   }
 
   function modelInput(id, key, label) {

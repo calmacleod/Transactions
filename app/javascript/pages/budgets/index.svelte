@@ -16,7 +16,7 @@
   let selectedMonth = month.value
 
   function updateBudget(category, value) {
-    router.patch(category.update_path, { category: { monthly_budget: value } }, { preserveScroll: true })
+    router.patch(category.update_path, { category: { monthly_budget: value } }, { preserveScroll: true, preserveState: true })
   }
 </script>
 
@@ -26,7 +26,7 @@
     <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Category budgets</h1>
     <p class="mt-2 text-sm text-muted-foreground">Set monthly targets and compare them against actual spending.</p>
   </div>
-  <form class="flex w-full flex-wrap items-end gap-2 sm:w-auto" on:submit|preventDefault={() => router.get(withQuery(actions.index, { month: selectedMonth }))}>
+  <form class="flex w-full flex-wrap items-end gap-2 sm:w-auto" on:submit|preventDefault={() => router.get(withQuery(actions.index, { month: selectedMonth }), {}, { preserveScroll: true })}>
     <div class="min-w-0 flex-1 space-y-1.5 sm:w-44 sm:flex-none">
       <Label for="budget-month">Month</Label>
       <Input id="budget-month" type="month" bind:value={selectedMonth} class="w-full" />

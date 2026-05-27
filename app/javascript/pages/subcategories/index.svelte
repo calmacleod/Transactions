@@ -15,12 +15,12 @@
 
   function createSubcategory() {
     if (!name.trim()) return
-    router.post(actions.create, { transaction_subcategory: { name, color } }, { preserveScroll: true })
+    router.post(actions.create, { transaction_subcategory: { name, color } }, { preserveScroll: true, preserveState: true })
     name = ""
   }
 
   function destroySubcategory(subcategory) {
-    router.delete(subcategory.destroy_path, { preserveScroll: true })
+    router.delete(subcategory.destroy_path, { preserveScroll: true, preserveState: true })
   }
 </script>
 

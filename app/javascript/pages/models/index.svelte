@@ -31,11 +31,11 @@
   ]
 
   function applyFilters() {
-    router.get(actions.index, Object.fromEntries(Object.entries(form).filter(([, value]) => value)))
+    router.get(actions.index, Object.fromEntries(Object.entries(form).filter(([, value]) => value)), { preserveScroll: true })
   }
 
   function toggleFavorite(model) {
-    router.patch(model.update_path, { model: { favorite: !model.favorite } }, { preserveScroll: true })
+    router.patch(model.update_path, { model: { favorite: !model.favorite } }, { preserveScroll: true, preserveState: true })
   }
 </script>
 
@@ -46,7 +46,7 @@
       <p class="mt-2 text-sm text-muted-foreground">Browse imported provider metadata, capabilities, context windows, and pricing.</p>
     </div>
 
-    <Button onclick={() => router.post(actions.refresh)}>
+    <Button onclick={() => router.post(actions.refresh, {}, { preserveScroll: true, preserveState: true })}>
       <RefreshCcw class="size-4" />
       Refresh models
     </Button>
@@ -98,7 +98,7 @@
         </div>
         <div class="flex items-end gap-2">
           <Button type="submit">Filter</Button>
-          <Button type="button" variant="outline" onclick={() => router.get(actions.index)}>Clear</Button>
+          <Button type="button" variant="outline" onclick={() => router.get(actions.index, {}, { preserveScroll: true })}>Clear</Button>
         </div>
       </form>
     </CardContent>
