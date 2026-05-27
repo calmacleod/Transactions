@@ -41,6 +41,17 @@ test("dashboard desktop layout does not clip the latest transaction table", asyn
   await expectNoViewportOverflow(page)
 })
 
+test("dashboard top merchants panel stays within the mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+
+  await expect(page.getByTestId("top-merchants-panel")).toBeVisible()
+
+  await expectElementFitsItsBox(page, "[data-testid='top-merchants-panel']")
+  await expectAllElementsFitTheirBoxes(page, "[data-testid='top-merchant-row']")
+  await expectNoViewportOverflow(page)
+})
+
 test("internal navigation links prefetch Inertia payloads", async ({ page }) => {
   await page.goto("/")
 
@@ -322,6 +333,24 @@ async function expectElementFitsItsBox(page, selector) {
   })
 
   expect(measurements.scrollWidth, JSON.stringify(measurements)).toBeLessThanOrEqual(measurements.clientWidth + 1)
+}
+
+async function expectAllElementsFitTheirBoxes(page, selector) {
+  const overflowingElements = await page.locator(selector).evaluateAll((elements) => {
+    return elements
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          rectWidth: rect.width,
+          text: element.textContent?.trim().replace(/\s+/g, " ").slice(0, 120),
+        }
+      })
+      .filter((element) => element.scrollWidth > element.clientWidth + 1)
+  })
+
+  expect(overflowingElements).toEqual([])
 }
 
 async function expectNoUnnamedVisibleButtons(page) {

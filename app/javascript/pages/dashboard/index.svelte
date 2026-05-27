@@ -190,18 +190,18 @@
   </section>
 
   <section class="mb-4 grid gap-4 xl:grid-cols-[minmax(20rem,0.42fr)_minmax(0,0.58fr)]">
-    <Card>
+    <Card data-testid="top-merchants-panel">
       <CardHeader class="border-b border-border">
         <CardTitle class="text-sm">Top merchants</CardTitle>
       </CardHeader>
-      <CardContent class="grid gap-1 pt-1">
+      <CardContent class="grid min-w-0 gap-1 pt-1">
         {#each top_merchants as merchant}
-          <Link href={merchant.filters_path} prefetch cacheFor="30s" class="flex items-center justify-between gap-4 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60">
+          <Link href={merchant.filters_path} prefetch cacheFor="30s" class="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60" data-testid="top-merchant-row">
             <div class="min-w-0">
               <p class="truncate text-sm font-medium text-foreground">{merchant.merchant_label}</p>
               <p class="text-xs text-muted-foreground">{merchant.count} purchase{merchant.count === 1 ? "" : "s"}</p>
             </div>
-            <p class="money-value text-sm font-semibold text-foreground">{merchant.amount_label}</p>
+            <p class="money-value shrink-0 text-sm font-semibold text-foreground">{merchant.amount_label}</p>
           </Link>
         {/each}
       </CardContent>
