@@ -46,6 +46,7 @@ class SpendingController < ApplicationController
     {
       value: month.strftime("%Y-%m"),
       label: month.strftime("%b %Y"),
+      year: month.strftime("%Y"),
       short_label: month.strftime("%b")
     }
   end

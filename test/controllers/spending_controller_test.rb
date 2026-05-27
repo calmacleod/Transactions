@@ -9,6 +9,7 @@ class SpendingControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     props = inertia_props
     assert_equal [ "May 2026" ], props["months"].map { |month| month["label"] }
+    assert_equal [ "2026" ], props["months"].map { |month| month["year"] }
     assert_equal 13_153, props["monthly_totals"].first["cents"]
     assert_includes props["category_rows"].map { |row| row["category"]["name"] }, "Groceries"
     assert_includes props["category_rows"].map { |row| row["category"]["name"] }, "Restaurants"

@@ -10,9 +10,26 @@
   export let max_month_cents = 0
   export let max_category_cents = 0
 
+  $: yearGroups = buildYearGroups(months)
+
   function percent(value, max, floor = 0) {
     if (!max) return floor
     return Math.max(Math.round((Number(value || 0) / max) * 100), floor)
+  }
+
+  function buildYearGroups(months) {
+    return months.reduce((groups, month) => {
+      const year = month.year || month.value?.slice(0, 4) || ""
+      const previousGroup = groups[groups.length - 1]
+
+      if (previousGroup?.year === year) {
+        previousGroup.count += 1
+      } else {
+        groups.push({ year, count: 1 })
+      }
+
+      return groups
+    }, [])
   }
 </script>
 
@@ -56,11 +73,16 @@
       <table class="w-full min-w-[72rem] text-sm">
         <thead class="border-b border-border bg-muted/40 text-xs text-muted-foreground">
           <tr>
-            <th class="sticky left-0 z-10 w-56 bg-muted/95 px-4 py-3 text-left font-medium">Category</th>
+            <th rowspan="2" class="sticky left-0 z-10 w-56 bg-muted/95 px-4 py-3 text-left align-bottom font-medium">Category</th>
+            {#each yearGroups as group}
+              <th colspan={group.count} class="border-b border-border px-3 py-2 text-center font-semibold text-foreground">{group.year}</th>
+            {/each}
+            <th rowspan="2" class="w-32 px-4 py-3 text-right align-bottom font-medium">Total</th>
+          </tr>
+          <tr>
             {#each months as month}
               <th class="w-32 px-3 py-3 text-right font-medium">{month.short_label || month.label}</th>
             {/each}
-            <th class="w-32 px-4 py-3 text-right font-medium">Total</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
