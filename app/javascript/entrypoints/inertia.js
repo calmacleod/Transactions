@@ -16,6 +16,12 @@ createInertiaApp({
     visitOptions: () => {
       return { queryStringArrayFormat: "brackets" }
     },
+    future: {
+      useScriptElementForInitialPage: true,
+      useDataInertiaHeadAttribute: true,
+      useDialogForErrorModal: true,
+      preserveEqualProps: true,
+    },
   },
 })
 

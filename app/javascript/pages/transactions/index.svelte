@@ -1,9 +1,6 @@
 <script>
   import { onMount, tick } from "svelte"
-  import { createConsumer } from "@rails/actioncable"
   import { router } from "@inertiajs/svelte"
-  import DOMPurify from "dompurify"
-  import { marked } from "marked"
   import { Badge } from "$lib/components/ui/badge"
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
@@ -59,6 +56,10 @@
   let chatHistoryLoading = false
   let chatHistoryLoaded = false
   let cableConsumer = null
+  let chatRuntimePromise = null
+  let markdownRuntimePromise = null
+  let markdownParser = null
+  let markdownSanitizer = null
   let filtersOpen = filter_active
   let dragSelecting = false
   let dragSelectionMode = null
@@ -121,7 +122,6 @@
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", stopDrag)
     updateLayout()
-    cableConsumer = createConsumer()
 
     return () => {
       chatSubscription?.unsubscribe()
@@ -382,7 +382,9 @@
     return sort?.direction === "asc" ? ChevronUp : ChevronDown
   }
 
-  function openChat(transactionIds = []) {
+  async function openChat(transactionIds = []) {
+    await ensureMarkdownRuntime()
+
     chatOpen = true
     chatQuestion = ""
     chatAnswer = ""
@@ -418,6 +420,8 @@
   }
 
   async function openExistingChat(chatId) {
+    await ensureChatRuntime()
+
     chatHistoryOpen = false
     chatOpen = true
     chatAnswer = ""
@@ -426,12 +430,14 @@
     currentChatId = chatId
     chatFocusedTransactionId = null
     await loadChat(chatId)
-    subscribeToChat(chatId)
+    await subscribeToChat(chatId)
   }
 
   async function askChat() {
     const question = chatQuestion.trim()
     if (!question) return
+    await ensureMarkdownRuntime()
+
     chatOpen = true
     chatLoading = true
     chatAnswer = ""
@@ -465,7 +471,7 @@
       chatAnswer = data.answer || ""
       chatSource = data.source || ""
       if (currentChatId) {
-        subscribeToChat(currentChatId)
+        await subscribeToChat(currentChatId)
         loadChatHistory(true)
       }
     } catch (_error) {
@@ -477,8 +483,10 @@
     }
   }
 
-  function subscribeToChat(chatId) {
-    if (!cableConsumer || chatSubscription?.chatId === chatId) return
+  async function subscribeToChat(chatId) {
+    if (chatSubscription?.chatId === chatId) return
+
+    await ensureChatRuntime()
 
     chatSubscription?.unsubscribe()
     chatSubscription = cableConsumer.subscriptions.create(
@@ -491,6 +499,33 @@
     )
     chatSubscription.chatId = chatId
     refreshChat(chatId)
+  }
+
+  async function ensureChatRuntime() {
+    if (!chatRuntimePromise) {
+      chatRuntimePromise = Promise.all([
+        ensureMarkdownRuntime(),
+        import("@rails/actioncable"),
+      ]).then(([, cable]) => {
+        cableConsumer = cableConsumer || cable.createConsumer()
+      })
+    }
+
+    await chatRuntimePromise
+  }
+
+  async function ensureMarkdownRuntime() {
+    if (!markdownRuntimePromise) {
+      markdownRuntimePromise = Promise.all([
+        import("marked"),
+        import("dompurify"),
+      ]).then(([markedModule, domPurifyModule]) => {
+        markdownParser = markedModule.marked
+        markdownSanitizer = domPurifyModule.default || domPurifyModule
+      })
+    }
+
+    await markdownRuntimePromise
   }
 
   async function refreshChat(chatId) {
@@ -553,15 +588,28 @@
   function renderMarkdown(message) {
     const source = messageText(message)
     if (!source) return ""
+    if (!markdownParser || !markdownSanitizer) return escapeHtml(source)
 
-    const html = marked.parse(source, { gfm: true, breaks: true, async: false })
-    const sanitized = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+    const html = markdownParser.parse(source, { gfm: true, breaks: true, async: false })
+    const sanitized = markdownSanitizer.sanitize(html, { USE_PROFILES: { html: true } })
 
     return sanitized.replace(/\[\[transaction:(\d+)\]\]/gi, (_match, id) => {
       const safeId = Number.parseInt(id, 10)
       if (!Number.isFinite(safeId)) return ""
 
       return `<button type="button" class="chat-transaction-reference" data-transaction-reference-id="${safeId}">${transactionReferenceLabel(safeId)}</button>`
+    })
+  }
+
+  function escapeHtml(value) {
+    return value.replace(/[&<>"']/g, (character) => {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;",
+      }[character]
     })
   }
 

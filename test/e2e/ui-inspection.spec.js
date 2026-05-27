@@ -212,7 +212,9 @@ test("pwa manifest, icon, and service worker registration are intact", async ({ 
   const serviceWorkerResponse = await request.get("/service-worker.js")
   expect(serviceWorkerResponse.ok()).toBe(true)
   const serviceWorker = await serviceWorkerResponse.text()
-  expect(serviceWorker).toContain("transactions-pwa-v3")
+  expect(serviceWorker).toContain("transactions-pwa-v4")
+  expect(serviceWorker).toContain("ASSET_PATH_PATTERN")
+  expect(serviceWorker).toContain("navigationPreload")
   expect(serviceWorker).not.toContain("/manifest.json")
   expect(serviceWorker).not.toContain("/icon.png")
 

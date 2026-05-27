@@ -6,6 +6,9 @@ import RubyPlugin from 'vite-plugin-ruby'
 import path from 'node:path'
 
 export default defineConfig({
+  build: {
+    emptyOutDir: true,
+  },
   plugins: [
     tailwindcss(),
     RubyPlugin(),

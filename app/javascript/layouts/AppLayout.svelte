@@ -24,7 +24,7 @@
     dark: "#100d06",
   }
   const navLinkClass = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-  const mountedNavPrefetch = ["hover", "mount"]
+  const navPrefetch = "hover"
   const page = usePage()
 
   let auth = page.props.auth || {}
@@ -90,7 +90,7 @@
   }
 
   function navPrefetchMode(item) {
-    return item.fullReload ? false : mountedNavPrefetch
+    return item.fullReload ? false : navPrefetch
   }
 
   function mouseDownNavigate(event, href, options = {}) {
@@ -221,7 +221,7 @@
             {:else}
               <Link
                 href={item.href}
-                prefetch
+                prefetch={navPrefetchMode(item)}
                 cacheFor="1m"
                 draggable="false"
                 onmousedown={(event) => mouseDownNavigate(event, item.href, { closeMobile: true })}
