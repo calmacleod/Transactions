@@ -47,14 +47,15 @@ class PwaTest < ActionDispatch::IntegrationTest
     get pwa_service_worker_path
 
     assert_response :success
-    assert_includes response.body, "transactions-pwa-v6"
+    assert_includes response.body, "transactions-pwa-v7"
     assert_includes response.body, "transactions-pages-v2"
     assert_includes response.body, "const VITE_PATH_PATTERN ="
     assert_includes response.body, 'const OFFLINE_FALLBACK_PATH = "/offline"'
     assert_includes response.body, "navigationPreload"
     assert_includes response.body, "cacheFirst(request)"
-    assert_includes response.body, "isCacheableViteAsset(url, sameOrigin)"
-    assert_includes response.body, "isLocalDevelopmentHost"
+    assert_includes response.body, "isCacheableViteAsset(url)"
+    assert_not_includes response.body, "isLocalDevelopmentHost"
+    assert_not_includes response.body, "vite-dev"
     assert_includes response.body, "networkFirstNavigation(request"
     assert_includes response.body, "networkFirstPage(request)"
     assert_includes response.body, "self.addEventListener(\"install\""

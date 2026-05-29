@@ -2,8 +2,29 @@ const DB_NAME = "transactions-offline"
 const DB_VERSION = 1
 const STORE_NAME = "snapshots"
 const LATEST_KEY = "latest"
+const REFRESH_INTERVAL_MS = 60 * 60 * 1000
+const FETCHED_AT_KEY = "transactions-offline-snapshot-fetched-at"
+const REFRESHED_AT_KEY = "transactions-offline-snapshot-refreshed-at"
+let refreshPromise = null
 
-export async function refreshOfflineSnapshot(path = "/offline/snapshot.json") {
+export function warmOfflineSnapshot(path = "/offline/snapshot.json") {
+  refreshOfflineSnapshot(path).catch(() => {})
+}
+
+export async function refreshOfflineSnapshot(path = "/offline/snapshot.json", { force = false } = {}) {
+  if (!force && !(await shouldRefreshOfflineSnapshot())) return loadOfflineSnapshot()
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = fetchAndStoreOfflineSnapshot(path).finally(() => {
+    refreshPromise = null
+  })
+
+  return refreshPromise
+}
+
+async function fetchAndStoreOfflineSnapshot(path) {
+  recordOfflineSnapshotFetchAttempt()
+
   const response = await fetch(path, {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
@@ -19,27 +40,65 @@ export async function refreshOfflineSnapshot(path = "/offline/snapshot.json") {
 }
 
 export async function loadOfflineSnapshot() {
+  const record = await loadOfflineSnapshotRecord()
+
+  return record?.snapshot || null
+}
+
+async function shouldRefreshOfflineSnapshot() {
+  const fetchedAt = Date.parse(readStorageValue(FETCHED_AT_KEY))
+  if (!Number.isFinite(fetchedAt)) return true
+
+  return Date.now() - fetchedAt >= REFRESH_INTERVAL_MS
+}
+
+async function loadOfflineSnapshotRecord() {
   const database = await openOfflineDatabase()
 
   return new Promise((resolve, reject) => {
     const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(LATEST_KEY)
 
-    request.onsuccess = () => resolve(request.result?.snapshot || null)
+    request.onsuccess = () => resolve(request.result || null)
     request.onerror = () => reject(request.error)
   })
 }
 
 export async function saveOfflineSnapshot(snapshot) {
   const database = await openOfflineDatabase()
+  const timestamp = new Date().toISOString()
+  writeStorageValue(FETCHED_AT_KEY, timestamp)
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite")
-    const request = transaction.objectStore(STORE_NAME).put({ id: LATEST_KEY, snapshot })
+    const request = transaction.objectStore(STORE_NAME).put({ id: LATEST_KEY, snapshot, fetchedAt: timestamp, refreshedAt: timestamp })
 
     request.onerror = () => reject(request.error)
-    transaction.oncomplete = () => resolve(snapshot)
+    transaction.oncomplete = () => {
+      writeStorageValue(REFRESHED_AT_KEY, timestamp)
+      resolve(snapshot)
+    }
     transaction.onerror = () => reject(transaction.error)
   })
+}
+
+function recordOfflineSnapshotFetchAttempt() {
+  writeStorageValue(FETCHED_AT_KEY, new Date().toISOString())
+}
+
+function readStorageValue(key) {
+  try {
+    return window.localStorage.getItem(key)
+  } catch (_error) {
+    return null
+  }
+}
+
+function writeStorageValue(key, value) {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch (_error) {
+    // Snapshot refresh metadata is best-effort; IndexedDB remains the source of truth for snapshot data.
+  }
 }
 
 function openOfflineDatabase() {

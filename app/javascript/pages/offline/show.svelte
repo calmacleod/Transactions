@@ -4,7 +4,7 @@
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { Progress } from "$lib/components/ui/progress"
-  import { loadOfflineSnapshot, refreshOfflineSnapshot } from "$lib/offline-snapshot"
+  import { loadOfflineSnapshot, warmOfflineSnapshot } from "$lib/offline-snapshot"
   import { badgeVariant } from "$lib/formatters"
   import BarChart3 from "@lucide/svelte/icons/bar-chart-3"
   import CreditCard from "@lucide/svelte/icons/credit-card"
@@ -59,8 +59,7 @@
         if (!cancelled) snapshot = storedSnapshot
 
         if (navigator.onLine) {
-          const refreshedSnapshot = await refreshOfflineSnapshot(snapshot_path)
-          if (!cancelled) snapshot = refreshedSnapshot || storedSnapshot
+          warmOfflineSnapshot(snapshot_path)
         }
       } finally {
         if (!cancelled) loading = false
@@ -68,11 +67,17 @@
     }
 
     loadSnapshot()
+    const handleSnapshotRefresh = (event) => {
+      if (!cancelled) snapshot = event.detail
+    }
+
+    window.addEventListener("transactions-offline-snapshot", handleSnapshotRefresh)
 
     return () => {
       cancelled = true
       window.removeEventListener("online", syncConnectionState)
       window.removeEventListener("offline", syncConnectionState)
+      window.removeEventListener("transactions-offline-snapshot", handleSnapshotRefresh)
     }
   })
 

@@ -1,5 +1,5 @@
 import { createInertiaApp, router } from '@inertiajs/svelte'
-import { refreshOfflineSnapshot } from '../lib/offline-snapshot'
+import { warmOfflineSnapshot } from '../lib/offline-snapshot'
 import Layout from '../layouts/AppLayout.svelte'
 import './application.css'
 
@@ -10,6 +10,8 @@ const warmRouteChunks = [
   () => import("../pages/dashboard/index.svelte"),
   () => import("../pages/offline/show.svelte"),
 ]
+const OFFLINE_PAGE_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+const OFFLINE_PAGE_FETCHED_AT_KEY = "transactions-offline-page-fetched-at"
 let serviceWorkerRegistrationPromise = null
 
 createInertiaApp({
@@ -89,11 +91,29 @@ async function warmOfflineSupport(authenticated) {
 
     if (!authenticated) return
 
-    await fetch("/offline", { credentials: "same-origin", headers: { Accept: "text/html" } })
-    await refreshOfflineSnapshot()
+    warmOfflineSnapshot()
+    warmOfflinePage()
   } catch (_error) {
     // Offline support is opportunistic; failed warmups should not interrupt normal app loads.
   }
+}
+
+function warmOfflinePage() {
+  if (!shouldRefreshOfflinePage()) return
+
+  recordOfflinePageFetchAttempt()
+  fetch("/offline", { credentials: "same-origin", headers: { Accept: "text/html" } }).catch(() => {})
+}
+
+function shouldRefreshOfflinePage() {
+  const fetchedAt = Date.parse(readStorageValue(OFFLINE_PAGE_FETCHED_AT_KEY))
+  if (!Number.isFinite(fetchedAt)) return true
+
+  return Date.now() - fetchedAt >= OFFLINE_PAGE_REFRESH_INTERVAL_MS
+}
+
+function recordOfflinePageFetchAttempt() {
+  writeStorageValue(OFFLINE_PAGE_FETCHED_AT_KEY, new Date().toISOString())
 }
 
 async function ensureServiceWorkerRegistration() {
@@ -103,8 +123,6 @@ async function ensureServiceWorkerRegistration() {
 }
 
 function redirectToOfflinePage() {
-  router.cancelAll({ async: true, prefetch: true, sync: true })
-
   if (window.location.pathname === "/offline") return
   if (window.location.pathname.startsWith("/session")) return
   if (window.location.pathname.startsWith("/passwords")) return
@@ -130,4 +148,20 @@ function authenticatedPage() {
 
 function authenticatedProps(props) {
   return Boolean(props?.auth?.authenticated)
+}
+
+function readStorageValue(key) {
+  try {
+    return window.localStorage.getItem(key)
+  } catch (_error) {
+    return null
+  }
+}
+
+function writeStorageValue(key, value) {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch (_error) {
+    // Offline warmup metadata is best-effort; missing storage should not affect navigation.
+  }
 }

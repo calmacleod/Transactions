@@ -1,6 +1,6 @@
-const CACHE_NAME = "transactions-pwa-v6"
+const CACHE_NAME = "transactions-pwa-v7"
 const PAGE_CACHE_NAME = "transactions-pages-v2"
-const VITE_PATH_PATTERN = /^\/vite(?:-[^/]+)?\//
+const VITE_PATH_PATTERN = /^\/vite(?:-test)?\//
 const OFFLINE_FALLBACK_PATH = "/offline"
 const CACHEABLE_PAGE_PATHS = new Set([
   "/",
@@ -34,8 +34,8 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url)
   const sameOrigin = url.origin === self.location.origin
-  const viteAsset = isCacheableViteAsset(url, sameOrigin)
-  if (!sameOrigin && !viteAsset) return
+  if (!sameOrigin) return
+  const viteAsset = isCacheableViteAsset(url)
 
   if (sameOrigin && request.mode === "navigate") {
     event.respondWith(networkFirstNavigation(request, event.preloadResponse))
@@ -108,15 +108,8 @@ function acceptsHtml(request) {
   return request.headers.get("accept")?.includes("text/html")
 }
 
-function isCacheableViteAsset(url, sameOrigin) {
-  if (!VITE_PATH_PATTERN.test(url.pathname)) return false
-  if (sameOrigin) return true
-
-  return isLocalDevelopmentHost(url.hostname)
-}
-
-function isLocalDevelopmentHost(hostname) {
-  return ["localhost", "127.0.0.1", "::1"].includes(hostname)
+function isCacheableViteAsset(url) {
+  return VITE_PATH_PATTERN.test(url.pathname)
 }
 
 function isCacheablePagePath(pathname) {

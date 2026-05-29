@@ -286,12 +286,13 @@ test("pwa manifest, icon, and service worker registration are intact", async ({ 
   const serviceWorkerResponse = await request.get("/service-worker.js")
   expect(serviceWorkerResponse.ok()).toBe(true)
   const serviceWorker = await serviceWorkerResponse.text()
-  expect(serviceWorker).toContain("transactions-pwa-v6")
+  expect(serviceWorker).toContain("transactions-pwa-v7")
   expect(serviceWorker).toContain("transactions-pages-v2")
   expect(serviceWorker).toContain("VITE_PATH_PATTERN")
   expect(serviceWorker).toContain('OFFLINE_FALLBACK_PATH = "/offline"')
   expect(serviceWorker).toContain("isCacheableViteAsset")
   expect(serviceWorker).toContain("navigationPreload")
+  expect(serviceWorker).not.toContain("vite-dev")
   expect(serviceWorker).not.toContain("/manifest.json")
   expect(serviceWorker).not.toContain("/icon.png")
 
@@ -378,45 +379,7 @@ function offlineInertiaExceptionIsPrevented(page) {
 }
 
 function hasStoredOfflineSnapshot() {
-  const openExistingOfflineSnapshot = (resolve) => {
-    const request = indexedDB.open("transactions-offline", 1)
-
-    request.onerror = () => resolve(false)
-    request.onupgradeneeded = () => {
-      request.transaction?.abort()
-      resolve(false)
-    }
-    request.onsuccess = () => {
-      const database = request.result
-      if (!database.objectStoreNames.contains("snapshots")) {
-        database.close()
-        resolve(false)
-        return
-      }
-
-      const transaction = database.transaction("snapshots", "readonly")
-      const getRequest = transaction.objectStore("snapshots").get("latest")
-
-      getRequest.onerror = () => resolve(false)
-      getRequest.onsuccess = () => resolve(Boolean(getRequest.result?.snapshot))
-    }
-  }
-
-  return new Promise((resolve) => {
-    if (indexedDB.databases) {
-      indexedDB.databases().then((databases) => {
-        if (!databases.some((database) => database.name === "transactions-offline")) {
-          resolve(false)
-          return
-        }
-
-        openExistingOfflineSnapshot(resolve)
-      }).catch(() => resolve(false))
-      return
-    }
-
-    openExistingOfflineSnapshot(resolve)
-  })
+  return Boolean(window.localStorage.getItem("transactions-offline-snapshot-refreshed-at"))
 }
 
 test("transaction quick filters perform Inertia visits", async ({ page }) => {
