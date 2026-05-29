@@ -75,7 +75,7 @@
       <div class="grid gap-5">
         <div class="grid gap-2">
           <Label>Mode</Label>
-          <div class="inline-grid w-fit grid-cols-2 gap-1 rounded-lg border border-border bg-background/70 p-1">
+          <div class="inline-grid w-fit grid-cols-2 gap-1 rounded-lg border border-border bg-background p-1">
             <Button type="button" variant={appearanceTheme === "light" ? "default" : "ghost"} size="sm" aria-pressed={appearanceTheme === "light"} onclick={() => setAppearanceTheme("light")}>Light</Button>
             <Button type="button" variant={appearanceTheme === "dim" ? "default" : "ghost"} size="sm" aria-pressed={appearanceTheme === "dim"} onclick={() => setAppearanceTheme("dim")}>Dim</Button>
           </div>

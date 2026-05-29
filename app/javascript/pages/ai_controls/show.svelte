@@ -98,27 +98,27 @@
     </CardHeader>
     <CardContent class="grid gap-4">
       <div class="grid gap-3 sm:grid-cols-3">
-        <div class="rounded-lg border border-border p-3">
+        <div class="rounded-lg border border-border bg-background p-3">
           <p class="text-xs text-muted-foreground">Requests this month</p>
           <p class="mt-1 text-2xl font-semibold text-foreground">{usage.month_count}</p>
         </div>
-        <div class="rounded-lg border border-border p-3">
+        <div class="rounded-lg border border-border bg-background p-3">
           <p class="text-xs text-muted-foreground">Successful</p>
           <p class="mt-1 text-2xl font-semibold text-foreground">{usage.month_success_count}</p>
         </div>
-        <div class="rounded-lg border border-border p-3">
+        <div class="rounded-lg border border-border bg-background p-3">
           <p class="text-xs text-muted-foreground">Remaining</p>
           <p class="mt-1 text-2xl font-semibold text-foreground">{usage.remaining_requests === null ? "Unlimited" : usage.remaining_requests}</p>
         </div>
       </div>
-      <div class="rounded-lg border border-border p-3">
+      <div class="rounded-lg border border-border bg-background p-3">
         <p class="text-xs text-muted-foreground">Estimated AI cost this month</p>
         <p class="money-value mt-1 text-2xl font-semibold text-foreground">{usage.estimated_cost_label}</p>
       </div>
 
       <div class="grid gap-2">
         {#each feature_statuses as feature}
-          <div class="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+          <div class="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
             <div>
               <p class="text-sm font-semibold capitalize text-foreground">{feature.feature}</p>
               <p class="text-xs text-muted-foreground">{feature.request_count} request{feature.request_count === 1 ? "" : "s"} this month</p>
@@ -144,7 +144,7 @@
   <CardContent class="grid gap-2">
     {#if recent_requests.length}
       {#each recent_requests as request}
-        <div class="grid gap-2 rounded-lg border border-border px-3 py-2 text-sm md:grid-cols-[9rem_minmax(0,1fr)_8rem_8rem_8rem] md:items-center">
+        <div class="grid gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm md:grid-cols-[9rem_minmax(0,1fr)_8rem_8rem_8rem] md:items-center">
           <div>
             <p class="font-semibold capitalize text-foreground">{request.feature}</p>
             <p class="text-xs text-muted-foreground">{request.created_at_label}</p>

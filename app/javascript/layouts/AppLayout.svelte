@@ -42,6 +42,8 @@
   let sidebarCollapsed = false
   let sidebarPreviewOpen = false
   let sidebarPreviewSuppressed = false
+  let onboardingStep = 0
+  let onboardingDismissedLocally = false
   let theme = "light"
   let accentColor = "#0f766e"
   let online = typeof navigator === "undefined" ? true : navigator.onLine
@@ -50,6 +52,9 @@
   $: offlineModePath = paths.offline || "/offline"
   $: offlineMode = currentPath === offlineModePath || currentPath.startsWith(`${offlineModePath}?`)
   $: navigationLocked = offlineMode || !online
+  $: onboardingSteps = onboardingStepsFor(paths)
+  $: currentOnboardingStep = onboardingSteps[Math.min(onboardingStep, onboardingSteps.length - 1)]
+  $: showOnboarding = auth.authenticated && auth.onboarding_required && !onboardingDismissedLocally
 
   onMount(() => {
     syncPageState(page)
@@ -76,6 +81,8 @@
   function syncPageState(nextPage) {
     auth = nextPage.props.auth || {}
     paths = nextPage.props.paths || {}
+    onboardingDismissedLocally = onboardingLocallyDismissed(auth)
+    if (!auth.onboarding_required) onboardingStep = 0
     flash = nextPage.props.flash || {}
     visibleFlash = { ...flash }
     scheduleFlashDismiss()
@@ -118,6 +125,43 @@
     }
 
     return items
+  }
+
+  function onboardingStepsFor(nextPaths) {
+    return [
+      {
+        label: "Import",
+        title: "Bring in a card CSV",
+        description: "Open Imports, upload a headerless CSV, then review the parsed rows before committing them as transactions.",
+        action: "Open imports",
+        path: nextPaths.imports || "/imports",
+        icon: History,
+      },
+      {
+        label: "Review",
+        title: "Clean up the ledger",
+        description: "Use Transactions to filter, search, bulk select, edit categories, add subcategories, and keep notes on unusual purchases.",
+        action: "Open transactions",
+        path: nextPaths.transactions || "/transactions",
+        icon: CreditCard,
+      },
+      {
+        label: "Budget",
+        title: "Set category guardrails",
+        description: "Set monthly targets in Budgets, then jump from any budget line back to the exact transactions behind the spend.",
+        action: "Open budgets",
+        path: nextPaths.budgets || "/budgets",
+        icon: PiggyBank,
+      },
+      {
+        label: "Automate",
+        title: "Tune reminders and AI",
+        description: "Settings controls CSV reminders. AI settings lets you choose model behavior when provider keys are configured.",
+        action: "Open settings",
+        path: nextPaths.settings || "/settings",
+        icon: Settings,
+      },
+    ]
   }
 
   function setTheme(value) {
@@ -216,7 +260,7 @@
   function desktopSidebarClass(expanded, collapsed, previewOpen) {
     const overlayClass = collapsed && previewOpen ? "shadow-xl" : "shadow-sm"
 
-    return `fixed inset-y-0 left-0 z-30 hidden border-r border-border/80 bg-card/90 px-2 py-4 backdrop-blur-xl ${overlayClass} xl:flex xl:flex-col`
+    return `fixed inset-y-0 left-0 z-30 hidden border-r border-border/80 bg-card px-2 py-4 ${overlayClass} xl:flex xl:flex-col`
   }
 
   function mainClass() {
@@ -247,13 +291,40 @@
   }
 
   function dismissOnboarding(nextPath = null) {
+    onboardingDismissedLocally = true
+    rememberOnboardingDismissal(auth)
+    auth = { ...auth, onboarding_required: false }
+
     router.patch(paths.onboarding, {}, {
       preserveScroll: true,
       onSuccess: () => {
-        auth = { ...auth, onboarding_required: false }
         if (nextPath) router.visit(nextPath)
       },
     })
+  }
+
+  function nextOnboardingStep() {
+    onboardingStep = Math.min(onboardingStep + 1, onboardingSteps.length - 1)
+  }
+
+  function previousOnboardingStep() {
+    onboardingStep = Math.max(onboardingStep - 1, 0)
+  }
+
+  function onboardingStorageKey(nextAuth) {
+    return `transactions-onboarding-dismissed:${nextAuth?.email || "current"}`
+  }
+
+  function onboardingLocallyDismissed(nextAuth) {
+    if (typeof window === "undefined") return false
+
+    return window.localStorage.getItem(onboardingStorageKey(nextAuth)) === "true"
+  }
+
+  function rememberOnboardingDismissal(nextAuth) {
+    if (typeof window === "undefined") return
+
+    window.localStorage.setItem(onboardingStorageKey(nextAuth), "true")
   }
 </script>
 
@@ -368,7 +439,7 @@
     {/if}
   </aside>
 
-  <header class="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border/80 bg-background/90 px-4 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl xl:hidden">
+  <header class="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border/80 bg-background px-4 pt-[env(safe-area-inset-top)] shadow-sm xl:hidden">
     <Button variant="outline" size="icon" aria-label="Open navigation" onclick={() => (mobileOpen = true)}>
       <Menu class="size-4" />
     </Button>
@@ -494,46 +565,68 @@
     </div>
   </main>
 
-  {#if auth.authenticated && auth.onboarding_required}
-    <div class="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Transactions walkthrough">
-      <div class="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl sm:p-6">
-        <div class="flex items-start gap-4">
-          <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground" data-brand-mark>
-            <BarChart3 class="size-5" />
-          </span>
-          <div class="min-w-0">
-            <p class="text-sm font-semibold uppercase text-primary">First run</p>
-            <h2 class="mt-1 text-2xl font-semibold tracking-normal text-foreground">Get oriented in Transactions</h2>
-            <p class="mt-2 text-sm leading-6 text-muted-foreground">Start by importing a headerless card CSV, then review categories, budgets, and insights from the sidebar.</p>
+  {#if showOnboarding}
+    <div class="fixed inset-0 z-50 grid place-items-center bg-background/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Transactions guided walkthrough">
+      <div class="grid w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-xl md:grid-cols-[16rem_minmax(0,1fr)]">
+        <div class="border-b border-border bg-muted p-4 md:border-b-0 md:border-r">
+          <div class="flex items-center gap-3">
+            <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground" data-brand-mark>
+              <BarChart3 class="size-5" />
+            </span>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-foreground">First run</p>
+              <p class="text-xs text-muted-foreground">Guided setup</p>
+            </div>
           </div>
+
+          <ol class="mt-5 grid gap-2">
+            {#each onboardingSteps as step, index}
+              <li>
+                <button type="button" class={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${index === onboardingStep ? "border-primary bg-background text-foreground shadow-sm" : "border-transparent text-muted-foreground hover:bg-background/80 hover:text-foreground"}`} onclick={() => (onboardingStep = index)}>
+                  <span class={`grid size-6 shrink-0 place-items-center rounded-md text-xs font-semibold ${index === onboardingStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>{index + 1}</span>
+                  <span>{step.label}</span>
+                </button>
+              </li>
+            {/each}
+          </ol>
         </div>
 
-        <div class="mt-5 grid gap-3 sm:grid-cols-2">
-          <div class="rounded-lg border border-border bg-background p-4">
-            <CreditCard class="size-5 text-primary" />
-            <p class="mt-3 text-sm font-semibold text-foreground">Transactions</p>
-            <p class="mt-1 text-sm leading-5 text-muted-foreground">Filter, sort, bulk select, and correct categories or notes from the main transaction ledger.</p>
+        <div class="p-5 sm:p-6">
+          <div class="flex items-start gap-4">
+            <span class="grid size-11 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <svelte:component this={currentOnboardingStep.icon} class="size-5" />
+            </span>
+            <div class="min-w-0">
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">Step {onboardingStep + 1} of {onboardingSteps.length}</p>
+              <h2 class="mt-1 text-2xl font-semibold tracking-normal text-foreground">{currentOnboardingStep.title}</h2>
+              <p class="mt-2 text-sm leading-6 text-muted-foreground">{currentOnboardingStep.description}</p>
+            </div>
           </div>
-          <div class="rounded-lg border border-border bg-background p-4">
-            <PiggyBank class="size-5 text-primary" />
-            <p class="mt-3 text-sm font-semibold text-foreground">Budgets</p>
-            <p class="mt-1 text-sm leading-5 text-muted-foreground">Set monthly category targets and jump directly into the transactions behind a budget line.</p>
-          </div>
-          <div class="rounded-lg border border-border bg-background p-4">
-            <Lightbulb class="size-5 text-primary" />
-            <p class="mt-3 text-sm font-semibold text-foreground">Insights</p>
-            <p class="mt-1 text-sm leading-5 text-muted-foreground">Generate recent spending observations from local rules or RubyLLM when provider keys are configured.</p>
-          </div>
-          <div class="rounded-lg border border-border bg-background p-4">
-            <Settings class="size-5 text-primary" />
-            <p class="mt-3 text-sm font-semibold text-foreground">Settings</p>
-            <p class="mt-1 text-sm leading-5 text-muted-foreground">Adjust the CSV upload reminder schedule so fresh statement data lands in the app regularly.</p>
-          </div>
-        </div>
 
-        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" onclick={() => dismissOnboarding()}>Dismiss</Button>
-          <Button type="button" onclick={() => dismissOnboarding(paths.transactions || "/transactions")}>Open transactions</Button>
+          <div class="mt-6 rounded-lg border border-border bg-background p-4 text-sm text-muted-foreground">
+            {#if onboardingStep === 0}
+              Start here when you have a statement export. Duplicate detection and classification run before rows become permanent.
+            {:else if onboardingStep === 1}
+              This is the main working screen: saved views, quick ranges, custom dates, bulk category edits, and AI chat all use the current filtered set.
+            {:else if onboardingStep === 2}
+              Budget rows are shortcuts. Each category links back to matching debit transactions for the selected month.
+            {:else}
+              Configure reminders first, then add provider keys and model preferences only if you want AI-assisted classification or insights.
+            {/if}
+          </div>
+
+          <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <Button type="button" variant="ghost" onclick={() => dismissOnboarding()}>Dismiss permanently</Button>
+            <div class="flex gap-2 sm:ml-auto">
+              <Button type="button" variant="outline" onclick={previousOnboardingStep} disabled={onboardingStep === 0}>Back</Button>
+              {#if onboardingStep < onboardingSteps.length - 1}
+                <Button type="button" variant="outline" onclick={nextOnboardingStep}>Next</Button>
+              {:else}
+                <Button type="button" variant="outline" onclick={() => dismissOnboarding()}>Finish</Button>
+              {/if}
+              <Button type="button" onclick={() => dismissOnboarding(currentOnboardingStep.path)}>{currentOnboardingStep.action}</Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

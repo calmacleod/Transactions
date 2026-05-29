@@ -41,7 +41,7 @@
   </CardHeader>
   <CardContent class="grid gap-3">
     {#each categories as category}
-      <div class="grid min-w-0 gap-3 rounded-lg border border-border p-3 xl:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_minmax(0,12rem)] xl:items-center">
+      <div class="grid min-w-0 gap-3 rounded-lg border border-border bg-background p-3 xl:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_minmax(0,12rem)] xl:items-center">
         <a href={category.filters_path} class="min-w-0">
           <div class="flex items-center gap-2">
             <span class="size-2.5 rounded-sm" style={`background-color: ${category.color}`}></span>

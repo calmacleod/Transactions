@@ -8,6 +8,7 @@
   import { Input } from "$lib/components/ui/input"
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$lib/components/ui/table"
+  import DatePicker from "../components/DatePicker.svelte"
   import Check from "@lucide/svelte/icons/check"
   import Download from "@lucide/svelte/icons/download"
   import Plus from "@lucide/svelte/icons/plus"
@@ -220,7 +221,7 @@
 </section>
 
 {#if readOnly}
-  <section class="mb-4 rounded-lg border border-border bg-muted/40 p-3 text-foreground">
+  <section class="mb-4 rounded-lg border border-border bg-background p-3 text-foreground">
     <p class="text-sm font-semibold">Finished import</p>
     <p class="mt-1 text-xs leading-5 text-muted-foreground">
       This import was closed{import_batch.imported_at_label ? ` on ${import_batch.imported_at_label}` : ""}. It is no longer active and cannot be imported again from this preview.
@@ -300,7 +301,7 @@
           </div>
 
           <div class="grid grid-cols-2 gap-2">
-            <Input type="date" bind:value={row.occurred_on} class="h-8" disabled={readOnly} onchange={() => (draftRows = draftRows)} />
+            <DatePicker bind:value={row.occurred_on} class="h-8" disabled={readOnly} ariaLabel={`Select date for row ${row.row_number || index + 1}`} onchange={() => (draftRows = draftRows)} />
             <NativeSelect bind:value={row.category_id} class="w-full" disabled={readOnly} onchange={() => (draftRows = draftRows)}>
               <NativeSelectOption value="">Unclassified</NativeSelectOption>
               {#each categories as category}
@@ -318,7 +319,7 @@
             <Input bind:value={row.notes} class="h-7 min-w-0 flex-1" placeholder="Notes" disabled={readOnly} onchange={() => (draftRows = draftRows)} />
           </div>
 
-          <div class="mt-2 rounded-md border border-border/80 bg-muted/30 px-2 py-1.5 text-xs">
+          <div class="mt-2 rounded-md border border-border/80 bg-background px-2 py-1.5 text-xs">
             {#if row.duplicate}
               <div class="flex items-center justify-between gap-2">
                 <div class="min-w-0">
@@ -347,7 +348,7 @@
 
           <div class="mt-2 grid gap-1 text-xs">
             {#if row.duplicate?.transaction}
-              <details class="rounded-md border border-border bg-background/70 px-2 py-1">
+              <details class="rounded-md border border-border bg-background px-2 py-1">
                 <summary class="cursor-pointer font-medium text-foreground">Matched transaction</summary>
                 <div class="mt-1 grid gap-1 text-muted-foreground">
                   <span>{row.duplicate.transaction.description}</span>
@@ -360,7 +361,7 @@
             {/if}
 
             {#if rawCells(row).length}
-              <details class="rounded-md border border-border bg-background/70 px-2 py-1">
+              <details class="rounded-md border border-border bg-background px-2 py-1">
                 <summary class="cursor-pointer font-medium text-foreground">CSV source</summary>
                 <div class="mt-1 grid gap-1">
                   {#each rawCells(row) as [label, value]}
@@ -396,7 +397,7 @@
               <TableCell>
                 <div class="grid gap-1.5">
                   <div class="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-2">
-                    <Input type="date" bind:value={row.occurred_on} class="h-7" disabled={readOnly} onchange={() => (draftRows = draftRows)} />
+                    <DatePicker bind:value={row.occurred_on} size="sm" disabled={readOnly} ariaLabel={`Select date for row ${row.row_number || index + 1}`} onchange={() => (draftRows = draftRows)} />
                     <Input bind:value={row.description} class="h-7 w-full font-medium" disabled={readOnly} onchange={() => (draftRows = draftRows)} />
                   </div>
                   <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -408,7 +409,7 @@
                     <Input bind:value={row.notes} class="h-7 min-w-40 flex-1" placeholder="Notes" disabled={readOnly} onchange={() => (draftRows = draftRows)} />
 
                     {#if rawCells(row).length}
-                      <details class="min-w-36 rounded-md border border-border bg-muted/30 px-2 py-1">
+                      <details class="min-w-36 rounded-md border border-border bg-background px-2 py-1">
                         <summary class="cursor-pointer text-[0.7rem] font-medium text-foreground">CSV source</summary>
                         <div class="mt-1 grid gap-1">
                           {#each rawCells(row) as [label, value]}
@@ -446,7 +447,7 @@
                     </div>
 
                     {#if row.duplicate.transaction}
-                      <details class="mt-1 rounded border border-amber-200/80 bg-background/70 px-2 py-1 text-[0.7rem] text-foreground dark:border-amber-800/80 dark:bg-background/40">
+                      <details class="mt-1 rounded border border-amber-200/80 bg-background px-2 py-1 text-[0.7rem] text-foreground dark:border-amber-800/80">
                         <summary class="cursor-pointer font-medium">Matched transaction</summary>
                         <div class="mt-1 grid gap-1 text-muted-foreground">
                           <span class="truncate">{row.duplicate.transaction.description}</span>
@@ -461,7 +462,7 @@
                     </label>
                   </div>
                 {:else}
-                  <div class="rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                  <div class="rounded-md border border-border bg-background px-2 py-1.5">
                     <div class="flex items-center justify-between gap-2">
                       <Badge variant={row.classification_status === "failed" ? "destructive" : "secondary"}>{classificationLabel(row)}</Badge>
                       <label class="flex items-center gap-2 font-medium text-foreground">

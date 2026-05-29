@@ -73,7 +73,7 @@
           {#if selectedInsight.transactions?.length}
             <div class="grid gap-2">
               {#each selectedInsight.transactions as transaction}
-                <div class="grid gap-2 rounded-lg border border-border px-3 py-2 text-sm md:grid-cols-[8rem_minmax(0,1fr)_9rem] md:items-center">
+                <div class="grid gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm md:grid-cols-[8rem_minmax(0,1fr)_9rem] md:items-center">
                   <div class="text-xs font-medium text-muted-foreground">{transaction.occurred_on_label}</div>
                   <div class="min-w-0">
                     <p class="truncate font-medium text-foreground">{transaction.merchant_name || transaction.description}</p>

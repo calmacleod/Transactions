@@ -115,7 +115,7 @@
       }}>
         <label
           for="dashboard-csv-file"
-          class={`grid min-h-44 cursor-pointer place-items-center rounded-lg border border-dashed p-5 text-center transition-colors ${dragActive ? "border-primary bg-primary/5" : "border-border bg-muted/30 hover:bg-muted/50"}`}
+          class={`grid min-h-44 cursor-pointer place-items-center rounded-lg border border-dashed p-5 text-center transition-colors ${dragActive ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted"}`}
           ondragover={(event) => {
             event.preventDefault()
             dragActive = true
@@ -187,7 +187,7 @@
       </CardHeader>
       <CardContent class="grid gap-2 pt-1">
         {#each category_totals.slice(0, 8) as item}
-          <Link href={item.filters_path} prefetch cacheFor="30s" class="grid gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60 md:grid-cols-[12rem_minmax(0,1fr)_7rem] md:items-center">
+          <Link href={item.filters_path} prefetch cacheFor="30s" class="grid gap-3 rounded-lg bg-background px-2 py-2 transition-colors hover:bg-muted md:grid-cols-[12rem_minmax(0,1fr)_7rem] md:items-center">
             <div class="min-w-0">
               <p class="truncate text-sm font-medium text-foreground">{item.name}</p>
               <p class="text-xs text-muted-foreground">{item.count} transaction{item.count === 1 ? "" : "s"}</p>
@@ -213,7 +213,7 @@
       </CardHeader>
       <CardContent class="grid gap-2 pt-1">
         {#each recommendations as recommendation}
-          <Link href={recommendation.filters_path} prefetch cacheFor="30s" class="rounded-lg px-2 py-2 transition-colors hover:bg-muted/60">
+          <Link href={recommendation.filters_path} prefetch cacheFor="30s" class="rounded-lg bg-background px-2 py-2 transition-colors hover:bg-muted">
             <div class="flex items-start justify-between gap-3">
               <h3 class="text-sm font-semibold text-foreground">{recommendation.title}</h3>
               <Badge variant={badgeVariant(recommendation.severity)}>{recommendation.severity}</Badge>
@@ -236,7 +236,7 @@
       <CardContent>
         <div class="mt-1 flex h-48 items-end gap-2">
           {#each day_totals as day}
-            <Link href={day.filters_path} prefetch cacheFor="30s" class="flex min-w-0 flex-1 flex-col items-center gap-2 rounded-lg p-1 transition-colors hover:bg-muted/60">
+            <Link href={day.filters_path} prefetch cacheFor="30s" class="flex min-w-0 flex-1 flex-col items-center gap-2 rounded-lg bg-background p-1 transition-colors hover:bg-muted">
               <div class="flex h-36 w-full items-end overflow-hidden rounded-lg bg-muted">
                 <div class="w-full rounded-lg bg-gradient-to-t from-primary to-teal-500" style={`height: ${percent(day.count, maxDayCount, 6)}%`}></div>
               </div>
@@ -260,7 +260,7 @@
       <CardContent>
         <div class="mt-1 flex h-48 items-end gap-3">
           {#each month_trend as month}
-            <Link href={month.filters_path} prefetch cacheFor="30s" class="flex min-w-0 flex-1 flex-col items-center gap-2 rounded-lg p-1 transition-colors hover:bg-muted/60">
+            <Link href={month.filters_path} prefetch cacheFor="30s" class="flex min-w-0 flex-1 flex-col items-center gap-2 rounded-lg bg-background p-1 transition-colors hover:bg-muted">
               <div class="flex h-36 w-full items-end overflow-hidden rounded-lg bg-muted">
                 <div class="w-full rounded-lg bg-gradient-to-t from-primary to-teal-500" style={`height: ${percent(month.cents, maxMonth, 6)}%`}></div>
               </div>
@@ -282,7 +282,7 @@
       </CardHeader>
       <CardContent class="grid min-w-0 gap-1 pt-1">
         {#each top_merchants as merchant}
-          <Link href={merchant.filters_path} prefetch cacheFor="30s" class="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60" data-testid="top-merchant-row">
+          <Link href={merchant.filters_path} prefetch cacheFor="30s" class="flex min-w-0 max-w-full items-center justify-between gap-3 rounded-lg bg-background px-2 py-2 transition-colors hover:bg-muted" data-testid="top-merchant-row">
             <div class="min-w-0">
               <p class="truncate text-sm font-medium text-foreground">{merchant.merchant_label}</p>
               <p class="text-xs text-muted-foreground">{merchant.count} purchase{merchant.count === 1 ? "" : "s"}</p>

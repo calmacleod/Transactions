@@ -220,7 +220,7 @@
         </CardHeader>
         <CardContent class="grid gap-2">
           {#each dashboard.transactions || [] as transaction}
-            <div class="grid gap-2 rounded-lg border border-border px-3 py-2 text-sm md:grid-cols-[6rem_minmax(0,1fr)_8rem] md:items-center">
+            <div class="grid gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm md:grid-cols-[6rem_minmax(0,1fr)_8rem] md:items-center">
               <p class="text-xs text-muted-foreground">{transaction.short_date_label}</p>
               <p class="truncate font-medium text-foreground">{transaction.merchant_name || transaction.description}</p>
               <p class={`money-value text-right font-semibold ${transaction.amount_class}`}>{transaction.amount_label}</p>
@@ -235,7 +235,7 @@
         <h2 class="text-xl font-semibold tracking-tight text-foreground">Transactions</h2>
         <p class="mt-1 text-sm text-muted-foreground">{visibleTransactions.length} of {transactions.length} records</p>
       </div>
-      <input class="h-10 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-72" placeholder="Search offline transactions" bind:value={query} />
+      <input class="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-72" placeholder="Search offline transactions" bind:value={query} />
     </section>
     <div class="grid gap-2">
       {#each visibleTransactions as transaction}
@@ -271,14 +271,14 @@
       </CardHeader>
       <CardContent class="grid gap-3">
         {#each spending.category_rows || [] as row}
-          <div class="rounded-lg border border-border p-3">
+          <div class="rounded-lg border border-border bg-background p-3">
             <div class="mb-3 flex items-center justify-between gap-3">
               <p class="text-sm font-semibold text-foreground">{row.category.name}</p>
               <p class="money-value text-sm font-semibold text-foreground">{row.total_label}</p>
             </div>
             <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {#each row.months as month}
-                <div class="rounded-md bg-muted/40 px-2 py-1 text-xs">
+                <div class="rounded-md bg-muted px-2 py-1 text-xs">
                   <span class="text-muted-foreground">{month.month.slice(0, 7)}</span>
                   <span class="money-value float-right font-medium text-foreground">{month.amount_label}</span>
                 </div>
@@ -295,7 +295,7 @@
       </CardHeader>
       <CardContent class="grid gap-3">
         {#each budgets.categories || [] as category}
-          <div class="grid min-w-0 gap-3 rounded-lg border border-border p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,12rem)] xl:items-center">
+          <div class="grid min-w-0 gap-3 rounded-lg border border-border bg-background p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,12rem)] xl:items-center">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <span class="size-2.5 rounded-sm" style={`background-color: ${category.color}`}></span>

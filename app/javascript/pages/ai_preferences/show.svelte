@@ -71,7 +71,7 @@
     </CardHeader>
     <CardContent class="grid gap-2">
       {#each recent_requests as request}
-        <div class="grid gap-2 rounded-lg border border-border px-3 py-2 text-sm sm:grid-cols-[8rem_minmax(0,1fr)_7rem_6rem] sm:items-center">
+        <div class="grid gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm sm:grid-cols-[8rem_minmax(0,1fr)_7rem_6rem] sm:items-center">
           <div>
             <p class="font-semibold capitalize text-foreground">{request.feature}</p>
             <p class="text-xs text-muted-foreground">{request.created_at_label}</p>

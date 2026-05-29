@@ -9,6 +9,7 @@
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$lib/components/ui/table"
   import { withQuery } from "$lib/formatters"
+  import DatePicker from "../components/DatePicker.svelte"
   import Check from "@lucide/svelte/icons/check"
   import ChevronDown from "@lucide/svelte/icons/chevron-down"
   import ChevronUp from "@lucide/svelte/icons/chevron-up"
@@ -575,7 +576,7 @@
 
   function messageClasses(message) {
     if (message.role === "user") return "ml-auto max-w-[85%] bg-primary text-primary-foreground"
-    if (message.role === "tool") return "mx-auto max-w-[90%] border border-dashed border-border bg-muted/60 text-muted-foreground"
+    if (message.role === "tool") return "mx-auto max-w-[90%] border border-dashed border-border bg-muted text-muted-foreground"
     return "mr-auto max-w-[90%] bg-background text-foreground"
   }
 
@@ -760,11 +761,11 @@
           </div>
           <div class="space-y-1.5">
             <Label for="start_date">From</Label>
-            <Input id="start_date" type="date" bind:value={filters.start_date} />
+            <DatePicker id="start_date" bind:value={filters.start_date} ariaLabel="Select start date" />
           </div>
           <div class="space-y-1.5">
             <Label for="end_date">To</Label>
-            <Input id="end_date" type="date" bind:value={filters.end_date} />
+            <DatePicker id="end_date" bind:value={filters.end_date} ariaLabel="Select end date" />
           </div>
           <div class="space-y-1.5">
             <Label for="direction">Type</Label>
@@ -885,7 +886,7 @@
         </Button>
       </form>
       {#if chatAnswer}
-        <div class="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm leading-6 text-foreground">
+        <div class="rounded-lg border border-border bg-background px-3 py-2 text-sm leading-6 text-foreground">
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{chatSource === "ai" ? "AI generated" : "Automatic"}</div>
           {chatAnswer}
         </div>
@@ -962,7 +963,7 @@
         </CardHeader>
         <CardContent class="grid min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-4">
           <div class="flex min-h-0 flex-col gap-3">
-            <div class="min-h-72 flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-muted/20 p-3">
+            <div class="min-h-72 flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-background p-3">
               {#if chatMessages.length}
                 {#each chatMessages as message}
                   <div class={`rounded-lg px-3 py-2 text-sm leading-6 shadow-xs ${messageClasses(message)}`} data-status={message.status}>
@@ -1005,7 +1006,7 @@
                 {#each referencedTransactions as transaction}
                   <button
                     type="button"
-                    class={`grid w-full gap-1 rounded-md border px-2 py-2 text-left transition-colors ${chatFocusedTransactionId === transaction.id ? "border-primary/50 bg-accent/70" : "border-border bg-muted/30 hover:bg-muted"}`}
+                    class={`grid w-full gap-1 rounded-md border px-2 py-2 text-left transition-colors ${chatFocusedTransactionId === transaction.id ? "border-primary/50 bg-accent" : "border-border bg-background hover:bg-muted"}`}
                     data-chat-transaction-id={transaction.id}
                     onclick={() => focusChatTransaction(transaction.id)}
                   >
@@ -1036,7 +1037,7 @@
         {#each transactions as transaction}
           <div
             data-testid="mobile-transaction-row"
-            class={`grid gap-2 px-3 py-2 ${selectedIds.has(transaction.id) ? "bg-accent/70" : ""}`}
+            class={`grid gap-2 px-3 py-2 ${selectedIds.has(transaction.id) ? "bg-accent" : ""}`}
             aria-pressed={selectedIds.has(transaction.id)}
           >
             <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
@@ -1056,7 +1057,7 @@
                 <CategoryPicker {categories} {transaction} className="h-9 w-full text-xs" selectClass="h-9 w-full text-xs" onChange={updateCategory} />
                 <div class="flex flex-wrap items-center gap-1.5">
                   {#each transaction.subcategories || [] as subcategory}
-                    <span class="inline-flex h-6 items-center gap-1.5 rounded-full border border-border px-2 text-xs font-medium text-foreground">
+                    <span class="inline-flex h-6 items-center gap-1.5 rounded-full border border-border bg-background px-2 text-xs font-medium text-foreground">
                       <span class="size-2 rounded-full" style={`background-color: ${subcategory.color}`}></span>
                       {subcategory.name}
                       <button type="button" class="text-muted-foreground hover:text-foreground" aria-label={`Remove ${subcategory.name}`} onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => removeSubcategory(transaction, subcategory.id))}>x</button>
@@ -1072,7 +1073,7 @@
                       {/each}
                     </NativeSelect>
                   {:else}
-                    <button type="button" class="inline-flex h-6 w-fit items-center gap-1.5 rounded-full border border-dashed border-border px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => openSubcategoryEditor(transaction))}>
+                    <button type="button" class="inline-flex h-6 w-fit items-center gap-1.5 rounded-full border border-dashed border-border bg-background px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => openSubcategoryEditor(transaction))}>
                       Add subcategory
                     </button>
                   {/if}
@@ -1091,13 +1092,13 @@
                   {/if}
                 </div>
                 {#if transaction.notes && !editingNoteIds.has(transaction.id)}
-                  <div class="flex items-start gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+                  <div class="flex items-start gap-2 rounded-md bg-muted px-2 py-1.5 text-xs leading-5 text-muted-foreground">
                     <NotebookPen class="mt-0.5 size-3.5 shrink-0" />
                     <p class="min-w-0 flex-1 break-words">{transaction.notes}</p>
                     <button type="button" class="shrink-0 font-medium text-primary hover:underline" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => toggleNoteEditor(transaction))}>Edit</button>
                   </div>
                 {:else if editingNoteIds.has(transaction.id)}
-                  <textarea class="min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" placeholder="Notes" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onblur={(event) => saveNote(transaction, event.currentTarget.value)}>{transaction.notes || ""}</textarea>
+                  <textarea class="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" placeholder="Notes" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onblur={(event) => saveNote(transaction, event.currentTarget.value)}>{transaction.notes || ""}</textarea>
                 {/if}
               </div>
             </div>
@@ -1142,7 +1143,7 @@
             {#each transactions as transaction}
               <TableRow
                 data-transaction-row-id={transaction.id}
-                class={`${selectedIds.has(transaction.id) ? "bg-accent/70" : ""} ${dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
+                class={`${selectedIds.has(transaction.id) ? "bg-accent" : ""} ${dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}
                 onpointerdown={(event) => startRowDrag(event, transaction)}
                 onpointerenter={(event) => hoverRow(event, transaction)}
                 onpointermove={(event) => hoverRow(event, transaction)}
@@ -1157,7 +1158,7 @@
                   </div>
                   <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                     {#each transaction.subcategories || [] as subcategory}
-                      <span class="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-border px-2 text-[11px] font-medium text-foreground">
+                      <span class="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-2 text-[11px] font-medium text-foreground">
                         <span class="size-2 rounded-full" style={`background-color: ${subcategory.color}`}></span>
                         {subcategory.name}
                         <button type="button" class="text-muted-foreground hover:text-foreground" aria-label={`Remove ${subcategory.name}`} onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => removeSubcategory(transaction, subcategory.id))}>x</button>
@@ -1173,7 +1174,7 @@
                         {/each}
                       </NativeSelect>
                     {:else}
-                      <button type="button" class="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-border px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => openSubcategoryEditor(transaction))}>
+                      <button type="button" class="inline-flex h-5 shrink-0 items-center rounded-full border border-dashed border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => openSubcategoryEditor(transaction))}>
                           Add subcategory
                       </button>
                     {/if}
@@ -1193,13 +1194,13 @@
                     {/if}
                   </div>
                   {#if transaction.notes && !editingNoteIds.has(transaction.id)}
-                    <div class="mt-1 flex items-start gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+                    <div class="mt-1 flex items-start gap-2 rounded-md bg-muted px-2 py-1.5 text-xs leading-5 text-muted-foreground">
                       <NotebookPen class="mt-0.5 size-3.5 shrink-0" />
                       <p class="min-w-0 flex-1 break-words">{transaction.notes}</p>
                       <button type="button" class="shrink-0 font-medium text-primary hover:underline" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => runRowControl(event, () => toggleNoteEditor(transaction))}>Edit</button>
                     </div>
                   {:else if editingNoteIds.has(transaction.id)}
-                    <textarea class="mt-2 min-h-14 w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" placeholder="Personal notes" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onblur={(event) => saveNote(transaction, event.currentTarget.value)}>{transaction.notes || ""}</textarea>
+                    <textarea class="mt-2 min-h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" placeholder="Personal notes" onpointerdown={(event) => event.stopPropagation()} onclick={(event) => event.stopPropagation()} onblur={(event) => saveNote(transaction, event.currentTarget.value)}>{transaction.notes || ""}</textarea>
                   {/if}
                 </TableCell>
                 <TableCell class="w-48 py-1.5">

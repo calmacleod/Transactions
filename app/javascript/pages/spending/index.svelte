@@ -39,7 +39,7 @@
     <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Monthly spending</h1>
     <p class="mt-2 text-sm text-muted-foreground">All recorded months and category movement over time.</p>
   </div>
-  <span class="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm text-muted-foreground">
+  <span class="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground">
     <TrendingUp class="size-4" />
     {months.length} month{months.length === 1 ? "" : "s"} on record
   </span>
@@ -52,7 +52,7 @@
   <CardContent>
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {#each monthly_totals as month}
-        <Link href={month.filters_path} prefetch cacheFor="30s" class="rounded-lg border border-border p-3 transition-colors hover:bg-muted/50">
+        <Link href={month.filters_path} prefetch cacheFor="30s" class="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted/50">
           <div class="flex items-center justify-between gap-3">
             <p class="text-sm font-semibold text-foreground">{month.label}</p>
             <p class="money-value text-sm font-semibold text-foreground">{month.amount_label}</p>
@@ -71,9 +71,9 @@
   <CardContent class="p-0">
     <div class="overflow-x-auto">
       <table class="w-full min-w-[72rem] text-sm">
-        <thead class="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+        <thead class="border-b border-border bg-muted text-xs text-muted-foreground">
           <tr>
-            <th rowspan="2" class="sticky left-0 z-10 w-56 bg-muted/95 px-4 py-3 text-left align-bottom font-medium">Category</th>
+            <th rowspan="2" class="sticky left-0 z-10 w-56 bg-muted px-4 py-3 text-left align-bottom font-medium">Category</th>
             {#each yearGroups as group}
               <th colspan={group.count} class="border-b border-border px-3 py-2 text-center font-semibold text-foreground">{group.year}</th>
             {/each}
@@ -96,7 +96,7 @@
               </td>
               {#each row.months as month}
                 <td class="px-3 py-3 text-right">
-                  <Link href={month.filters_path} prefetch cacheFor="30s" class="block rounded-md px-2 py-1 hover:bg-muted/60">
+                  <Link href={month.filters_path} prefetch cacheFor="30s" class="block rounded-md bg-background px-2 py-1 hover:bg-muted/60">
                     <span class="money-value text-xs font-medium text-foreground">{month.amount_label}</span>
                     <span class="mt-1 block h-1 rounded-full bg-muted">
                       <span class="block h-1 rounded-full bg-primary" style={`width: ${percent(month.cents, max_category_cents)}%`}></span>
