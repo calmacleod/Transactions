@@ -14,13 +14,31 @@
     <script>
       (() => {
         const lightThemeColor = "#fafaf6"
-        const darkThemeColor = "#100d06"
+        const dimThemeColor = "#3b3429"
+        const defaultAccentColor = "#0f766e"
         const savedTheme = window.localStorage.getItem("transactions-theme")
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-        const theme = savedTheme || (prefersDark ? "dark" : "light")
-        const themeColor = theme === "dark" ? darkThemeColor : lightThemeColor
+        const prefersDim = window.matchMedia("(prefers-color-scheme: dark)").matches
+        const theme = savedTheme === "dim" || savedTheme === "dark" || (!savedTheme && prefersDim) ? "dim" : "light"
+        const themeColor = theme === "dim" ? dimThemeColor : lightThemeColor
+        const accentColor = /^#[0-9a-f]{6}$/i.test(window.localStorage.getItem("transactions-accent-color") || "") ? window.localStorage.getItem("transactions-accent-color") : defaultAccentColor
+        const accentForegroundColor = (hexColor) => {
+          const value = hexColor.slice(1)
+          const channels = [0, 2, 4].map((index) => {
+            const channel = parseInt(value.slice(index, index + 2), 16) / 255
+            return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+          })
+          const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
 
-        document.documentElement.classList.toggle("dark", theme === "dark")
+          return luminance > 0.42 ? "#11140f" : "#fffaf0"
+        }
+
+        document.documentElement.classList.toggle("dark", theme === "dim")
+        document.documentElement.style.setProperty("--user-accent", accentColor)
+        document.documentElement.style.setProperty("--primary", accentColor)
+        document.documentElement.style.setProperty("--primary-foreground", accentForegroundColor(accentColor))
+        document.documentElement.style.setProperty("--ring", `color-mix(in oklch, ${accentColor} 72%, var(--foreground))`)
+        document.documentElement.style.setProperty("--accent", `color-mix(in oklch, ${accentColor} ${theme === "dim" ? "30%" : "16%"}, var(--background))`)
+        document.documentElement.style.setProperty("--accent-foreground", `color-mix(in oklch, ${accentColor} ${theme === "dim" ? "38%" : "70%"}, var(--foreground))`)
         document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor)
         document.querySelector('meta[name="msapplication-TileColor"]')?.setAttribute("content", themeColor)
       })()

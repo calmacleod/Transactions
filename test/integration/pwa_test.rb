@@ -12,7 +12,8 @@ class PwaTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'name="color-scheme" content="light dark"'
     assert_includes response.body, 'name="theme-color" content="#fafaf6"'
     assert_includes response.body, 'name="msapplication-TileColor" content="#fafaf6"'
-    assert_includes response.body, 'const darkThemeColor = "#100d06"'
+    assert_includes response.body, 'const dimThemeColor = "#3b3429"'
+    assert_includes response.body, 'const defaultAccentColor = "#0f766e"'
     assert_includes response.body, 'name="apple-mobile-web-app-capable" content="yes"'
     assert_includes response.body, 'name="apple-mobile-web-app-status-bar-style" content="black-translucent"'
   end

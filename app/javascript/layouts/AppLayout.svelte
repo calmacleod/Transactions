@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button"
   import { Separator } from "$lib/components/ui/separator"
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "$lib/components/ui/sheet"
+  import { applyAccentColor, applyTheme, storedAccentColor, storedTheme } from "$lib/theme"
   import BarChart3 from "@lucide/svelte/icons/bar-chart-3"
   import CreditCard from "@lucide/svelte/icons/credit-card"
   import History from "@lucide/svelte/icons/history"
@@ -22,10 +23,6 @@
   import TrendingUp from "@lucide/svelte/icons/trending-up"
   import Sun from "@lucide/svelte/icons/sun"
 
-  const themeColors = {
-    light: "#fafaf6",
-    dark: "#100d06",
-  }
   const navLinkClass = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
   const navPrefetch = ["hover", "mount"]
   const flashDismissDelay = 4_000
@@ -46,23 +43,25 @@
   let sidebarPreviewOpen = false
   let sidebarPreviewSuppressed = false
   let theme = "light"
+  let accentColor = "#0f766e"
 
   $: sidebarExpanded = !sidebarCollapsed || sidebarPreviewOpen
 
   onMount(() => {
     syncPageState(page)
     const stopTrackingNavigation = router.on("navigate", (event) => syncPageState(event.detail.page))
-    const savedTheme = window.localStorage.getItem("transactions-theme")
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-    setTheme(savedTheme || (prefersDark ? "dark" : "light"))
+    setTheme(storedTheme())
+    accentColor = applyAccentColor(storedAccentColor())
     sidebarCollapsed = window.localStorage.getItem("transactions-sidebar-collapsed") === "true"
     window.addEventListener("mousemove", clearSidebarSuppressionAfterPointerLeaves)
+    window.addEventListener("transactions-theme-change", syncThemeState)
 
     return () => {
       stopTrackingNavigation()
       clearFlashTimer()
       clearSidebarPreviewTimer()
       window.removeEventListener("mousemove", clearSidebarSuppressionAfterPointerLeaves)
+      window.removeEventListener("transactions-theme-change", syncThemeState)
     }
   })
 
@@ -114,15 +113,16 @@
   }
 
   function setTheme(value) {
-    theme = value === "dark" ? "dark" : "light"
-    document.documentElement.classList.toggle("dark", theme === "dark")
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[theme])
-    document.querySelector('meta[name="msapplication-TileColor"]')?.setAttribute("content", themeColors[theme])
-    window.localStorage.setItem("transactions-theme", theme)
+    theme = applyTheme(value)
   }
 
   function toggleTheme() {
-    setTheme(theme === "dark" ? "light" : "dark")
+    setTheme(theme === "dim" ? "light" : "dim")
+  }
+
+  function syncThemeState(event) {
+    if (event.detail?.theme) theme = event.detail.theme
+    if (event.detail?.accentColor) accentColor = event.detail.accentColor
   }
 
   function toggleSidebarCollapsed() {
@@ -177,7 +177,7 @@
 
   function desktopNavClass(item, expanded) {
     const layoutClass = expanded ? "grid w-full grid-cols-[3rem_1fr] text-left" : "grid w-9 justify-self-center grid-cols-[2.25rem]"
-    const stateClass = isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    const stateClass = isActive(item.href, currentPath, paths.root || "/") ? "border border-primary/40 bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
 
     return `group h-9 items-center rounded-lg p-0 text-sm font-medium transition-colors ${layoutClass} ${stateClass}`
   }
@@ -185,7 +185,7 @@
   function desktopSidebarClass(expanded, collapsed, previewOpen) {
     const overlayClass = collapsed && previewOpen ? "shadow-xl" : "shadow-sm"
 
-    return `fixed inset-y-0 left-0 z-30 hidden border-r border-border bg-card/95 px-2 py-4 ${overlayClass} xl:flex xl:flex-col`
+    return `fixed inset-y-0 left-0 z-30 hidden border-r border-border/80 bg-card/90 px-2 py-4 backdrop-blur-xl ${overlayClass} xl:flex xl:flex-col`
   }
 
   function mainClass() {
@@ -220,11 +220,11 @@
   }
 </script>
 
-<div class="min-h-screen bg-background text-foreground" style={`--sidebar-offset: ${sidebarCollapsed ? "4rem" : "14rem"}; --sidebar-width: ${sidebarExpanded ? "14rem" : "4rem"};`} data-app-chrome>
+<div class="min-h-screen bg-background text-foreground" style={`--sidebar-offset: ${sidebarCollapsed ? "4rem" : "14rem"}; --sidebar-width: ${sidebarExpanded ? "14rem" : "4rem"}; --current-accent: ${accentColor};`} data-app-chrome>
   <aside class={desktopSidebarClass(sidebarExpanded, sidebarCollapsed, sidebarPreviewOpen)} style="width: var(--sidebar-width)" data-testid="desktop-sidebar" onmouseenter={startSidebarPreview} onmouseleave={closeSidebarPreview}>
     <div class={sidebarExpanded ? "grid grid-cols-[3rem_1fr_2.25rem] items-center" : "grid grid-cols-[3rem] items-center"}>
       <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class={sidebarExpanded ? "col-span-2 grid h-9 min-w-0 grid-cols-[3rem_1fr] items-center" : "grid h-9 w-full grid-cols-[3rem] items-center"} aria-label="Transactions dashboard" title={sidebarExpanded ? undefined : "Transactions"} onmousedown={(event) => mouseDownNavigate(event, paths.root || "/")} onclick={ignoreMouseClickAfterMouseDown}>
-        <span class="grid size-9 place-items-center justify-self-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-testid="sidebar-brand-icon">
+        <span class="grid size-9 place-items-center justify-self-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark data-testid="sidebar-brand-icon">
           <BarChart3 class="size-5" />
         </span>
         {#if sidebarExpanded}
@@ -251,7 +251,7 @@
       <nav class="grid gap-1">
         {#each navItems as item}
           {#if item.fullReload}
-            <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={desktopNavClass(item, sidebarExpanded)} aria-label={item.label} title={sidebarExpanded ? undefined : item.label}>
+            <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={desktopNavClass(item, sidebarExpanded)} data-active-nav={isActive(item.href, currentPath, paths.root || "/")} aria-label={item.label} title={sidebarExpanded ? undefined : item.label}>
               <span class="grid size-9 place-items-center justify-self-center" data-testid={`sidebar-icon-${item.label.toLowerCase().replaceAll(" ", "-")}`}>
                 <svelte:component this={item.icon} class="size-4" />
               </span>
@@ -266,6 +266,7 @@
               onmousedown={(event) => mouseDownNavigate(event, item.href)}
               onclick={ignoreMouseClickAfterMouseDown}
               class={desktopNavClass(item, sidebarExpanded)}
+              data-active-nav={isActive(item.href, currentPath, paths.root || "/")}
               aria-label={item.label}
               title={sidebarExpanded ? undefined : item.label}
             >
@@ -287,13 +288,13 @@
             <PanelLeftOpen class="size-4" />
           </Button>
         {/if}
-        <Button variant="ghost" class={sidebarExpanded ? "mb-1 w-full justify-start text-muted-foreground" : "mb-1 w-full justify-center px-2 text-muted-foreground"} onclick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={sidebarExpanded ? undefined : `Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-          {#if theme === "dark"}
+        <Button variant="ghost" class={sidebarExpanded ? "mb-1 w-full justify-start text-muted-foreground" : "mb-1 w-full justify-center px-2 text-muted-foreground"} onclick={toggleTheme} aria-label={`Switch to ${theme === "dim" ? "light" : "dim"} mode`} title={sidebarExpanded ? undefined : `Switch to ${theme === "dim" ? "light" : "dim"} mode`}>
+          {#if theme === "dim"}
             <Sun class="size-4" />
             {#if sidebarExpanded}Light mode{/if}
           {:else}
             <Moon class="size-4" />
-            {#if sidebarExpanded}Dark mode{/if}
+            {#if sidebarExpanded}Dim mode{/if}
           {/if}
         </Button>
         <Button variant="ghost" class={sidebarExpanded ? "w-full justify-start text-muted-foreground" : "w-full justify-center px-2 text-muted-foreground"} onclick={signOut} aria-label="Sign out" title={sidebarExpanded ? undefined : "Sign out"}>
@@ -304,12 +305,12 @@
     {/if}
   </aside>
 
-  <header class="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/95 px-4 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur xl:hidden">
+  <header class="fixed inset-x-0 top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border/80 bg-background/90 px-4 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl xl:hidden">
     <Button variant="outline" size="icon" aria-label="Open navigation" onclick={() => (mobileOpen = true)}>
       <Menu class="size-4" />
     </Button>
     <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/")} onclick={ignoreMouseClickAfterMouseDown}>
-      <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+      <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark>
         <BarChart3 class="size-5" />
       </span>
       <span class="min-w-0">
@@ -317,8 +318,8 @@
         <span class="block text-xs text-muted-foreground">Expense control</span>
       </span>
     </Link>
-    <Button variant="outline" size="icon" class="ml-auto" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onclick={toggleTheme}>
-      {#if theme === "dark"}
+    <Button variant="outline" size="icon" class="ml-auto" aria-label={`Switch to ${theme === "dim" ? "light" : "dim"} mode`} onclick={toggleTheme}>
+      {#if theme === "dim"}
         <Sun class="size-4" />
       {:else}
         <Moon class="size-4" />
@@ -332,7 +333,7 @@
         <SheetTitle>Navigation</SheetTitle>
       </SheetHeader>
       <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/", { closeMobile: true })} onclick={(event) => ignoreMouseClickAfterMouseDown(event, { closeMobile: true })}>
-        <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+        <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark>
           <BarChart3 class="size-5" />
         </span>
         <span class="min-w-0">
@@ -345,7 +346,7 @@
         <nav class="grid gap-1">
           {#each navItems as item}
             {#if item.fullReload}
-              <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+              <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-active-nav={isActive(item.href, currentPath, paths.root || "/")}>
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>
               </a>
@@ -358,6 +359,7 @@
                 onmousedown={(event) => mouseDownNavigate(event, item.href, { closeMobile: true })}
                 onclick={(event) => ignoreMouseClickAfterMouseDown(event, { closeMobile: true })}
                 class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                data-active-nav={isActive(item.href, currentPath, paths.root || "/")}
               >
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>
@@ -368,13 +370,13 @@
       {/if}
       {#if auth.authenticated}
         <div class="mt-6">
-          <Button variant="ghost" class="mb-1 w-full justify-start text-muted-foreground" onclick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-            {#if theme === "dark"}
+          <Button variant="ghost" class="mb-1 w-full justify-start text-muted-foreground" onclick={toggleTheme} aria-label={`Switch to ${theme === "dim" ? "light" : "dim"} mode`}>
+            {#if theme === "dim"}
               <Sun class="size-4" />
               Light mode
             {:else}
               <Moon class="size-4" />
-              Dark mode
+              Dim mode
             {/if}
           </Button>
           <Button variant="ghost" class="w-full justify-start text-muted-foreground" onclick={signOut}>
@@ -404,7 +406,7 @@
     <div class="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Transactions walkthrough">
       <div class="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl sm:p-6">
         <div class="flex items-start gap-4">
-          <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+          <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground" data-brand-mark>
             <BarChart3 class="size-5" />
           </span>
           <div class="min-w-0">

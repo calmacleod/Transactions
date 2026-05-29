@@ -370,19 +370,30 @@ test("selected transaction bulk actions float over the viewport", async ({ page 
   expect(position.top).toBeGreaterThan(0)
 })
 
-test("theme toggle persists dark mode in local storage", async ({ page }) => {
+test("theme toggle persists dim mode in local storage", async ({ page }) => {
   await page.goto("/")
 
   await expect.poll(() => currentThemeColor(page)).toBe("#fafaf6")
-  await page.getByRole("button", { name: "Switch to dark mode" }).click()
+  await page.getByRole("button", { name: "Switch to dim mode" }).click()
   await expect(page.locator("html")).toHaveClass(/dark/)
-  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("transactions-theme"))).toBe("dark")
-  await expect.poll(() => currentThemeColor(page)).toBe("#100d06")
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("transactions-theme"))).toBe("dim")
+  await expect.poll(() => currentThemeColor(page)).toBe("#3b3429")
 
   await page.reload()
   await expect(page.locator("html")).toHaveClass(/dark/)
   await expect(page.getByRole("button", { name: "Switch to light mode" })).toBeVisible()
-  await expect.poll(() => currentThemeColor(page)).toBe("#100d06")
+  await expect.poll(() => currentThemeColor(page)).toBe("#3b3429")
+})
+
+test("settings custom accent updates the app theme", async ({ page }) => {
+  await page.goto("/settings")
+
+  await page.getByLabel("Accent hex color").fill("#2563eb")
+  await page.getByLabel("Accent hex color").blur()
+
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("transactions-accent-color"))).toBe("#2563eb")
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--primary").trim())).toBe("#2563eb")
+  await expect(page.getByText("#2563eb")).toBeVisible()
 })
 
 test("secondary pages render without blank or broken Inertia content", async ({ page }) => {
