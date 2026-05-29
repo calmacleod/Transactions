@@ -26,6 +26,8 @@ env:
     - MAILER_FROM
   clear:
     APP_URL: https://<%= app_host %>
+    APP_HOST: <%= app_host %>
+    APP_PROTOCOL: https
     RUBYLLM_MODEL: <%= ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano") %>
     SOLID_QUEUE_IN_PUMA: true
 
