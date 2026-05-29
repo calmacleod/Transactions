@@ -21,8 +21,19 @@ class AiPreferencesControllerTest < ActionDispatch::IntegrationTest
     assert_equal visible_model.model_id, inertia_props["selected_model"]
     assert_equal [ visible_model.model_id ], inertia_props["selectable_models"].map { |model| model["model_id"] }
     assert_equal 1, inertia_props.dig("usage", "month_count")
-    assert_equal "$0.00", inertia_props.dig("usage", "estimated_cost_label")
+    assert_equal "<$0.01", inertia_props.dig("usage", "estimated_cost_label")
     assert_equal [ visible_model.model_id ], inertia_props["recent_requests"].map { |request| request["model"] }
+  end
+
+  test "shows cent-level usage once estimated cost crosses a cent" do
+    sign_in_as users(:two)
+    Model.create!(provider: "openai", model_id: "visible-model", name: "Visible Model", user_selectable: true)
+    AiRequest.create!(feature: "chat", model: "visible-model", estimated_cost_microdollars: 20_000, user: users(:two))
+
+    get ai_preferences_path
+
+    assert_response :success
+    assert_equal "$0.02", inertia_props.dig("usage", "estimated_cost_label")
   end
 
   test "updates preferred model when it is user selectable" do

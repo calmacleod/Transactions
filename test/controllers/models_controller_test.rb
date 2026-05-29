@@ -27,6 +27,29 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
     assert_equal({ "field" => "model", "direction" => "asc" }, inertia_props["sort"])
   end
 
+  test "sorts models by price without raw SQL ordering" do
+    sign_in_as users(:one)
+    Model.delete_all
+    Model.create!(
+      provider: "openai",
+      model_id: "expensive-model",
+      name: "Expensive Model",
+      pricing: { text_tokens: { standard: { input_per_million: 8.0 } } }
+    )
+    Model.create!(
+      provider: "anthropic",
+      model_id: "cheap-model",
+      name: "Cheap Model",
+      pricing: { text_tokens: { standard: { input_per_million: 1.5 } } }
+    )
+
+    get admin_models_path, params: { sort: "price", direction: "asc" }
+
+    assert_response :success
+    assert_equal [ "Cheap Model", "Expensive Model" ], inertia_props["models"].map { |model| model["name"] }
+    assert_equal({ "field" => "price", "direction" => "asc" }, inertia_props["sort"])
+  end
+
   test "refreshes RubyLLM models immediately with feedback" do
     sign_in_as users(:one)
     Model.delete_all

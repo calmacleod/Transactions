@@ -15,6 +15,7 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
     assert_equal admin_ai_controls_path, props.dig("actions", "ai_controls")
     assert_equal admin_models_path, props.dig("actions", "models")
     assert_includes props["users"].map { |user| user["email_address"] }, users(:two).email_address
+    assert_equal "$1.25", props["users"].find { |user| user["email_address"] == users(:two).email_address }["ai_spend_label"]
   end
 
   test "redirects regular users" do

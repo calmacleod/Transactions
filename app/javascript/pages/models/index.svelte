@@ -28,6 +28,7 @@
 
   let form = { ...filters }
   let refreshing = false
+  let catalogScroller
 
   $: statCards = [
     { label: "Available models", value: stats.available_models, icon: Sparkles },
@@ -37,16 +38,59 @@
   ]
 
   function applyFilters() {
-    router.get(actions.index, queryParams(), { preserveScroll: true })
+    visitModels(queryParams())
   }
 
   function clearFilters() {
-    router.get(actions.index, queryParams({ query: "", provider: "", capability: "" }), { preserveScroll: true })
+    visitModels(queryParams({ query: "", provider: "", capability: "" }))
   }
 
   function sortBy(field) {
     const direction = sort.field === field ? (sort.direction === "asc" ? "desc" : "asc") : defaultDirection(field)
-    router.get(actions.index, queryParams({ sort: field, direction }), { preserveScroll: true })
+    visitModels(queryParams({ sort: field, direction }))
+  }
+
+  function visitModels(params) {
+    const scrollPosition = {
+      x: window.scrollX,
+      y: window.scrollY,
+      tableX: catalogScroller?.scrollLeft || 0,
+      tableY: catalogScroller?.scrollTop || 0,
+    }
+
+    router.get(actions.index, params, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: (page) => syncModelProps(page.props),
+      onFinish: () => restoreScrollPosition(scrollPosition),
+    })
+  }
+
+  function syncModelProps(nextProps) {
+    stats = nextProps.stats || stats
+    providers = nextProps.providers || providers
+    models = nextProps.models || []
+    filters = nextProps.filters || {}
+    sort = nextProps.sort || sort
+    capped = Boolean(nextProps.capped)
+    actions = nextProps.actions || actions
+    form = { ...filters }
+  }
+
+  function restoreScrollPosition(position) {
+    const restore = () => {
+      window.scrollTo(position.x, position.y)
+      if (!catalogScroller) return
+
+      catalogScroller.scrollLeft = position.tableX
+      catalogScroller.scrollTop = position.tableY
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(restore)
+    })
+    window.setTimeout(restore, 50)
+    window.setTimeout(restore, 150)
   }
 
   function queryParams(overrides = {}) {
@@ -155,7 +199,7 @@
     <CardHeader class="border-b border-border">
       <CardTitle class="text-sm">Model catalog</CardTitle>
     </CardHeader>
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto" data-testid="models-catalog-scroll" bind:this={catalogScroller}>
       <Table class="min-w-[70rem]">
         <TableHeader>
           <TableRow>

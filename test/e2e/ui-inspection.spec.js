@@ -20,8 +20,11 @@ test("dashboard renders without runtime errors and exposes primary controls", as
   await page.goto("/")
 
   await expect(page.getByRole("heading", { name: "Spending dashboard" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Classify pending" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Generate insights" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Upload transactions" })).toBeVisible()
+  await page.getByRole("button", { name: "Upload transactions" }).click()
+  const uploadDialog = page.getByRole("dialog", { name: "Upload transactions" })
+  await expect(uploadDialog.getByLabel("Upload transactions")).toBeAttached()
+  await expect(page.getByRole("button", { name: "Review CSV" })).toBeVisible()
   await expect(page.getByRole("link", { name: /Month spend/i })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Category allocation" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Latest transactions" })).toBeVisible()
@@ -96,8 +99,55 @@ test("app chrome navigation starts on mouse down", async ({ page }) => {
   await page.mouse.up()
 })
 
-test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
+test("desktop sidebar can collapse to an icon rail and preview on hover", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
   await page.goto("/")
+
+  const sidebar = page.getByTestId("desktop-sidebar")
+  await expect(sidebar).toBeVisible()
+
+  const expandedWidth = await sidebar.evaluate((element) => element.getBoundingClientRect().width)
+  expect(expandedWidth).toBeLessThan(256)
+  expect(expandedWidth).toBeGreaterThan(200)
+  const transactionsIcon = sidebar.getByTestId("sidebar-icon-transactions")
+  const expandedIconBox = await transactionsIcon.boundingBox()
+  expect(expandedIconBox).not.toBeNull()
+
+  await page.getByRole("button", { name: "Collapse sidebar" }).click()
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(80)
+  const activeRailLink = sidebar.getByRole("link", { name: "Dashboard", exact: true })
+  const activeRailBox = await activeRailLink.boundingBox()
+  expect(activeRailBox.width).toBeCloseTo(activeRailBox.height, 0)
+  const collapsedIconBox = await transactionsIcon.boundingBox()
+  expect(collapsedIconBox.width).toBeCloseTo(expandedIconBox.width, 0)
+  expect(collapsedIconBox.height).toBeCloseTo(expandedIconBox.height, 0)
+  expect(Math.abs(collapsedIconBox.x - expandedIconBox.x)).toBeLessThanOrEqual(1)
+
+  const collapsedMainLeft = await page.locator("main").evaluate((element) => element.getBoundingClientRect().left)
+  expect(collapsedMainLeft).toBeLessThan(90)
+
+  await page.mouse.move(640, 360)
+  await sidebar.getByRole("link", { name: "Transactions", exact: true }).hover()
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
+  await expect.poll(() => page.locator("main").evaluate((element) => element.getBoundingClientRect().left)).toBe(collapsedMainLeft)
+  const previewIconBox = await transactionsIcon.boundingBox()
+  expect(previewIconBox.width).toBeCloseTo(expandedIconBox.width, 0)
+  expect(previewIconBox.height).toBeCloseTo(expandedIconBox.height, 0)
+  expect(Math.abs(previewIconBox.x - expandedIconBox.x)).toBeLessThanOrEqual(1)
+
+  await page.getByRole("button", { name: "Pin expanded sidebar" }).click()
+  await expect.poll(() => page.locator("main").evaluate((element) => element.getBoundingClientRect().left)).toBeGreaterThan(200)
+  const pinnedIconBox = await transactionsIcon.boundingBox()
+  expect(pinnedIconBox.width).toBeCloseTo(expandedIconBox.width, 0)
+  expect(pinnedIconBox.height).toBeCloseTo(expandedIconBox.height, 0)
+  expect(Math.abs(pinnedIconBox.x - expandedIconBox.x)).toBeLessThanOrEqual(1)
+
+  await page.mouse.move(640, 360)
+  await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
+})
+
+test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
+  await page.goto("/admin")
 
   const jobsPagePromise = page.waitForEvent("popup")
   await page.getByRole("link", { name: /^Jobs$/ }).click()
@@ -108,6 +158,30 @@ test("jobs navigation leaves the Inertia shell for Mission Control", async ({ pa
   await expect(jobsPage.locator("#app")).toHaveCount(0)
   await expect(jobsPage.locator("body")).toContainText("Pending jobs")
   await jobsPage.close()
+})
+
+test("models sorting preserves the user's scroll position", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 520 })
+  await page.goto("/admin/models")
+
+  await expect(page.getByRole("heading", { name: "Models" })).toBeVisible()
+  const catalogScroll = page.getByTestId("models-catalog-scroll")
+  await expect(catalogScroll).toBeVisible()
+
+  await page.evaluate(() => window.scrollTo(0, 155))
+  const tableBefore = await catalogScroll.evaluate((element) => {
+    element.scrollLeft = 260
+    return element.scrollLeft
+  })
+
+  const before = await page.evaluate(() => window.scrollY)
+  expect(before).toBeGreaterThan(0)
+
+  await page.getByRole("button", { name: /Input \/ Output/ }).click()
+  await expect(page).toHaveURL(/sort=price/)
+
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before)
+  await expect.poll(() => catalogScroll.evaluate((element) => element.scrollLeft)).toBe(tableBefore)
 })
 
 test("transactions page keeps dense controls usable on desktop and mobile", async ({ page }) => {
@@ -312,7 +386,7 @@ test("theme toggle persists dark mode in local storage", async ({ page }) => {
 })
 
 test("secondary pages render without blank or broken Inertia content", async ({ page }) => {
-  for (const path of ["/insights", "/admin/models"]) {
+  for (const path of ["/imports", "/insights", "/admin/models"]) {
     await page.goto(path)
     await expect(page.locator("#app")).not.toBeEmpty()
     await expectNoViewportOverflow(page)

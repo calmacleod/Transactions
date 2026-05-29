@@ -30,7 +30,11 @@ Rails.application.routes.draw do
   resources :budgets, only: %i[index update]
   resources :subcategories, only: %i[index create destroy]
   resources :saved_transaction_queries, only: %i[create destroy]
-  resources :imports, only: :create
+  resources :imports, only: %i[index create] do
+    get :preview, on: :member
+    post :commit, on: :member
+    get :download, on: :member
+  end
   resources :insights, only: %i[index create]
   resource :settings, only: %i[show update]
   resource :ai_preferences, only: %i[show update]

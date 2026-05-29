@@ -4,16 +4,18 @@
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { Progress } from "$lib/components/ui/progress"
+  import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "$lib/components/ui/sheet"
   import { Table, TableBody, TableCell, TableRow } from "$lib/components/ui/table"
   import CategoryBadge from "../components/CategoryBadge.svelte"
   import ClassificationRun from "../components/ClassificationRun.svelte"
   import { badgeVariant } from "$lib/formatters"
   import CalendarDays from "@lucide/svelte/icons/calendar-days"
   import CreditCard from "@lucide/svelte/icons/credit-card"
+  import History from "@lucide/svelte/icons/history"
   import Sparkles from "@lucide/svelte/icons/sparkles"
   import Target from "@lucide/svelte/icons/target"
   import Upload from "@lucide/svelte/icons/upload"
-  import WandSparkles from "@lucide/svelte/icons/wand-sparkles"
+  import UploadCloud from "@lucide/svelte/icons/upload-cloud"
 
   export let month_range
   export let metrics
@@ -26,13 +28,19 @@
   export let transactions = []
   export let insights = []
   export let classification_run = null
+  export let upload_prompt = { title: "Upload transactions", body: "Import your latest card CSV and review every row before it is added.", days_since_last_upload: null }
+  export let unfinished_import = null
   export let actions
 
   let csvFile
+  let uploadOpen = false
+  let dragActive = false
 
   $: maxCategory = Math.max(...category_totals.map((item) => item.cents || 0), 0)
   $: maxDayCount = Math.max(...day_totals.map((item) => item.count || 0), 0)
   $: maxMonth = Math.max(...month_trend.map((item) => item.cents || 0), 0)
+  $: uploadFileName = csvFile?.name || "No file selected"
+  $: showUploadAlert = upload_prompt.days_since_last_upload !== null && upload_prompt.days_since_last_upload >= 3
   $: kpis = [
     { label: "Month spend", value: metrics.total_spend_label, note: month_range.label, href: actions.month_transactions, icon: CreditCard },
     { label: "Purchases", value: metrics.expense_count, note: `${metrics.transaction_count} total records`, href: actions.month_transactions, icon: CalendarDays },
@@ -49,6 +57,16 @@
     if (!csvFile) return
     router.post(actions.import, { csv_file: csvFile }, { forceFormData: true, preserveScroll: true, preserveState: true })
   }
+
+  function chooseFile(event) {
+    csvFile = event.currentTarget.files?.[0]
+  }
+
+  function handleDrop(event) {
+    event.preventDefault()
+    dragActive = false
+    csvFile = event.dataTransfer?.files?.[0]
+  }
 </script>
 
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -59,16 +77,84 @@
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <Button onclick={() => router.post(actions.classify, {}, { preserveScroll: true, preserveState: true })}>
-        <WandSparkles class="size-4" />
-        Classify pending
+      <Button href={actions.imports} variant="outline" size="lg">
+        <History class="size-4" />
+        Past imports
       </Button>
-      <Button variant="outline" onclick={() => router.post(actions.generate_insights, {}, { preserveScroll: true, preserveState: true })}>
-        <Sparkles class="size-4" />
-        Generate insights
+      <Button size="lg" onclick={() => (uploadOpen = true)}>
+        <Upload class="size-4" />
+        Upload transactions
       </Button>
     </div>
   </section>
+
+  {#if showUploadAlert}
+    <section class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm font-semibold">{upload_prompt.title}</p>
+          <p class="mt-1 text-xs leading-5">{upload_prompt.body}</p>
+        </div>
+        <Button variant="outline" size="sm" class="border-amber-300 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-900/40" onclick={() => (uploadOpen = true)}>
+          Upload CSV
+        </Button>
+      </div>
+    </section>
+  {/if}
+
+  <Sheet bind:open={uploadOpen}>
+    <SheetContent class="w-full p-5 sm:max-w-md">
+      <SheetHeader>
+        <SheetTitle>Upload transactions</SheetTitle>
+        <SheetDescription>Choose a headerless card CSV. You will review every mapped row before anything is added.</SheetDescription>
+      </SheetHeader>
+
+      <form class="grid gap-4" onsubmit={(event) => {
+        event.preventDefault()
+        importCsv()
+      }}>
+        <label
+          for="dashboard-csv-file"
+          class={`grid min-h-44 cursor-pointer place-items-center rounded-lg border border-dashed p-5 text-center transition-colors ${dragActive ? "border-primary bg-primary/5" : "border-border bg-muted/30 hover:bg-muted/50"}`}
+          ondragover={(event) => {
+            event.preventDefault()
+            dragActive = true
+          }}
+          ondragleave={() => (dragActive = false)}
+          ondrop={handleDrop}
+        >
+          <span class="grid gap-3">
+            <span class="mx-auto grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
+              <UploadCloud class="size-5" />
+            </span>
+            <span>
+              <span class="block text-sm font-semibold text-foreground">Drop CSV here or choose a file</span>
+              <span class="mt-1 block text-xs text-muted-foreground">{uploadFileName}</span>
+            </span>
+          </span>
+        </label>
+        <input id="dashboard-csv-file" aria-label="Upload transactions" type="file" accept=".csv,text/csv" class="sr-only" onchange={chooseFile} />
+
+        <SheetFooter>
+          <Button type="submit" class="w-full" disabled={!csvFile}>
+            Review CSV
+          </Button>
+        </SheetFooter>
+      </form>
+    </SheetContent>
+  </Sheet>
+
+  {#if unfinished_import}
+    <section class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm font-semibold">Finish importing {unfinished_import.filename}</p>
+          <p class="mt-1 text-xs">Started {unfinished_import.created_at_label}. {unfinished_import.rows_count} row{unfinished_import.rows_count === 1 ? "" : "s"} still waiting for review.</p>
+        </div>
+        <Button href={unfinished_import.preview_path} variant="outline" size="sm" class="border-amber-300 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-900/40">Resume import</Button>
+      </div>
+    </section>
+  {/if}
 
   <ClassificationRun run={classification_run} />
 
@@ -180,7 +266,7 @@
               </div>
               <div class="text-center">
                 <p class="text-xs font-semibold text-foreground">{month.label}</p>
-              <p class="money-value text-xs text-muted-foreground">{month.amount_label}</p>
+                <p class="money-value text-xs text-muted-foreground">{month.amount_label}</p>
               </div>
             </Link>
           {/each}
@@ -233,37 +319,20 @@
     </Card>
   </section>
 
-  <section class="grid gap-4 xl:grid-cols-[minmax(18rem,0.35fr)_minmax(0,0.65fr)]">
-    <Card>
-      <CardHeader>
-        <CardTitle class="text-sm">Import CSV</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form class="grid gap-3" on:submit|preventDefault={importCsv}>
-          <input type="file" accept=".csv,text/csv" class="block w-full rounded-lg border border-input bg-background px-2.5 py-1 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-foreground" on:change={(event) => (csvFile = event.currentTarget.files[0])} />
-          <Button type="submit" class="w-full">
-            <Upload class="size-4" />
-            Import transactions
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-
-    <div class="grid gap-3 md:grid-cols-2">
-      {#each insights as insight}
-        <Card>
-          <CardContent>
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="text-xs font-semibold uppercase tracking-wide text-primary">{insight.starts_on_label}</p>
-                <h3 class="mt-1 text-sm font-semibold text-foreground">{insight.title}</h3>
-              </div>
-              <Badge variant={badgeVariant(insight.severity)}>{insight.severity}</Badge>
+  <section class="grid gap-3 md:grid-cols-2">
+    {#each insights as insight}
+      <Card>
+        <CardContent>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-primary">{insight.starts_on_label}</p>
+              <h3 class="mt-1 text-sm font-semibold text-foreground">{insight.title}</h3>
             </div>
-            <p class="mt-2 text-xs leading-5 text-muted-foreground">{insight.body}</p>
-            <Badge class="mt-3" variant={insight.generation_source === "ai" ? "success" : "secondary"}>{insight.generation_source_label}</Badge>
-          </CardContent>
-        </Card>
-      {/each}
-    </div>
+            <Badge variant={badgeVariant(insight.severity)}>{insight.severity}</Badge>
+          </div>
+          <p class="mt-2 text-xs leading-5 text-muted-foreground">{insight.body}</p>
+          <Badge class="mt-3" variant={insight.generation_source === "ai" ? "success" : "secondary"}>{insight.generation_source_label}</Badge>
+        </CardContent>
+      </Card>
+    {/each}
   </section>

@@ -2,6 +2,9 @@ class SettingsController < ApplicationController
   def show
     render inertia: {
       reminder: reminder_props(Current.user),
+      import_retention: {
+        retain_uploaded_csv: Current.user.retain_uploaded_csv?
+      },
       days: Date::DAYNAMES.each_with_index.map { |name, index| { label: name, value: index } },
       hours: (0..23).map { |hour| { label: Time.zone.local(2000, 1, 1, hour).strftime("%-l:00 %p"), value: hour } },
       actions: {
@@ -21,7 +24,7 @@ class SettingsController < ApplicationController
   private
 
   def settings_params
-    params.require(:user).permit(:csv_reminder_enabled, :csv_reminder_wday, :csv_reminder_hour)
+    params.require(:user).permit(:csv_reminder_enabled, :csv_reminder_wday, :csv_reminder_hour, :retain_uploaded_csv)
   end
 
   def reminder_props(user)

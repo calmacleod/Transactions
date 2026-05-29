@@ -61,26 +61,57 @@ class ModelsController < ApplicationController
   end
 
   def sorted_models(scope)
+    return sort_models_by_price(scope) if sort_field == "price"
+
     scope.order(sort_order)
   end
 
   def sort_order
-    column, fallback = case sort_field
+    primary, fallback = case sort_field
     when "user_access"
-      [ "user_selectable", "name ASC" ]
+      [ sorted_column(:user_selectable), [ sortable_column(:name).asc ] ]
     when "model"
-      [ "name", "provider ASC" ]
+      [ sorted_column(:name), [ sortable_column(:provider).asc ] ]
     when "provider"
-      [ "provider", "name ASC" ]
+      [ sorted_column(:provider), [ sortable_column(:name).asc ] ]
     when "context"
-      [ "context_window", "name ASC" ]
-    when "price"
-      [ "CAST(json_extract(pricing, '$.text_tokens.standard.input_per_million') AS REAL)", "name ASC" ]
+      [ sorted_column(:context_window), [ sortable_column(:name).asc ] ]
     else
-      [ "favorite", "provider ASC, name ASC" ]
+      [ sorted_column(:favorite), [ sortable_column(:provider).asc, sortable_column(:name).asc ] ]
     end
 
-    Arel.sql("#{column} #{sort_direction_sql}, #{fallback}")
+    [ primary, *fallback ]
+  end
+
+  def sortable_column(column)
+    Model.arel_table[column]
+  end
+
+  def sorted_column(column)
+    attribute = sortable_column(column)
+    sort_direction == "asc" ? attribute.asc : attribute.desc
+  end
+
+  def sort_models_by_price(scope)
+    scope.to_a.sort_by do |model|
+      price = model_input_price(model)
+      comparable_price = price || 0
+
+      [
+        price.nil? ? 1 : 0,
+        sort_direction == "asc" ? comparable_price : -comparable_price,
+        model.name.downcase
+      ]
+    end
+  end
+
+  def model_input_price(model)
+    standard_pricing = model.pricing&.dig("text_tokens", "standard") || model.pricing&.dig(:text_tokens, :standard) || {}
+    value = standard_pricing["input_per_million"] || standard_pricing[:input_per_million]
+
+    BigDecimal(value.to_s) if value
+  rescue ArgumentError
+    nil
   end
 
   def sort_field
@@ -89,10 +120,6 @@ class ModelsController < ApplicationController
 
   def sort_direction
     params[:direction] == "asc" ? "asc" : "desc"
-  end
-
-  def sort_direction_sql
-    sort_direction.upcase
   end
 
   def model_props(model)

@@ -21,6 +21,7 @@ class ApplicationController < ActionController::Base
       paths: {
         root: root_path,
         transactions: transactions_path,
+        imports: imports_path,
         spending: spending_path,
         budgets: budgets_path,
         subcategories: subcategories_path,
@@ -61,14 +62,15 @@ class ApplicationController < ActionController::Base
   end
 
   def money_from_microdollars(microdollars)
-    helpers.number_to_currency(microdollars.to_i / 1_000_000.0)
+    microdollars = microdollars.to_i
+    return helpers.number_to_currency(0) if microdollars.zero?
+    return "<$0.01" if microdollars.positive? && microdollars < 10_000
+
+    helpers.number_to_currency(microdollars / 1_000_000.0)
   end
 
   def ai_request_microdollars(scope)
-    microdollars = scope.sum(:estimated_cost_microdollars)
-    return microdollars if microdollars.positive?
-
-    scope.sum(:estimated_cost_cents) * 10_000
+    scope.sum(:estimated_cost_microdollars) + scope.where(estimated_cost_microdollars: 0).sum(:estimated_cost_cents) * 10_000
   end
 
   def model_option_props(model)

@@ -2,6 +2,22 @@ require "test_helper"
 require "stringio"
 
 class StatementCsvImporterTest < ActiveSupport::TestCase
+  test "previews headerless statement rows without creating transactions" do
+    csv = StringIO.new(<<~CSV)
+      2026-05-22,"SAMPLE ONLINE STORE TORONTO, ON",17.24,,1111********2222
+      2026-05-20,"SAMPLE REFUND",,4.99,1111********2222
+    CSV
+
+    assert_no_difference -> { ExpenseTransaction.count } do
+      batch = StatementCsvImporter.new(io: csv, filename: "sample.csv", user: users(:one)).preview
+
+      assert_equal "preview", batch.status
+      assert_equal 2, batch.rows_count
+      assert_equal 2, batch.transactions_count
+      assert_equal [ "SAMPLE ONLINE STORE TORONTO, ON", "SAMPLE REFUND" ], batch.import_rows.ordered.pluck(:description)
+    end
+  end
+
   test "imports headerless statement rows" do
     csv = StringIO.new(<<~CSV)
       2026-05-22,"SAMPLE ONLINE STORE TORONTO, ON",17.24,,1111********2222
@@ -60,5 +76,29 @@ class StatementCsvImporterTest < ActiveSupport::TestCase
 
     assert_equal original_batch, transaction.reload.import_batch
     assert_equal "legacy-id", transaction.external_id
+  end
+
+  test "commits edited preview rows with manual categories" do
+    batch = users(:one).import_batches.create!(filename: "edited.csv", imported_at: Time.current, status: "preview")
+    rows = [
+      {
+        occurred_on: "2026-05-22",
+        description: "Edited merchant",
+        amount: "19.99",
+        direction: "debit",
+        card_last4: "4444",
+        category_id: categories(:restaurants).id
+      }
+    ]
+
+    assert_difference -> { ExpenseTransaction.count }, 1 do
+      StatementCsvImporter.new(io: StringIO.new, filename: "edited.csv", user: users(:one)).commit(batch:, rows:)
+    end
+
+    transaction = ExpenseTransaction.find_by!(description: "Edited merchant")
+    assert_equal categories(:restaurants), transaction.category
+    assert_equal 1999, transaction.amount_cents
+    assert_equal "complete", batch.reload.status
+    assert_equal 1, batch.import_rows.count
   end
 end

@@ -3,7 +3,7 @@ require "test_helper"
 class AiControlsControllerTest < ActionDispatch::IntegrationTest
   test "shows AI settings and usage visibility" do
     sign_in_as users(:one)
-    AiRequest.create!(feature: "chat", model: "test-model", successful: true)
+    AiRequest.create!(feature: "chat", model: "test-model", successful: true, estimated_cost_microdollars: 15_000)
     Model.create!(provider: "openai", model_id: "visible-model", name: "Visible Model", user_selectable: true)
 
     get admin_ai_controls_path
@@ -11,6 +11,7 @@ class AiControlsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "gpt-5-nano", inertia_props["settings"]["model"]
     assert_equal 1, inertia_props["usage"]["month_count"]
+    assert_equal "$0.02", inertia_props["usage"]["estimated_cost_label"]
     assert_equal [ "visible-model" ], inertia_props["selectable_models"].map { |model| model["model_id"] }
   end
 

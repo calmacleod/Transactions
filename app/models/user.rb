@@ -35,6 +35,7 @@ class User < ApplicationRecord
   has_many :classification_runs, dependent: :destroy
   has_many :expense_transactions, dependent: :destroy
   has_many :import_batches, dependent: :destroy
+  has_many :import_rows, dependent: :destroy
   has_many :insights, dependent: :destroy
   has_many :insight_transactions, dependent: :nullify
   has_many :transaction_subcategories, dependent: :destroy
@@ -46,6 +47,7 @@ class User < ApplicationRecord
 
   validates :email_address, presence: true, uniqueness: { case_sensitive: false }, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :role, inclusion: { in: ROLES }
+  validates :retain_uploaded_csv, inclusion: { in: [ true, false ] }
   validates :csv_reminder_wday, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 6 }
   validates :csv_reminder_hour, numericality: { only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 23 }
   validate :preferred_ai_model_is_user_selectable

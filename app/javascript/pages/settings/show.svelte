@@ -7,6 +7,7 @@
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
 
   export let reminder
+  export let import_retention = { retain_uploaded_csv: true }
   export let days = []
   export let hours = []
   export let actions
@@ -15,6 +16,7 @@
     csv_reminder_enabled: reminder.enabled,
     csv_reminder_wday: reminder.wday,
     csv_reminder_hour: reminder.hour,
+    retain_uploaded_csv: import_retention.retain_uploaded_csv,
   }
 
   function submit() {
@@ -30,7 +32,7 @@
   <div>
     <p class="text-sm font-semibold uppercase text-primary">Preferences</p>
     <h1 class="mt-1 text-3xl font-semibold tracking-normal text-foreground">Settings</h1>
-    <p class="mt-2 text-sm leading-6 text-muted-foreground">Control the CSV upload reminder schedule for your account.</p>
+    <p class="mt-2 text-sm leading-6 text-muted-foreground">Control upload reminders and CSV retention for your account.</p>
   </div>
 
   <Card>
@@ -70,6 +72,26 @@
         {#if reminder.last_sent_at_label}
           <p class="text-sm text-muted-foreground">Last sent {reminder.last_sent_at_label}.</p>
         {/if}
+
+        <Button type="submit">Save settings</Button>
+      </form>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle class="text-lg">Import files</CardTitle>
+      <p class="text-sm leading-6 text-muted-foreground">Original CSV files are retained with each import batch so you can download and audit them later.</p>
+    </CardHeader>
+    <CardContent>
+      <form class="space-y-5" on:submit|preventDefault={submit}>
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
+          <Checkbox bind:checked={form.retain_uploaded_csv} />
+          <span>
+            <span class="block text-sm font-medium text-foreground">Keep uploaded CSV files</span>
+            <span class="block text-sm text-muted-foreground">Turn this off to store only parsed import rows and transaction records.</span>
+          </span>
+        </label>
 
         <Button type="submit">Save settings</Button>
       </form>
