@@ -32,7 +32,7 @@ class ImportPreviewClassifier
     merchant_key = normalized_merchant(description)
     return if merchant_key.blank?
 
-    transaction_scope.where.not(category_id: nil).recent.limit(1_000).each do |transaction|
+    transaction_scope.includes(:category).where.not(category_id: nil).recent.limit(1_000).each do |transaction|
       return transaction.category if merchant_matches?(merchant_key, normalized_merchant(transaction.description))
     end
 

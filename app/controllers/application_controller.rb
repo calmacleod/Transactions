@@ -71,7 +71,11 @@ class ApplicationController < ActionController::Base
   end
 
   def ai_request_microdollars(scope)
-    scope.sum(:estimated_cost_microdollars) + scope.where(estimated_cost_microdollars: 0).sum(:estimated_cost_cents) * 10_000
+    scope.sum(ai_request_microdollars_expression)
+  end
+
+  def ai_request_microdollars_expression
+    Arel.sql("estimated_cost_microdollars + CASE WHEN estimated_cost_microdollars = 0 THEN estimated_cost_cents * 10000 ELSE 0 END")
   end
 
   def model_option_props(model)
@@ -127,7 +131,7 @@ class ApplicationController < ActionController::Base
       direction: transaction.direction,
       category_id: transaction.category_id,
       category: category_props(transaction.category),
-      subcategories: transaction.subcategories.by_name.map { |subcategory| subcategory_props(subcategory) },
+      subcategories: transaction_subcategories_for_props(transaction).map { |subcategory| subcategory_props(subcategory) },
       notes: transaction.notes,
       classification_reason: transaction.classification_reason,
       confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending",
@@ -143,6 +147,10 @@ class ApplicationController < ActionController::Base
       name: subcategory.name,
       color: subcategory.color.presence || "#71717a"
     }
+  end
+
+  def transaction_subcategories_for_props(transaction)
+    transaction.subcategories.sort_by(&:name)
   end
 
   def insight_props(insight)

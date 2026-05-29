@@ -160,7 +160,7 @@ class ImportsController < ApplicationController
     existing_by_full_key = {}
     existing_by_natural_key = {}
 
-    current_user.expense_transactions.find_each do |transaction|
+    current_user.expense_transactions.includes(:category).find_each do |transaction|
       existing_by_external_id[transaction.external_id] = transaction if transaction.external_id.present?
       existing_by_full_key[transaction_key(transaction, include_source: true)] = transaction
       existing_by_natural_key[transaction_key(transaction, include_source: false)] = transaction

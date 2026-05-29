@@ -37,6 +37,24 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal({ "field" => "amount", "direction" => "desc" }, inertia_props["sort"])
   end
 
+  test "renders transaction subcategories without per-row queries" do
+    sign_in_as users(:one)
+    ExpenseTransactionSubcategory.create!(
+      user: users(:one),
+      expense_transaction: expense_transactions(:grocery),
+      transaction_subcategory: transaction_subcategories(:work)
+    )
+
+    get transactions_path
+
+    assert_response :success
+    subcategory_names = inertia_props["transactions"].index_by { |transaction| transaction["description"] }.transform_values do |transaction|
+      transaction["subcategories"].map { |subcategory| subcategory["name"] }
+    end
+    assert_equal [ "Work" ], subcategory_names.fetch("LOCAL GROCERY MARKET")
+    assert_equal [ "Gift" ], subcategory_names.fetch("NEIGHBOURHOOD RESTAURANT")
+  end
+
   test "paginates transaction list" do
     sign_in_as users(:one)
     import_batch = import_batches(:statement)

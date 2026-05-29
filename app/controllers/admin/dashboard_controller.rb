@@ -1,17 +1,18 @@
 module Admin
   class DashboardController < BaseController
     def index
-      users = User.order(:email_address)
+      users = User.includes(:expense_transactions).order(:email_address).to_a
       invitations = UserInvitation.recent.limit(25)
+      ai_spend_by_user_id = ai_request_microdollars_by_user_id(users)
 
       render inertia: {
         metrics: {
-          user_count: users.count,
+          user_count: users.size,
           admin_count: users.select(&:admin?).size,
           pending_invitation_count: UserInvitation.pending.count,
           total_ai_spend_label: money_from_microdollars(ai_request_microdollars(AiRequest.all))
         },
-        users: users.map { |user| user_props(user) },
+        users: users.map { |user| user_props(user, ai_spend_microdollars: ai_spend_by_user_id.fetch(user.id, 0)) },
         invitations: invitations.map { |invitation| invitation_props(invitation) },
         actions: {
           invite: admin_invitations_path,
@@ -26,18 +27,25 @@ module Admin
 
     private
 
-    def user_props(user)
+    def user_props(user, ai_spend_microdollars:)
       {
         id: user.id,
         email_address: user.email_address,
         role: user.role,
         role_label: user.role.titleize,
-        transaction_count: user.expense_transactions.count,
-        ai_spend_label: money_from_microdollars(ai_request_microdollars(user.ai_requests)),
+        transaction_count: user.expense_transactions.size,
+        ai_spend_label: money_from_microdollars(ai_spend_microdollars),
         csv_reminder_enabled: user.csv_reminder_enabled?,
         csv_reminder_label: user.csv_reminder_label,
         created_at_label: user.created_at.strftime("%b %-d, %Y")
       }
+    end
+
+    def ai_request_microdollars_by_user_id(users)
+      user_ids = users.map(&:id)
+      return {} if user_ids.empty?
+
+      AiRequest.where(user_id: user_ids).group(:user_id).sum(ai_request_microdollars_expression)
     end
 
     def invitation_props(invitation)

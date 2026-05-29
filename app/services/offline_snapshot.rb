@@ -60,7 +60,7 @@ class OfflineSnapshot
       top_merchants: dashboard.top_merchants.map { |item| dashboard_item_props(item).merge(merchant_label: item[:merchant].titleize) },
       recommendations: dashboard.recommendations.map { |item| dashboard_item_props(item) },
       transactions: user.expense_transactions.includes(:category, :subcategories).recent.limit(8).map { |transaction| transaction_props(transaction) },
-      insights: user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6).map { |insight| insight_props(insight, transaction_limit: 10) }
+      insights: insight_collection_props(user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6), transaction_limit: 10)
     }
   end
 
@@ -127,7 +127,7 @@ class OfflineSnapshot
 
   def insights_props
     {
-      insights: user.insights.recent.includes(expense_transactions: [ :category, :subcategories ]).map { |insight| insight_props(insight) }
+      insights: insight_collection_props(user.insights.recent, transaction_limit: 25)
     }
   end
 
@@ -160,14 +160,21 @@ class OfflineSnapshot
       direction: transaction.direction,
       category_id: transaction.category_id,
       category: category_props(transaction.category),
-      subcategories: transaction.subcategories.by_name.map { |subcategory| subcategory_props(subcategory) },
+      subcategories: transaction_subcategories_for_props(transaction).map { |subcategory| subcategory_props(subcategory) },
       notes: transaction.notes,
       classification_reason: transaction.classification_reason,
       confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending"
     }
   end
 
-  def insight_props(insight, transaction_limit: 25)
+  def insight_collection_props(insights, transaction_limit:)
+    insight_records = insights.to_a
+    transactions_by_insight_id = insight_transactions_by_insight_id(insight_records, transaction_limit:)
+
+    insight_records.map { |insight| insight_props(insight, transactions: transactions_by_insight_id.fetch(insight.id, [])) }
+  end
+
+  def insight_props(insight, transactions:)
     {
       id: insight.id,
       title: insight.title,
@@ -178,7 +185,7 @@ class OfflineSnapshot
       starts_on: insight.starts_on&.iso8601,
       starts_on_label: insight.starts_on&.strftime("%b %Y"),
       ends_on: insight.ends_on&.iso8601,
-      transactions: insight.expense_transactions.includes(:category, :subcategories).recent.limit(transaction_limit).map { |transaction| transaction_props(transaction) }
+      transactions: transactions.map { |transaction| transaction_props(transaction) }
     }
   end
 
@@ -207,6 +214,29 @@ class OfflineSnapshot
       name: subcategory.name,
       color: subcategory.color.presence || "#71717a"
     }
+  end
+
+  def transaction_subcategories_for_props(transaction)
+    transaction.subcategories.sort_by(&:name)
+  end
+
+  def insight_transactions_by_insight_id(insights, transaction_limit:)
+    insight_ids = insights.map(&:id)
+    return {} if insight_ids.empty?
+
+    transactions_by_insight_id = Hash.new { |hash, key| hash[key] = [] }
+    InsightTransaction.where(insight_id: insight_ids)
+                      .includes(expense_transaction: [ :category, :subcategories ])
+                      .find_each do |insight_transaction|
+      transactions_by_insight_id[insight_transaction.insight_id] << insight_transaction.expense_transaction
+    end
+
+    transactions_by_insight_id.transform_values do |transactions|
+      transactions.compact
+                  .sort_by { |transaction| [ transaction.occurred_on || Date.new(1, 1, 1), transaction.id ] }
+                  .reverse
+                  .first(transaction_limit)
+    end
   end
 
   def saved_query_props(saved_query)

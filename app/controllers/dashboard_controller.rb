@@ -1,6 +1,6 @@
 class DashboardController < ApplicationController
   def index
-    transactions = current_user.expense_transactions.includes(:category).recent.limit(4)
+    transactions = current_user.expense_transactions.includes(:category, :subcategories).recent.limit(4)
     insights = current_user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6)
     categories = current_user.categories.by_name
     month_range = Date.current.beginning_of_month..Date.current.end_of_month
