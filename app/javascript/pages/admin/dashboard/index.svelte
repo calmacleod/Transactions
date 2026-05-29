@@ -7,7 +7,9 @@
   import BriefcaseBusiness from "@lucide/svelte/icons/briefcase-business"
   import Bot from "@lucide/svelte/icons/bot"
   import Gauge from "@lucide/svelte/icons/gauge"
+  import Mail from "@lucide/svelte/icons/mail"
   import MailPlus from "@lucide/svelte/icons/mail-plus"
+  import X from "@lucide/svelte/icons/x"
   import AdminBreadcrumbs from "../AdminBreadcrumbs.svelte"
 
   export let metrics
@@ -16,6 +18,7 @@
   export let actions
 
   let email_address = ""
+  let activeTool = null
 
   function inviteUser() {
     router.post(actions.invite, { user_invitation: { email_address } }, {
@@ -24,6 +27,14 @@
         email_address = ""
       },
     })
+  }
+
+  function openTool(title, url) {
+    activeTool = { title, url }
+  }
+
+  function closeTool() {
+    activeTool = null
   }
 </script>
 
@@ -42,13 +53,9 @@
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <a href={actions.jobs} data-turbo="false" target="_blank" rel="noreferrer">
-        <Button type="button" variant="outline"><BriefcaseBusiness class="size-4" /> Jobs</Button>
-      </a>
+      <Button type="button" variant="outline" onclick={() => openTool("Jobs", actions.jobs)}><BriefcaseBusiness class="size-4" /> Jobs</Button>
       {#if actions.email_previews}
-        <a href={actions.email_previews} target="_blank" rel="noreferrer">
-          <Button type="button" variant="outline">Email previews</Button>
-        </a>
+        <Button type="button" variant="outline" onclick={() => openTool("Email previews", actions.email_previews)}><Mail class="size-4" /> Email previews</Button>
       {/if}
       {#if actions.first_time_flow_preview}
         <Button type="button" variant="outline" onclick={() => router.visit(actions.first_time_flow_preview)}>First-time flow</Button>
@@ -90,7 +97,13 @@
       <CardTitle class="text-lg">Invite user</CardTitle>
     </CardHeader>
     <CardContent>
-      <form class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end" on:submit|preventDefault={inviteUser}>
+      <form
+        class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
+        onsubmit={(event) => {
+          event.preventDefault()
+          inviteUser()
+        }}
+      >
         <div class="space-y-1.5">
           <Label for="invite-email">Email</Label>
           <Input id="invite-email" type="email" required bind:value={email_address} autocomplete="email" />
@@ -155,3 +168,29 @@
     </CardContent>
   </Card>
 </div>
+
+{#if activeTool}
+  <div
+    class="fixed inset-0 z-50 grid place-items-center bg-background/80 p-2 backdrop-blur-sm sm:p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-label={activeTool.title}
+    tabindex="-1"
+    onclick={(event) => {
+      if (event.target === event.currentTarget) closeTool()
+    }}
+    onkeydown={(event) => {
+      if (event.key === "Escape") closeTool()
+    }}
+  >
+    <div class="flex h-[min(84vh,900px)] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl">
+      <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 class="text-sm font-semibold text-foreground">{activeTool.title}</h2>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close admin tool" onclick={closeTool}>
+          <X class="size-4" />
+        </Button>
+      </div>
+      <iframe class="min-h-0 flex-1 border-0 bg-background" title={activeTool.title} src={activeTool.url}></iframe>
+    </div>
+  </div>
+{/if}

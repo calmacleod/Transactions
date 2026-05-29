@@ -146,18 +146,19 @@ test("desktop sidebar can collapse to an icon rail and preview on hover", async 
   await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(200)
 })
 
-test("jobs navigation leaves the Inertia shell for Mission Control", async ({ page }) => {
+test("jobs navigation opens Mission Control in an admin modal", async ({ page }) => {
   await page.goto("/admin")
 
-  const jobsPagePromise = page.waitForEvent("popup")
-  await page.getByRole("link", { name: /^Jobs$/ }).click()
-  const jobsPage = await jobsPagePromise
-  await jobsPage.waitForLoadState()
+  await page.getByRole("button", { name: /^Jobs$/ }).click()
 
-  await expect(jobsPage).toHaveURL(/\/admin\/jobs/)
-  await expect(jobsPage.locator("#app")).toHaveCount(0)
-  await expect(jobsPage.locator("body")).toContainText("Pending jobs")
-  await jobsPage.close()
+  const jobsDialog = page.getByRole("dialog", { name: "Jobs" })
+  await expect(jobsDialog).toBeVisible()
+  await expect(page).toHaveURL(/\/admin$/)
+  await expect(jobsDialog.locator("iframe")).toHaveAttribute("src", "/admin/jobs")
+  await expect(page.frameLocator("iframe[title='Jobs']").locator("body")).toContainText("Pending jobs")
+
+  await page.getByRole("button", { name: "Close admin tool" }).click()
+  await expect(jobsDialog).toBeHidden()
 })
 
 test("models sorting preserves the user's scroll position", async ({ page }) => {
