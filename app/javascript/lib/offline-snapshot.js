@@ -12,8 +12,10 @@ export function warmOfflineSnapshot(path = "/offline/snapshot.json") {
 }
 
 export async function refreshOfflineSnapshot(path = "/offline/snapshot.json", { force = false } = {}) {
-  if (!force && !(await shouldRefreshOfflineSnapshot())) return loadOfflineSnapshot()
   if (refreshPromise) return refreshPromise
+
+  const storedSnapshot = await loadOfflineSnapshot()
+  if (!force && storedSnapshot && !shouldRefreshOfflineSnapshot()) return storedSnapshot
 
   refreshPromise = fetchAndStoreOfflineSnapshot(path).finally(() => {
     refreshPromise = null
@@ -45,11 +47,11 @@ export async function loadOfflineSnapshot() {
   return record?.snapshot || null
 }
 
-async function shouldRefreshOfflineSnapshot() {
-  const fetchedAt = Date.parse(readStorageValue(FETCHED_AT_KEY))
-  if (!Number.isFinite(fetchedAt)) return true
+function shouldRefreshOfflineSnapshot() {
+  const refreshedAt = Date.parse(readStorageValue(REFRESHED_AT_KEY))
+  if (!Number.isFinite(refreshedAt)) return true
 
-  return Date.now() - fetchedAt >= REFRESH_INTERVAL_MS
+  return Date.now() - refreshedAt >= REFRESH_INTERVAL_MS
 }
 
 async function loadOfflineSnapshotRecord() {
