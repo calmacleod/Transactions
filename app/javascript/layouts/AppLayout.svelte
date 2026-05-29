@@ -44,8 +44,12 @@
   let sidebarPreviewSuppressed = false
   let theme = "light"
   let accentColor = "#0f766e"
+  let online = typeof navigator === "undefined" ? true : navigator.onLine
 
   $: sidebarExpanded = !sidebarCollapsed || sidebarPreviewOpen
+  $: offlineModePath = paths.offline || "/offline"
+  $: offlineMode = currentPath === offlineModePath || currentPath.startsWith(`${offlineModePath}?`)
+  $: navigationLocked = offlineMode || !online
 
   onMount(() => {
     syncPageState(page)
@@ -55,6 +59,8 @@
     sidebarCollapsed = window.localStorage.getItem("transactions-sidebar-collapsed") === "true"
     window.addEventListener("mousemove", clearSidebarSuppressionAfterPointerLeaves)
     window.addEventListener("transactions-theme-change", syncThemeState)
+    window.addEventListener("online", syncOnlineState)
+    window.addEventListener("offline", syncOnlineState)
 
     return () => {
       stopTrackingNavigation()
@@ -62,6 +68,8 @@
       clearSidebarPreviewTimer()
       window.removeEventListener("mousemove", clearSidebarSuppressionAfterPointerLeaves)
       window.removeEventListener("transactions-theme-change", syncThemeState)
+      window.removeEventListener("online", syncOnlineState)
+      window.removeEventListener("offline", syncOnlineState)
     }
   })
 
@@ -163,6 +171,8 @@
   }
 
   function signOut() {
+    if (navigationLocked) return
+
     router.delete(paths.session)
   }
 
@@ -172,14 +182,35 @@
   }
 
   function navPrefetchMode(item) {
+    if (navigationLocked) return false
     return item.fullReload ? false : navPrefetch
   }
 
-  function desktopNavClass(item, expanded) {
+  function syncOnlineState() {
+    online = navigator.onLine
+  }
+
+  function navKey(item) {
+    return item.label.toLowerCase().replaceAll(" ", "-")
+  }
+
+  function lockedNavLabel(item) {
+    return `${item.label} unavailable while offline`
+  }
+
+  function desktopNavClass(item, expanded, locked = false) {
     const layoutClass = expanded ? "grid w-full grid-cols-[3rem_1fr] text-left" : "grid w-9 justify-self-center grid-cols-[2.25rem]"
+    if (locked) return `group h-9 cursor-not-allowed items-center rounded-lg p-0 text-sm font-medium text-muted-foreground/50 opacity-70 ${layoutClass}`
+
     const stateClass = isActive(item.href, currentPath, paths.root || "/") ? "border border-primary/40 bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
 
     return `group h-9 items-center rounded-lg p-0 text-sm font-medium transition-colors ${layoutClass} ${stateClass}`
+  }
+
+  function mobileNavClass(item, locked = false) {
+    if (locked) return `${navLinkClass} cursor-not-allowed text-muted-foreground/50 opacity-70`
+
+    return `${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`
   }
 
   function desktopSidebarClass(expanded, collapsed, previewOpen) {
@@ -197,6 +228,12 @@
 
     event.preventDefault()
     if (options.closeMobile) mobileOpen = false
+    if (navigationLocked) return
+
+    if (!online && href !== paths.offline) {
+      router.visit(paths.offline || "/offline")
+      return
+    }
     router.visit(href)
   }
 
@@ -223,6 +260,19 @@
 <div class="min-h-screen bg-background text-foreground" style={`--sidebar-offset: ${sidebarCollapsed ? "4rem" : "14rem"}; --sidebar-width: ${sidebarExpanded ? "14rem" : "4rem"}; --current-accent: ${accentColor};`} data-app-chrome>
   <aside class={desktopSidebarClass(sidebarExpanded, sidebarCollapsed, sidebarPreviewOpen)} style="width: var(--sidebar-width)" data-testid="desktop-sidebar" onmouseenter={startSidebarPreview} onmouseleave={closeSidebarPreview}>
     <div class={sidebarExpanded ? "grid grid-cols-[3rem_1fr_2.25rem] items-center" : "grid grid-cols-[3rem] items-center"}>
+      {#if navigationLocked}
+      <div class={sidebarExpanded ? "col-span-2 grid h-9 min-w-0 cursor-not-allowed grid-cols-[3rem_1fr] items-center opacity-80" : "grid h-9 w-full cursor-not-allowed grid-cols-[3rem] items-center opacity-80"} aria-label="Transactions dashboard unavailable while offline" title={sidebarExpanded ? undefined : "Transactions"} data-testid="locked-sidebar-brand">
+        <span class="grid size-9 place-items-center justify-self-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark data-testid="sidebar-brand-icon">
+          <BarChart3 class="size-5" />
+        </span>
+        {#if sidebarExpanded}
+        <span class="min-w-0">
+          <span class="block text-sm font-semibold text-foreground">Transactions</span>
+          <span class="block text-xs text-muted-foreground">Expense control</span>
+        </span>
+        {/if}
+      </div>
+      {:else}
       <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class={sidebarExpanded ? "col-span-2 grid h-9 min-w-0 grid-cols-[3rem_1fr] items-center" : "grid h-9 w-full grid-cols-[3rem] items-center"} aria-label="Transactions dashboard" title={sidebarExpanded ? undefined : "Transactions"} onmousedown={(event) => mouseDownNavigate(event, paths.root || "/")} onclick={ignoreMouseClickAfterMouseDown}>
         <span class="grid size-9 place-items-center justify-self-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark data-testid="sidebar-brand-icon">
           <BarChart3 class="size-5" />
@@ -234,6 +284,7 @@
         </span>
         {/if}
       </Link>
+      {/if}
       {#if sidebarExpanded}
         <Button variant="ghost" size="icon" class="shrink-0 text-muted-foreground" aria-label={sidebarCollapsed ? "Pin expanded sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Pin expanded sidebar" : "Collapse sidebar"} onclick={toggleSidebarCollapsed}>
           {#if sidebarCollapsed}
@@ -248,11 +299,23 @@
     <Separator class="my-4" />
 
     {#if auth.authenticated}
+      {#if navigationLocked && sidebarExpanded}
+        <div class="mb-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="offline-sidebar-lock">
+          Sidebar navigation is locked while offline.
+        </div>
+      {/if}
       <nav class="grid gap-1">
         {#each navItems as item}
-          {#if item.fullReload}
+          {#if navigationLocked}
+            <button type="button" disabled class={desktopNavClass(item, sidebarExpanded, true)} aria-label={lockedNavLabel(item)} title={sidebarExpanded ? undefined : item.label} data-testid={`locked-nav-${navKey(item)}`}>
+              <span class="grid size-9 place-items-center justify-self-center" data-testid={`sidebar-icon-${navKey(item)}`}>
+                <svelte:component this={item.icon} class="size-4" />
+              </span>
+              {#if sidebarExpanded}<span>{item.label}</span>{/if}
+            </button>
+          {:else if item.fullReload}
             <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={desktopNavClass(item, sidebarExpanded)} data-active-nav={isActive(item.href, currentPath, paths.root || "/")} aria-label={item.label} title={sidebarExpanded ? undefined : item.label}>
-              <span class="grid size-9 place-items-center justify-self-center" data-testid={`sidebar-icon-${item.label.toLowerCase().replaceAll(" ", "-")}`}>
+              <span class="grid size-9 place-items-center justify-self-center" data-testid={`sidebar-icon-${navKey(item)}`}>
                 <svelte:component this={item.icon} class="size-4" />
               </span>
               {#if sidebarExpanded}<span>{item.label}</span>{/if}
@@ -270,7 +333,7 @@
               aria-label={item.label}
               title={sidebarExpanded ? undefined : item.label}
             >
-              <span class="grid size-9 place-items-center justify-self-center" data-testid={`sidebar-icon-${item.label.toLowerCase().replaceAll(" ", "-")}`}>
+              <span class="grid size-9 place-items-center justify-self-center" data-testid={`sidebar-icon-${navKey(item)}`}>
                 <svelte:component this={item.icon} class="size-4" />
               </span>
               {#if sidebarExpanded}<span>{item.label}</span>{/if}
@@ -297,7 +360,7 @@
             {#if sidebarExpanded}Dim mode{/if}
           {/if}
         </Button>
-        <Button variant="ghost" class={sidebarExpanded ? "w-full justify-start text-muted-foreground" : "w-full justify-center px-2 text-muted-foreground"} onclick={signOut} aria-label="Sign out" title={sidebarExpanded ? undefined : "Sign out"}>
+        <Button variant="ghost" class={sidebarExpanded ? "w-full justify-start text-muted-foreground" : "w-full justify-center px-2 text-muted-foreground"} onclick={signOut} disabled={navigationLocked} aria-label="Sign out" title={sidebarExpanded ? undefined : "Sign out"}>
           <LogOut class="size-4" />
           {#if sidebarExpanded}Sign out{/if}
         </Button>
@@ -309,6 +372,17 @@
     <Button variant="outline" size="icon" aria-label="Open navigation" onclick={() => (mobileOpen = true)}>
       <Menu class="size-4" />
     </Button>
+    {#if navigationLocked}
+    <div class="flex cursor-not-allowed items-center gap-3 opacity-80" aria-label="Transactions dashboard unavailable while offline" data-testid="locked-mobile-brand">
+      <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark>
+        <BarChart3 class="size-5" />
+      </span>
+      <span class="min-w-0">
+        <span class="block text-sm font-semibold text-foreground">Transactions</span>
+        <span class="block text-xs text-muted-foreground">Expense control</span>
+      </span>
+    </div>
+    {:else}
     <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/")} onclick={ignoreMouseClickAfterMouseDown}>
       <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark>
         <BarChart3 class="size-5" />
@@ -318,6 +392,7 @@
         <span class="block text-xs text-muted-foreground">Expense control</span>
       </span>
     </Link>
+    {/if}
     <Button variant="outline" size="icon" class="ml-auto" aria-label={`Switch to ${theme === "dim" ? "light" : "dim"} mode`} onclick={toggleTheme}>
       {#if theme === "dim"}
         <Sun class="size-4" />
@@ -332,6 +407,17 @@
       <SheetHeader class="sr-only">
         <SheetTitle>Navigation</SheetTitle>
       </SheetHeader>
+      {#if navigationLocked}
+      <div class="flex cursor-not-allowed items-center gap-3 opacity-80" aria-label="Transactions dashboard unavailable while offline" data-testid="locked-sheet-brand">
+        <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark>
+          <BarChart3 class="size-5" />
+        </span>
+        <span class="min-w-0">
+          <span class="block text-sm font-semibold text-foreground">Transactions</span>
+          <span class="block text-xs text-muted-foreground">Expense control</span>
+        </span>
+      </div>
+      {:else}
       <Link href={paths.root || "/"} prefetch cacheFor="30s" draggable="false" class="flex items-center gap-3" onmousedown={(event) => mouseDownNavigate(event, paths.root || "/", { closeMobile: true })} onclick={(event) => ignoreMouseClickAfterMouseDown(event, { closeMobile: true })}>
         <span class="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm" data-brand-mark>
           <BarChart3 class="size-5" />
@@ -341,12 +427,18 @@
           <span class="block text-xs text-muted-foreground">Expense control</span>
         </span>
       </Link>
+      {/if}
       <Separator class="my-4" />
       {#if auth.authenticated}
         <nav class="grid gap-1">
           {#each navItems as item}
-            {#if item.fullReload}
-              <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-active-nav={isActive(item.href, currentPath, paths.root || "/")}>
+            {#if navigationLocked}
+              <button type="button" disabled class={mobileNavClass(item, true)} aria-label={lockedNavLabel(item)} data-testid={`locked-mobile-nav-${navKey(item)}`}>
+                <svelte:component this={item.icon} class="size-4" />
+                <span>{item.label}</span>
+              </button>
+            {:else if item.fullReload}
+              <a href={item.href} data-turbo="false" target={item.newTab ? "_blank" : undefined} rel={item.newTab ? "noreferrer" : undefined} draggable="false" class={mobileNavClass(item)} data-active-nav={isActive(item.href, currentPath, paths.root || "/")}>
                 <svelte:component this={item.icon} class="size-4" />
                 <span>{item.label}</span>
               </a>
@@ -358,7 +450,7 @@
                 draggable="false"
                 onmousedown={(event) => mouseDownNavigate(event, item.href, { closeMobile: true })}
                 onclick={(event) => ignoreMouseClickAfterMouseDown(event, { closeMobile: true })}
-                class={`${navLinkClass} ${isActive(item.href, currentPath, paths.root || "/") ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                class={mobileNavClass(item)}
                 data-active-nav={isActive(item.href, currentPath, paths.root || "/")}
               >
                 <svelte:component this={item.icon} class="size-4" />
@@ -379,7 +471,7 @@
               Dim mode
             {/if}
           </Button>
-          <Button variant="ghost" class="w-full justify-start text-muted-foreground" onclick={signOut}>
+          <Button variant="ghost" class="w-full justify-start text-muted-foreground" onclick={signOut} disabled={navigationLocked}>
             <LogOut class="size-4" />
             Sign out
           </Button>

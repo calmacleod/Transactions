@@ -26,6 +26,7 @@ class ApplicationController < ActionController::Base
         budgets: budgets_path,
         subcategories: subcategories_path,
         insights: insights_path,
+        offline: offline_path,
         ai_preferences: ai_preferences_path,
         settings: settings_path,
         onboarding: onboarding_path,

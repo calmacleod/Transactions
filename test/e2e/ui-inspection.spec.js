@@ -286,8 +286,11 @@ test("pwa manifest, icon, and service worker registration are intact", async ({ 
   const serviceWorkerResponse = await request.get("/service-worker.js")
   expect(serviceWorkerResponse.ok()).toBe(true)
   const serviceWorker = await serviceWorkerResponse.text()
-  expect(serviceWorker).toContain("transactions-pwa-v4")
-  expect(serviceWorker).toContain("ASSET_PATH_PATTERN")
+  expect(serviceWorker).toContain("transactions-pwa-v6")
+  expect(serviceWorker).toContain("transactions-pages-v2")
+  expect(serviceWorker).toContain("VITE_PATH_PATTERN")
+  expect(serviceWorker).toContain('OFFLINE_FALLBACK_PATH = "/offline"')
+  expect(serviceWorker).toContain("isCacheableViteAsset")
   expect(serviceWorker).toContain("navigationPreload")
   expect(serviceWorker).not.toContain("/manifest.json")
   expect(serviceWorker).not.toContain("/icon.png")
@@ -307,6 +310,114 @@ test("pwa manifest, icon, and service worker registration are intact", async ({ 
     })
     .toContain("/service-worker.js")
 })
+
+test("offline mode renders a read-only snapshot from the PWA cache", async ({ page, context }) => {
+  await page.goto("/")
+
+  await expect
+    .poll(async () => {
+      return page.evaluate(async () => {
+        if (!("serviceWorker" in navigator)) return "unsupported"
+        await navigator.serviceWorker.ready
+        return navigator.serviceWorker.controller ? "controlled" : "ready"
+      })
+    })
+    .not.toBe("unsupported")
+
+  if (await page.evaluate(() => !navigator.serviceWorker.controller)) {
+    await page.reload()
+    await expect(page.getByRole("heading", { name: "Spending dashboard" })).toBeVisible()
+  }
+
+  await expect.poll(() => page.evaluate(async () => Boolean(await caches.match("/offline"))), { timeout: 15_000 }).toBe(true)
+  await expect.poll(() => page.evaluate(hasStoredOfflineSnapshot), { timeout: 15_000 }).toBe(true)
+
+  const appOrigin = await page.evaluate(() => window.location.origin)
+  await context.setOffline(true)
+  try {
+    await expect(page.getByTestId("locked-nav-transactions")).toBeDisabled()
+    await page.goto(`${appOrigin}/transactions`)
+    await expect(page.getByRole("heading", { name: "Read-only copy" })).toBeVisible()
+    await expect(page.getByTestId("offline-connection-badge")).toContainText("Offline")
+    await expect(page.getByTestId("offline-connection-status")).toContainText("Waiting for the connection")
+    await expect(page.getByTestId("locked-sidebar-brand")).toBeVisible()
+    await expect(page.getByTestId("locked-nav-dashboard")).toBeDisabled()
+    await expect(page.getByTestId("locked-nav-transactions")).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Upload transactions" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Regenerate" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0)
+    await page.getByRole("button", { name: "Transactions", exact: true }).click()
+    await expect(page.getByText("LOCAL GROCERY MARKET")).toBeVisible()
+    await expect(page.getByPlaceholder("Search offline transactions")).toBeVisible()
+    await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0)
+    await context.setOffline(false)
+    await expect(page.getByTestId("offline-connection-badge")).toContainText("Back online")
+    await expect(page.getByTestId("offline-connection-status")).toContainText("Connection restored")
+    await expect(page.getByTestId("exit-offline-mode")).toBeVisible()
+    await expect(page.getByTestId("locked-nav-dashboard")).toBeDisabled()
+    expect(await offlineInertiaExceptionIsPrevented(page)).toBe(true)
+    await expect(page.locator("iframe[srcdoc]")).toHaveCount(0)
+  } finally {
+    await context.setOffline(false)
+    page.browserErrors = page.browserErrors.filter((message) => !message.includes("ERR_INTERNET_DISCONNECTED"))
+  }
+})
+
+function offlineInertiaExceptionIsPrevented(page) {
+  return page.evaluate(() => {
+    const event = new CustomEvent("inertia:httpException", {
+      cancelable: true,
+      detail: { response: { data: "<html><body>offline fallback</body></html>" } },
+    })
+
+    document.dispatchEvent(event)
+
+    return event.defaultPrevented
+  })
+}
+
+function hasStoredOfflineSnapshot() {
+  const openExistingOfflineSnapshot = (resolve) => {
+    const request = indexedDB.open("transactions-offline", 1)
+
+    request.onerror = () => resolve(false)
+    request.onupgradeneeded = () => {
+      request.transaction?.abort()
+      resolve(false)
+    }
+    request.onsuccess = () => {
+      const database = request.result
+      if (!database.objectStoreNames.contains("snapshots")) {
+        database.close()
+        resolve(false)
+        return
+      }
+
+      const transaction = database.transaction("snapshots", "readonly")
+      const getRequest = transaction.objectStore("snapshots").get("latest")
+
+      getRequest.onerror = () => resolve(false)
+      getRequest.onsuccess = () => resolve(Boolean(getRequest.result?.snapshot))
+    }
+  }
+
+  return new Promise((resolve) => {
+    if (indexedDB.databases) {
+      indexedDB.databases().then((databases) => {
+        if (!databases.some((database) => database.name === "transactions-offline")) {
+          resolve(false)
+          return
+        }
+
+        openExistingOfflineSnapshot(resolve)
+      }).catch(() => resolve(false))
+      return
+    }
+
+    openExistingOfflineSnapshot(resolve)
+  })
+}
 
 test("transaction quick filters perform Inertia visits", async ({ page }) => {
   await page.goto("/transactions")

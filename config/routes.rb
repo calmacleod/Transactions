@@ -36,6 +36,8 @@ Rails.application.routes.draw do
     get :download, on: :member
   end
   resources :insights, only: %i[index create]
+  get "offline", to: "offline#show", as: :offline
+  get "offline/snapshot.json", to: "offline#snapshot", as: :offline_snapshot, defaults: { format: :json }
   resource :settings, only: %i[show update]
   resource :ai_preferences, only: %i[show update]
   resource :onboarding, only: :update, controller: :onboarding
