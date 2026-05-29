@@ -23,7 +23,6 @@
         width: 36px;
         height: 36px;
         border-radius: 8px;
-        background: #18181b;
         vertical-align: middle;
       }
       .brand-name {
@@ -80,7 +79,7 @@
   <body>
     <div class="shell">
       <div class="brand">
-        <span class="brand-mark"></span>
+        <%= image_tag @app_icon.url, alt: "", width: 36, height: 36, class: "brand-mark" %>
         <span class="brand-name">Transactions</span>
       </div>
       <div class="card">

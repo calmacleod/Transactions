@@ -5,6 +5,7 @@ class SessionsController < ApplicationController
   def new
     render inertia: {
       email_address: params[:email_address],
+      development: Rails.env.development?,
       actions: {
         session: session_path,
         new_password: new_password_path,
@@ -24,6 +25,15 @@ class SessionsController < ApplicationController
 
   def destroy
     terminate_session
-    redirect_to new_session_path, status: :see_other
+    redirect_to sign_out_redirect_path, status: :see_other
+  end
+
+  private
+
+  def sign_out_redirect_path
+    return_to = params[:return_to].to_s
+    return return_to if return_to.start_with?("/") && !return_to.start_with?("//")
+
+    new_session_path
   end
 end

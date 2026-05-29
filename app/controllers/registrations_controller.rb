@@ -7,7 +7,9 @@ class RegistrationsController < ApplicationController
       invite_code: params[:code],
       actions: {
         registration: registrations_path,
-        new_session: new_session_path
+        new_session: new_session_path,
+        session: session_path,
+        root: root_path
       }
     }
   end

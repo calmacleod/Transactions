@@ -17,7 +17,7 @@ let serviceWorkerRegistrationPromise = null
 createInertiaApp({
   pages: "../pages",
   layout: (name) => {
-    return name.startsWith("sessions/") || name.startsWith("passwords/") ? undefined : Layout
+    return name.startsWith("sessions/") || name.startsWith("passwords/") || name.startsWith("registrations/") ? undefined : Layout
   },
 
   defaults: {

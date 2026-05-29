@@ -62,15 +62,7 @@ Rails.application.configure do
   }
 
   if ENV["RESEND_API_KEY"].present?
-    config.action_mailer.delivery_method = :smtp
-    config.action_mailer.smtp_settings = {
-      address: "smtp.resend.com",
-      port: 587,
-      user_name: "resend",
-      password: ENV["RESEND_API_KEY"],
-      authentication: :plain,
-      enable_starttls_auto: true
-    }
+    config.action_mailer.delivery_method = :resend
   end
 
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to

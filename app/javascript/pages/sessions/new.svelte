@@ -7,6 +7,7 @@
   import AuthLayout from "../AuthLayout.svelte"
 
   export let email_address = ""
+  export let development = false
   export let actions
 
   let email = email_address || ""
@@ -22,7 +23,9 @@
     <CardHeader>
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Admin access</p>
       <CardTitle class="text-2xl">Sign in</CardTitle>
-      <p class="text-sm leading-6 text-muted-foreground">Use the admin credential seeded from your environment.</p>
+      {#if development}
+        <p class="text-sm leading-6 text-muted-foreground">Use the admin credential seeded from your environment.</p>
+      {/if}
     </CardHeader>
 
     <CardContent>

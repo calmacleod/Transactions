@@ -160,6 +160,12 @@
     background-size: 42px 42px, 42px 42px, auto, auto, auto;
   }
 
+  [data-auth-shell] {
+    background-attachment: scroll;
+    animation: auth-surface-drift 9s linear infinite;
+    will-change: background-position;
+  }
+
   [data-brand-mark],
   [data-active-nav="true"] {
     background:
@@ -267,5 +273,21 @@
   .chat-transaction-reference:hover {
     background: color-mix(in oklch, var(--accent) 92%, transparent);
     border-color: var(--primary);
+  }
+}
+
+@keyframes auth-surface-drift {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+  }
+
+  to {
+    background-position: 42px 42px, 42px 42px, 0 0, 84px -42px, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-auth-shell] {
+    animation: none;
   }
 }

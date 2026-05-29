@@ -1,6 +1,20 @@
 require "test_helper"
 
 class RegistrationsControllerTest < ActionDispatch::IntegrationTest
+  test "new exposes sign out action for authenticated invitation visits" do
+    sign_in_as(users(:one))
+
+    get new_registration_path(email_address: "new@example.com", code: "INVITECODE")
+
+    assert_response :success
+    assert_equal "registrations/new", inertia_page["component"]
+    assert_equal true, inertia_props.dig("auth", "authenticated")
+    assert_equal session_path, inertia_props.dig("actions", "session")
+    assert_equal root_path, inertia_props.dig("actions", "root")
+    assert_equal "new@example.com", inertia_props["email_address"]
+    assert_equal "INVITECODE", inertia_props["invite_code"]
+  end
+
   test "creates a user with a valid invitation code" do
     invitation = UserInvitation.create_for!(email_address: "new@example.com", invited_by: users(:one))
     code = invitation.raw_code

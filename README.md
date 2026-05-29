@@ -61,6 +61,18 @@ Optional provider environment variables:
 
 Without a provider key, the app still imports data and uses transparent local merchant rules for basic classification.
 
+## Email Configuration
+
+Transactional email uses Action Mailer with Resend when `RESEND_API_KEY` is present.
+
+Optional email environment variables:
+
+- `RESEND_API_KEY`
+- `MAILER_FROM`
+
+The default sender uses the verified Resend domain `transaction.callummacleod.ca`.
+Override `MAILER_FROM` only with another sender on a domain verified in Resend.
+
 ## RubyLLM Models
 
 The app stores RubyLLM's model registry locally so available models can be browsed in the UI.
@@ -114,5 +126,7 @@ Kamal expects these Bitwarden Secrets Manager keys:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `OPENAI_API_KEY`
+- `RESEND_API_KEY`
+- `MAILER_FROM`
 
 Kamal loads `.kamal/secrets`, fetches the Bitwarden project with `kamal secrets fetch --adapter bitwarden-sm`, and extracts these values with `kamal secrets extract`.
