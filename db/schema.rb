@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_29_090200) do
   create_table "ai_chat_messages", force: :cascade do |t|
     t.integer "ai_chat_id", null: false
     t.text "content", null: false
@@ -23,9 +23,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.string "role", null: false
     t.string "status", default: "complete", null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["ai_chat_id", "created_at"], name: "index_ai_chat_messages_on_ai_chat_id_and_created_at"
     t.index ["ai_chat_id"], name: "index_ai_chat_messages_on_ai_chat_id"
     t.index ["status"], name: "index_ai_chat_messages_on_status"
+    t.index ["user_id"], name: "index_ai_chat_messages_on_user_id"
   end
 
   create_table "ai_chat_transactions", force: :cascade do |t|
@@ -33,9 +35,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.datetime "created_at", null: false
     t.integer "expense_transaction_id", null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["ai_chat_id", "expense_transaction_id"], name: "index_ai_chat_transactions_uniqueness", unique: true
     t.index ["ai_chat_id"], name: "index_ai_chat_transactions_on_ai_chat_id"
     t.index ["expense_transaction_id"], name: "index_ai_chat_transactions_on_expense_transaction_id"
+    t.index ["user_id"], name: "index_ai_chat_transactions_on_user_id"
   end
 
   create_table "ai_chats", force: :cascade do |t|
@@ -60,8 +64,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.integer "output_tokens"
     t.boolean "successful", default: true, null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["created_at"], name: "index_ai_requests_on_created_at"
     t.index ["feature"], name: "index_ai_requests_on_feature"
+    t.index ["user_id"], name: "index_ai_requests_on_user_id"
   end
 
   create_table "ai_settings", force: :cascade do |t|
@@ -78,7 +84,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.integer "monthly_budget_cents"
     t.string "name"
     t.datetime "updated_at", null: false
-    t.index ["name"], name: "index_categories_on_name", unique: true
+    t.integer "user_id"
+    t.index ["user_id", "name"], name: "index_categories_on_user_id_and_name", unique: true
+    t.index ["user_id"], name: "index_categories_on_user_id"
   end
 
   create_table "classification_runs", force: :cascade do |t|
@@ -96,8 +104,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.string "status", default: "queued", null: false
     t.integer "total_count", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["created_at"], name: "index_classification_runs_on_created_at"
     t.index ["status"], name: "index_classification_runs_on_status"
+    t.index ["user_id"], name: "index_classification_runs_on_user_id"
   end
 
   create_table "expense_transaction_subcategories", force: :cascade do |t|
@@ -105,9 +115,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.integer "expense_transaction_id", null: false
     t.integer "transaction_subcategory_id", null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["expense_transaction_id", "transaction_subcategory_id"], name: "index_expense_transaction_subcategories_uniqueness", unique: true
     t.index ["expense_transaction_id"], name: "idx_on_expense_transaction_id_afcf50bd10"
     t.index ["transaction_subcategory_id"], name: "idx_on_transaction_subcategory_id_c2c97f8b7d"
+    t.index ["user_id"], name: "index_expense_transaction_subcategories_on_user_id"
   end
 
   create_table "expense_transactions", force: :cascade do |t|
@@ -127,10 +139,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.json "raw_data"
     t.string "source"
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["category_id"], name: "index_expense_transactions_on_category_id"
-    t.index ["external_id"], name: "index_expense_transactions_on_external_id", unique: true
     t.index ["import_batch_id"], name: "index_expense_transactions_on_import_batch_id"
     t.index ["occurred_on"], name: "index_expense_transactions_on_occurred_on"
+    t.index ["user_id", "external_id"], name: "index_expense_transactions_on_user_and_external_id", unique: true
+    t.index ["user_id"], name: "index_expense_transactions_on_user_id"
   end
 
   create_table "import_batches", force: :cascade do |t|
@@ -142,6 +156,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.string "status", default: "pending", null: false
     t.integer "transactions_count", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
+    t.index ["user_id"], name: "index_import_batches_on_user_id"
   end
 
   create_table "insight_transactions", force: :cascade do |t|
@@ -149,9 +165,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.integer "expense_transaction_id", null: false
     t.integer "insight_id", null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["expense_transaction_id"], name: "index_insight_transactions_on_expense_transaction_id"
     t.index ["insight_id", "expense_transaction_id"], name: "idx_on_insight_id_expense_transaction_id_1eace887e5", unique: true
     t.index ["insight_id"], name: "index_insight_transactions_on_insight_id"
+    t.index ["user_id"], name: "index_insight_transactions_on_user_id"
   end
 
   create_table "insights", force: :cascade do |t|
@@ -164,8 +182,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.date "starts_on"
     t.string "title"
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["generation_source"], name: "index_insights_on_generation_source"
     t.index ["starts_on", "ends_on"], name: "index_insights_on_starts_on_and_ends_on"
+    t.index ["user_id"], name: "index_insights_on_user_id"
   end
 
   create_table "models", force: :cascade do |t|
@@ -184,10 +204,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.json "pricing", default: {}
     t.string "provider", null: false
     t.datetime "updated_at", null: false
+    t.boolean "user_selectable", default: false, null: false
     t.index ["family"], name: "index_models_on_family"
     t.index ["favorite"], name: "index_models_on_favorite"
     t.index ["provider", "model_id"], name: "index_models_on_provider_and_model_id", unique: true
     t.index ["provider"], name: "index_models_on_provider"
+    t.index ["user_selectable"], name: "index_models_on_user_selectable"
   end
 
   create_table "saved_transaction_queries", force: :cascade do |t|
@@ -214,15 +236,41 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_26_090009) do
     t.datetime "created_at", null: false
     t.string "name", null: false
     t.datetime "updated_at", null: false
-    t.index ["name"], name: "index_transaction_subcategories_on_name", unique: true
+    t.integer "user_id"
+    t.index ["user_id", "name"], name: "index_transaction_subcategories_on_user_and_name", unique: true
+    t.index ["user_id"], name: "index_transaction_subcategories_on_user_id"
+  end
+
+  create_table "user_invitations", force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.integer "accepted_by_user_id"
+    t.string "code_digest", null: false
+    t.datetime "created_at", null: false
+    t.string "email_address", null: false
+    t.datetime "expires_at", null: false
+    t.integer "invited_by_user_id"
+    t.datetime "updated_at", null: false
+    t.index ["accepted_by_user_id"], name: "index_user_invitations_on_accepted_by_user_id"
+    t.index ["email_address", "accepted_at"], name: "index_user_invitations_on_email_and_accepted_at"
+    t.index ["email_address"], name: "index_user_invitations_on_email_address"
+    t.index ["invited_by_user_id"], name: "index_user_invitations_on_invited_by_user_id"
   end
 
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.boolean "csv_reminder_enabled", default: true, null: false
+    t.integer "csv_reminder_hour", default: 9, null: false
+    t.datetime "csv_reminder_last_sent_at"
+    t.integer "csv_reminder_wday", default: 1, null: false
     t.string "email_address", null: false
+    t.datetime "onboarding_dismissed_at"
     t.string "password_digest", null: false
+    t.string "preferred_ai_model"
+    t.string "role", default: "regular", null: false
     t.datetime "updated_at", null: false
+    t.index ["csv_reminder_enabled", "csv_reminder_wday", "csv_reminder_hour"], name: "index_users_on_csv_reminder_schedule"
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
+    t.index ["role"], name: "index_users_on_role"
   end
 
   add_foreign_key "ai_chat_messages", "ai_chats"

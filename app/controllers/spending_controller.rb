@@ -15,8 +15,8 @@ class SpendingController < ApplicationController
   private
 
   def months_on_record
-    first_date = ExpenseTransaction.expenses.minimum(:occurred_on)&.beginning_of_month || Date.current.beginning_of_month
-    last_date = ExpenseTransaction.expenses.maximum(:occurred_on)&.beginning_of_month || Date.current.beginning_of_month
+    first_date = current_user.expense_transactions.expenses.minimum(:occurred_on)&.beginning_of_month || Date.current.beginning_of_month
+    last_date = current_user.expense_transactions.expenses.maximum(:occurred_on)&.beginning_of_month || Date.current.beginning_of_month
 
     months = []
     current_month = first_date
@@ -28,7 +28,7 @@ class SpendingController < ApplicationController
   end
 
   def monthly_totals(months)
-    totals = ExpenseTransaction.expenses.group_by_month
+    totals = current_user.expense_transactions.expenses.group_by_month
 
     months.map do |month|
       cents = totals.fetch(month, 0)
@@ -52,7 +52,7 @@ class SpendingController < ApplicationController
   end
 
   def category_month_rows(months)
-    grouped = ExpenseTransaction.expenses.includes(:category).to_a.group_by { |transaction| transaction.category || uncategorized_category }
+    grouped = current_user.expense_transactions.expenses.includes(:category).to_a.group_by { |transaction| transaction.category || uncategorized_category }
 
     grouped.map do |category, transactions|
       month_totals = transactions.group_by { |transaction| transaction.occurred_on.beginning_of_month }

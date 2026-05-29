@@ -5,7 +5,19 @@ Rails.application.routes.draw do
   end
   resource :session
   resources :passwords, param: :token
+  resources :registrations, only: %i[new create]
   root "dashboard#index"
+
+  namespace :admin do
+    root "dashboard#index"
+    resources :invitations, only: :create
+    resource :ai_controls, only: %i[show update], controller: "/ai_controls"
+    resources :models, only: %i[index create update], controller: "/models"
+
+    if Rails.env.development?
+      get "first_time_flow_preview", to: "/development/previews#first_time_flow", as: :first_time_flow_preview
+    end
+  end
 
   mount MissionControl::Jobs::Engine, at: "/admin/jobs"
   mount ActionCable.server, at: "/cable"
@@ -20,9 +32,10 @@ Rails.application.routes.draw do
   resources :saved_transaction_queries, only: %i[create destroy]
   resources :imports, only: :create
   resources :insights, only: %i[index create]
+  resource :settings, only: %i[show update]
+  resource :ai_preferences, only: %i[show update]
+  resource :onboarding, only: :update, controller: :onboarding
   resources :ai_chats, only: %i[index show]
-  resource :ai_controls, only: %i[show update]
-  resources :models, only: %i[index create update]
   resource :classifications, only: :create
   resources :classification_runs, only: :show do
     patch :cancel, on: :member

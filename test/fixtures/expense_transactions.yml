@@ -1,4 +1,5 @@
 grocery:
+  user: one
   occurred_on: 2026-05-19
   description: LOCAL GROCERY MARKET
   amount_cents: 5879
@@ -14,6 +15,7 @@ grocery:
   import_batch: statement
 
 restaurant:
+  user: one
   occurred_on: 2026-05-21
   description: NEIGHBOURHOOD RESTAURANT
   amount_cents: 7274

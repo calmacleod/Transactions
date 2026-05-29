@@ -1,4 +1,6 @@
 class ExpenseTransaction < ApplicationRecord
+  include UserOwned
+
   belongs_to :category, optional: true
   belongs_to :import_batch, optional: true
   has_many :expense_transaction_subcategories, dependent: :destroy
@@ -9,7 +11,7 @@ class ExpenseTransaction < ApplicationRecord
   has_many :ai_chats, through: :ai_chat_transactions
 
   validates :occurred_on, :description, :amount_cents, :direction, :external_id, presence: true
-  validates :external_id, uniqueness: true
+  validates :external_id, uniqueness: { scope: :user_id }
   validates :direction, inclusion: { in: %w[debit credit] }
 
   scope :recent, -> { order(occurred_on: :desc, id: :desc) }

@@ -5,16 +5,16 @@
   import { Separator } from "$lib/components/ui/separator"
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "$lib/components/ui/sheet"
   import BarChart3 from "@lucide/svelte/icons/bar-chart-3"
-  import Bot from "@lucide/svelte/icons/bot"
-  import BriefcaseBusiness from "@lucide/svelte/icons/briefcase-business"
   import CreditCard from "@lucide/svelte/icons/credit-card"
-  import Gauge from "@lucide/svelte/icons/gauge"
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard"
   import Lightbulb from "@lucide/svelte/icons/lightbulb"
   import LogOut from "@lucide/svelte/icons/log-out"
   import Menu from "@lucide/svelte/icons/menu"
   import Moon from "@lucide/svelte/icons/moon"
   import PiggyBank from "@lucide/svelte/icons/piggy-bank"
+  import Settings from "@lucide/svelte/icons/settings"
+  import Shield from "@lucide/svelte/icons/shield"
+  import Sparkles from "@lucide/svelte/icons/sparkles"
   import Tags from "@lucide/svelte/icons/tags"
   import TrendingUp from "@lucide/svelte/icons/trending-up"
   import Sun from "@lucide/svelte/icons/sun"
@@ -55,17 +55,22 @@
   }
 
   function navItemsFor(nextPaths) {
-    return [
+    const items = [
       { label: "Dashboard", href: nextPaths.root || "/", icon: LayoutDashboard },
       { label: "Transactions", href: nextPaths.transactions || "/transactions", icon: CreditCard },
       { label: "Spending", href: nextPaths.spending || "/spending", icon: TrendingUp },
       { label: "Budgets", href: nextPaths.budgets || "/budgets", icon: PiggyBank },
       { label: "Subcategories", href: nextPaths.subcategories || "/subcategories", icon: Tags },
       { label: "Insights", href: nextPaths.insights || "/insights", icon: Lightbulb },
-      { label: "AI controls", href: nextPaths.ai_controls || "/ai_controls", icon: Gauge },
-      { label: "Models", href: nextPaths.models || "/models", icon: Bot },
-      { label: "Jobs", href: nextPaths.jobs || "/admin/jobs", icon: BriefcaseBusiness, fullReload: true, newTab: true },
+      { label: "AI settings", href: nextPaths.ai_preferences || "/ai_preferences", icon: Sparkles },
+      { label: "Settings", href: nextPaths.settings || "/settings", icon: Settings },
     ]
+
+    if (auth.admin) {
+      items.push({ label: "Admin", href: nextPaths.admin || "/admin", icon: Shield })
+    }
+
+    return items
   }
 
   function setTheme(value) {
@@ -86,7 +91,7 @@
 
   function isActive(href, path, rootPath = "/") {
     if (href === rootPath || href === "/") return path === "/" || path.startsWith("/?")
-    return path === href || path.startsWith(`${href}?`)
+    return path === href || path.startsWith(`${href}?`) || path.startsWith(`${href}/`)
   }
 
   function navPrefetchMode(item) {
@@ -108,6 +113,16 @@
     }
 
     if (options.closeMobile) mobileOpen = false
+  }
+
+  function dismissOnboarding(nextPath = null) {
+    router.patch(paths.onboarding, {}, {
+      preserveScroll: true,
+      onSuccess: () => {
+        auth = { ...auth, onboarding_required: false }
+        if (nextPath) router.visit(nextPath)
+      },
+    })
   }
 </script>
 
@@ -268,4 +283,49 @@
       <slot />
     </div>
   </main>
+
+  {#if auth.authenticated && auth.onboarding_required}
+    <div class="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Transactions walkthrough">
+      <div class="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl sm:p-6">
+        <div class="flex items-start gap-4">
+          <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+            <BarChart3 class="size-5" />
+          </span>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold uppercase text-primary">First run</p>
+            <h2 class="mt-1 text-2xl font-semibold tracking-normal text-foreground">Get oriented in Transactions</h2>
+            <p class="mt-2 text-sm leading-6 text-muted-foreground">Start by importing a headerless card CSV, then review categories, budgets, and insights from the sidebar.</p>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+          <div class="rounded-lg border border-border bg-background p-4">
+            <CreditCard class="size-5 text-primary" />
+            <p class="mt-3 text-sm font-semibold text-foreground">Transactions</p>
+            <p class="mt-1 text-sm leading-5 text-muted-foreground">Filter, sort, bulk select, and correct categories or notes from the main transaction ledger.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-background p-4">
+            <PiggyBank class="size-5 text-primary" />
+            <p class="mt-3 text-sm font-semibold text-foreground">Budgets</p>
+            <p class="mt-1 text-sm leading-5 text-muted-foreground">Set monthly category targets and jump directly into the transactions behind a budget line.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-background p-4">
+            <Lightbulb class="size-5 text-primary" />
+            <p class="mt-3 text-sm font-semibold text-foreground">Insights</p>
+            <p class="mt-1 text-sm leading-5 text-muted-foreground">Generate recent spending observations from local rules or RubyLLM when provider keys are configured.</p>
+          </div>
+          <div class="rounded-lg border border-border bg-background p-4">
+            <Settings class="size-5 text-primary" />
+            <p class="mt-3 text-sm font-semibold text-foreground">Settings</p>
+            <p class="mt-1 text-sm leading-5 text-muted-foreground">Adjust the CSV upload reminder schedule so fresh statement data lands in the app regularly.</p>
+          </div>
+        </div>
+
+        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onclick={() => dismissOnboarding()}>Dismiss</Button>
+          <Button type="button" onclick={() => dismissOnboarding(paths.transactions || "/transactions")}>Open transactions</Button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>

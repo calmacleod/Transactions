@@ -12,11 +12,13 @@ module Ai
       def execute(month: nil)
         start_date = parse_month(month)
         range = start_date..start_date.end_of_month
-        spent_by_category = ExpenseTransaction.expenses.between(range.begin, range.end).group(:category_id).sum(:amount_cents)
+        transaction_scope = Current.user&.expense_transactions || ExpenseTransaction.all
+        category_scope = Current.user&.categories || Category.all
+        spent_by_category = transaction_scope.expenses.between(range.begin, range.end).group(:category_id).sum(:amount_cents)
 
         {
           month: start_date.strftime("%Y-%m"),
-          categories: Category.by_name.map do |category|
+          categories: category_scope.by_name.map do |category|
             budget_cents = category.monthly_budget_cents.to_i
             spent_cents = spent_by_category.fetch(category.id, 0)
             {

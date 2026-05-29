@@ -42,8 +42,8 @@ class TransactionsController < ApplicationController
   end
 
   def update
-    transaction = ExpenseTransaction.find(params[:id])
-    transaction.update!(transaction_params)
+    transaction = current_user.expense_transactions.find(params[:id])
+    transaction.update!(normalized_transaction_params)
 
     redirect_back fallback_location: transactions_path, notice: "Transaction updated."
   end
@@ -51,7 +51,7 @@ class TransactionsController < ApplicationController
   def bulk_update
     category_id = bulk_category_id
 
-    transactions = ExpenseTransaction.where(id: bulk_transaction_ids)
+    transactions = current_user.expense_transactions.where(id: bulk_transaction_ids)
     transactions.find_each do |transaction|
       transaction.update!(category_id:)
     end
@@ -62,12 +62,12 @@ class TransactionsController < ApplicationController
   private
 
   def transaction_index_props
-    categories = Category.by_name
+    categories = current_user.categories.by_name
     saved_queries = Current.session.user.saved_transaction_queries.ordered
     selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
     filter_params = merged_filter_params(selected_saved_query)
     filter = TransactionFilter.new(filter_params)
-    filtered_transactions = filter.call.includes(:subcategories)
+    filtered_transactions = filter.call(current_user.expense_transactions).includes(:subcategories)
     transactions_per_page = transactions_per_page()
     pagy, transactions = pagy(:offset, filtered_transactions, limit: transactions_page_limit(filtered_transactions, transactions_per_page))
     start_date = filter.start_date
@@ -75,7 +75,7 @@ class TransactionsController < ApplicationController
 
     {
       categories: category_options(categories),
-      subcategories: TransactionSubcategory.by_name.map { |subcategory| subcategory_props(subcategory) },
+      subcategories: current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory) },
       saved_queries: saved_queries.map { |query| saved_query_props(query) },
       selected_saved_query_id: selected_saved_query&.id,
       filter_params: filter_params,
@@ -115,7 +115,7 @@ class TransactionsController < ApplicationController
 
   def bulk_category_id
     category_id = bulk_transaction_params[:category_id].presence
-    Category.find(category_id).id if category_id.present?
+    current_user.categories.find(category_id).id if category_id.present?
   end
 
   def transaction_per_page_options
@@ -218,7 +218,7 @@ class TransactionsController < ApplicationController
   end
 
   def filtered_chat_transactions(filter)
-    scope = filter.call.includes(:category, :subcategories)
+    scope = filter.call(current_user.expense_transactions).includes(:category, :subcategories)
     transaction_ids = Array(params[:transaction_ids]).compact_blank
 
     transaction_ids.present? ? scope.where(id: transaction_ids) : scope
@@ -251,5 +251,16 @@ class TransactionsController < ApplicationController
 
   def chat_messages(chat)
     chat.messages.ordered.map { |message| AiChatChannel.message_payload(message) }
+  end
+
+  def normalized_transaction_params
+    attributes = transaction_params.to_h
+    if attributes.key?("category_id") && attributes["category_id"].present?
+      attributes["category_id"] = current_user.categories.find(attributes["category_id"]).id
+    end
+    if attributes.key?("subcategory_ids")
+      attributes["subcategory_ids"] = current_user.transaction_subcategories.where(id: attributes["subcategory_ids"]).ids
+    end
+    attributes
   end
 end

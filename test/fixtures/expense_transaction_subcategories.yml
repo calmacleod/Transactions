@@ -1,3 +1,4 @@
 restaurant_gift:
+  user: one
   expense_transaction: restaurant
   transaction_subcategory: gift

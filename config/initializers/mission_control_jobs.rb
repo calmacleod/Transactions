@@ -1,4 +1,4 @@
-MissionControl::Jobs.base_controller_class = "::ApplicationController"
+MissionControl::Jobs.base_controller_class = "::Admin::BaseController"
 MissionControl::Jobs.http_basic_auth_enabled = false
 
 module MissionControlJobsFullNavigation

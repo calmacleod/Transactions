@@ -9,7 +9,10 @@ class ApplicationController < ActionController::Base
     {
       auth: {
         authenticated: authenticated?.present?,
-        email: Current.session&.user&.email_address
+        email: Current.session&.user&.email_address,
+        role: Current.session&.user&.role,
+        admin: Current.session&.user&.admin? || false,
+        onboarding_required: onboarding_required?
       },
       flash: {
         notice: flash[:notice],
@@ -22,20 +25,72 @@ class ApplicationController < ActionController::Base
         budgets: budgets_path,
         subcategories: subcategories_path,
         insights: insights_path,
-        ai_controls: ai_controls_path,
-        models: models_path,
+        ai_preferences: ai_preferences_path,
+        settings: settings_path,
+        onboarding: onboarding_path,
+        admin: admin_root_path,
+        ai_controls: admin_ai_controls_path,
+        models: admin_models_path,
         jobs: "/admin/jobs",
         session: session_path,
         new_session: new_session_path,
-        passwords: passwords_path
+        passwords: passwords_path,
+        new_registration: new_registration_path
       }
     }
   end
 
   private
 
+  def current_user
+    Current.user
+  end
+
+  def require_admin_user
+    return if current_user&.admin?
+
+    redirect_to root_path, alert: "Admin access is required."
+  end
+
+  def onboarding_required?
+    Current.session&.user&.onboarding_required? || session[:preview_onboarding].present?
+  end
+
   def money_from_cents(cents)
     helpers.number_to_currency(cents.to_i / 100.0)
+  end
+
+  def money_from_microdollars(microdollars)
+    helpers.number_to_currency(microdollars.to_i / 1_000_000.0)
+  end
+
+  def ai_request_microdollars(scope)
+    microdollars = scope.sum(:estimated_cost_microdollars)
+    return microdollars if microdollars.positive?
+
+    scope.sum(:estimated_cost_cents) * 10_000
+  end
+
+  def model_option_props(model)
+    {
+      id: model.id,
+      label: "#{model.name} (#{model.model_id})",
+      name: model.name,
+      model_id: model.model_id,
+      provider: model.provider,
+      capabilities: model.capabilities,
+      input_modalities: model.input_modalities.presence || [ "unknown" ],
+      output_modalities: model.output_modalities.presence || [ "unknown" ],
+      context_window_label: model.context_window.present? ? helpers.number_with_delimiter(model.context_window) : nil,
+      price_label: model_price_label(model)
+    }
+  end
+
+  def model_price_label(model)
+    input_price = model.input_price_per_million
+    output_price = model.output_price_per_million
+
+    input_price.present? || output_price.present? ? "#{helpers.number_to_currency(input_price || 0, precision: 2)} / #{helpers.number_to_currency(output_price || 0, precision: 2)}" : "Unknown"
   end
 
   def category_props(category)
@@ -49,7 +104,7 @@ class ApplicationController < ActionController::Base
     }
   end
 
-  def category_options(categories = Category.by_name)
+  def category_options(categories = Current.user&.categories&.by_name || Category.none)
     categories.map { |category| category_props(category) }
   end
 

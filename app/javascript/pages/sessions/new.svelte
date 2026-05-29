@@ -39,6 +39,7 @@
 
         <Button type="submit" class="w-full">Sign in</Button>
       </form>
+      <Button type="button" variant="ghost" class="mt-3 w-full" onclick={() => router.visit(actions.new_registration)}>Join with invitation</Button>
     </CardContent>
   </Card>
 </AuthLayout>

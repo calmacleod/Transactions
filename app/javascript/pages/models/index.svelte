@@ -7,21 +7,27 @@
   import { Label } from "$lib/components/ui/label"
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
   import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$lib/components/ui/table"
+  import ArrowDown from "@lucide/svelte/icons/arrow-down"
+  import ArrowUp from "@lucide/svelte/icons/arrow-up"
+  import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down"
   import Braces from "@lucide/svelte/icons/braces"
   import Eye from "@lucide/svelte/icons/eye"
   import RefreshCcw from "@lucide/svelte/icons/refresh-ccw"
   import Server from "@lucide/svelte/icons/server"
   import Star from "@lucide/svelte/icons/star"
   import Sparkles from "@lucide/svelte/icons/sparkles"
+  import AdminBreadcrumbs from "../admin/AdminBreadcrumbs.svelte"
 
   export let stats
   export let providers = []
   export let models = []
   export let filters = {}
+  export let sort = { field: "favorite", direction: "desc" }
   export let capped = false
   export let actions
 
   let form = { ...filters }
+  let refreshing = false
 
   $: statCards = [
     { label: "Available models", value: stats.available_models, icon: Sparkles },
@@ -31,13 +37,54 @@
   ]
 
   function applyFilters() {
-    router.get(actions.index, Object.fromEntries(Object.entries(form).filter(([, value]) => value)), { preserveScroll: true })
+    router.get(actions.index, queryParams(), { preserveScroll: true })
+  }
+
+  function clearFilters() {
+    router.get(actions.index, queryParams({ query: "", provider: "", capability: "" }), { preserveScroll: true })
+  }
+
+  function sortBy(field) {
+    const direction = sort.field === field ? (sort.direction === "asc" ? "desc" : "asc") : defaultDirection(field)
+    router.get(actions.index, queryParams({ sort: field, direction }), { preserveScroll: true })
+  }
+
+  function queryParams(overrides = {}) {
+    const params = { ...form, sort: sort.field, direction: sort.direction, ...overrides }
+    return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""))
+  }
+
+  function defaultDirection(field) {
+    return ["favorite", "user_access", "context", "price"].includes(field) ? "desc" : "asc"
+  }
+
+  function sortIcon(field) {
+    if (sort.field !== field) return ArrowUpDown
+    return sort.direction === "asc" ? ArrowUp : ArrowDown
+  }
+
+  function refreshModels() {
+    router.post(actions.refresh, {}, {
+      preserveScroll: true,
+      onStart: () => {
+        refreshing = true
+      },
+      onFinish: () => {
+        refreshing = false
+      },
+    })
   }
 
   function toggleFavorite(model) {
     router.patch(model.update_path, { model: { favorite: !model.favorite } }, { preserveScroll: true, preserveState: true })
   }
+
+  function toggleUserSelectable(model) {
+    router.patch(model.update_path, { model: { user_selectable: !model.user_selectable } }, { preserveScroll: true, preserveState: true })
+  }
 </script>
+
+<AdminBreadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Models" }]} />
 
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
@@ -46,9 +93,9 @@
       <p class="mt-2 text-sm text-muted-foreground">Browse imported provider metadata, capabilities, context windows, and pricing.</p>
     </div>
 
-    <Button onclick={() => router.post(actions.refresh, {}, { preserveScroll: true, preserveState: true })}>
-      <RefreshCcw class="size-4" />
-      Refresh models
+    <Button onclick={refreshModels} disabled={refreshing}>
+      <RefreshCcw class={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+      {refreshing ? "Refreshing..." : "Refresh models"}
     </Button>
   </section>
 
@@ -98,7 +145,7 @@
         </div>
         <div class="flex items-end gap-2">
           <Button type="submit">Filter</Button>
-          <Button type="button" variant="outline" onclick={() => router.get(actions.index, {}, { preserveScroll: true })}>Clear</Button>
+          <Button type="button" variant="outline" onclick={clearFilters}>Clear</Button>
         </div>
       </form>
     </CardContent>
@@ -112,13 +159,43 @@
       <Table class="min-w-[70rem]">
         <TableHeader>
           <TableRow>
-            <TableHead class="w-14"></TableHead>
-            <TableHead>Model</TableHead>
-            <TableHead>Provider</TableHead>
+            <TableHead class="w-14">
+              <Button type="button" variant="ghost" size="icon" aria-label="Sort by favorite" onclick={() => sortBy("favorite")}>
+                <svelte:component this={sortIcon("favorite")} class="size-4" />
+              </Button>
+            </TableHead>
+            <TableHead class="w-40">
+              <Button type="button" variant="ghost" class="h-auto px-0 py-0 text-xs font-medium uppercase text-muted-foreground hover:bg-transparent hover:text-foreground" onclick={() => sortBy("user_access")}>
+                User access
+                <svelte:component this={sortIcon("user_access")} class="size-3.5" />
+              </Button>
+            </TableHead>
+            <TableHead>
+              <Button type="button" variant="ghost" class="h-auto px-0 py-0 text-xs font-medium uppercase text-muted-foreground hover:bg-transparent hover:text-foreground" onclick={() => sortBy("model")}>
+                Model
+                <svelte:component this={sortIcon("model")} class="size-3.5" />
+              </Button>
+            </TableHead>
+            <TableHead>
+              <Button type="button" variant="ghost" class="h-auto px-0 py-0 text-xs font-medium uppercase text-muted-foreground hover:bg-transparent hover:text-foreground" onclick={() => sortBy("provider")}>
+                Provider
+                <svelte:component this={sortIcon("provider")} class="size-3.5" />
+              </Button>
+            </TableHead>
             <TableHead>I/O</TableHead>
             <TableHead>Capabilities</TableHead>
-            <TableHead class="text-right">Context</TableHead>
-            <TableHead class="text-right">Input / Output</TableHead>
+            <TableHead class="text-right">
+              <Button type="button" variant="ghost" class="ml-auto h-auto px-0 py-0 text-xs font-medium uppercase text-muted-foreground hover:bg-transparent hover:text-foreground" onclick={() => sortBy("context")}>
+                Context
+                <svelte:component this={sortIcon("context")} class="size-3.5" />
+              </Button>
+            </TableHead>
+            <TableHead class="text-right">
+              <Button type="button" variant="ghost" class="ml-auto h-auto px-0 py-0 text-xs font-medium uppercase text-muted-foreground hover:bg-transparent hover:text-foreground" onclick={() => sortBy("price")}>
+                Input / Output
+                <svelte:component this={sortIcon("price")} class="size-3.5" />
+              </Button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -127,6 +204,11 @@
               <TableCell>
                 <Button type="button" variant="ghost" size="icon" aria-label={model.favorite ? `Unfavorite ${model.name}` : `Favorite ${model.name}`} onclick={() => toggleFavorite(model)}>
                   <Star class={`size-4 ${model.favorite ? "fill-primary text-primary" : "text-muted-foreground"}`} />
+                </Button>
+              </TableCell>
+              <TableCell>
+                <Button type="button" variant={model.user_selectable ? "default" : "outline"} size="sm" onclick={() => toggleUserSelectable(model)}>
+                  {model.user_selectable ? "Available" : "Hidden"}
                 </Button>
               </TableCell>
               <TableCell>

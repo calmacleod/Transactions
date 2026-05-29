@@ -13,8 +13,9 @@ module Ai
       "Travel" => /hotel|air canada|westjet|airbnb|booking/i
     }.freeze
 
-    def initialize(model: Ai::Controls.model_for(:classification))
+    def initialize(model: Ai::Controls.model_for(:classification), user: Current.user)
       @model = model
+      @user = user
     end
 
     def classify_all(scope = ExpenseTransaction.unclassified.recent)
@@ -31,7 +32,7 @@ module Ai
 
     private
 
-    attr_reader :model
+    attr_reader :model, :user
 
     def llm_classification(transaction)
       response = Ai::RubyLlmClient.new(feature: :classification, model:).ask(prompt_for(transaction), schema: TransactionClassificationSchema)
@@ -48,7 +49,7 @@ module Ai
     end
 
     def prompt_for(transaction)
-      categories = Category.by_name.pluck(:name).join(", ")
+      categories = category_scope.by_name.pluck(:name).join(", ")
 
       <<~PROMPT
         Classify this credit card transaction for a personal expense tracker.
@@ -89,7 +90,7 @@ module Ai
     end
 
     def apply_result(transaction, result)
-      category = Category.find_or_create_by!(name: result[:category]) do |record|
+      category = category_scope.find_or_create_by!(name: result[:category]) do |record|
         record.color = CategoryColor.pick(result[:category])
       end
 
@@ -99,6 +100,10 @@ module Ai
         classification_reason: result[:reason],
         classified_at: Time.current
       )
+    end
+
+    def category_scope
+      user&.categories || Current.user&.categories || Category.all
     end
   end
 end

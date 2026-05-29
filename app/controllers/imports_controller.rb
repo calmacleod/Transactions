@@ -1,7 +1,7 @@
 class ImportsController < ApplicationController
   def create
     uploaded_file = params.require(:csv_file)
-    batch = StatementCsvImporter.new(io: uploaded_file.tempfile, filename: uploaded_file.original_filename).call
+    batch = StatementCsvImporter.new(io: uploaded_file.tempfile, filename: uploaded_file.original_filename, user: current_user).call
 
     redirect_to root_path, notice: "Imported #{batch.transactions_count} new transactions from #{batch.filename}."
   rescue ActionController::ParameterMissing

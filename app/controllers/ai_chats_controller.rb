@@ -58,6 +58,6 @@ class AiChatsController < ApplicationController
 
     return ExpenseTransaction.none if ids.empty?
 
-    ExpenseTransaction.where(id: ids).includes(:category, :subcategories).recent
+    Current.user.expense_transactions.where(id: ids).includes(:category, :subcategories).recent
   end
 end

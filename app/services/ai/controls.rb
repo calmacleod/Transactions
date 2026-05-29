@@ -10,7 +10,10 @@ module Ai
       AiSetting.get("model")
     end
 
-    def self.model_for(feature)
+    def self.model_for(feature, user: Current.user)
+      preferred_model = user&.preferred_ai_model
+      return preferred_model if preferred_model.present? && Model.user_selectable.exists?(model_id: preferred_model)
+
       key = "#{feature}_model"
       configured = AiSetting.find_by(key:)&.value.presence
       return configured if configured.present?
@@ -45,7 +48,8 @@ module Ai
         estimated_cost_cents: estimated_cost_cents(model, input_tokens, output_tokens),
         estimated_cost_microdollars: estimated_cost_microdollars(model, response, input_tokens, output_tokens),
         successful:,
-        error_message: error&.message
+        error_message: error&.message,
+        user: Current.user
       )
     end
 

@@ -28,7 +28,7 @@ class TransactionFilter
     hash.slice(*FILTER_KEYS).compact_blank
   end
 
-  def call(scope = ExpenseTransaction.all)
+  def call(scope = Current.user&.expense_transactions || ExpenseTransaction.all)
     relation = scope.includes(:category)
     relation = apply_dates(relation)
     relation = relation.where(category_id: params["category_id"]) if params["category_id"].present?

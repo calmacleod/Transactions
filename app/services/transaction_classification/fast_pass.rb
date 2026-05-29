@@ -40,7 +40,7 @@ module TransactionClassification
 
     def ensure_categories(names)
       names.each_with_object({}) do |name, categories|
-        categories[name] = Category.find_or_create_by!(name:) do |category|
+        categories[name] = category_scope.find_or_create_by!(name:) do |category|
           category.color = CategoryColor.pick(name)
         end
       end
@@ -88,6 +88,10 @@ module TransactionClassification
         ai: 0,
         failed: 0
       )
+    end
+
+    def category_scope
+      run.user&.categories || Category.all
     end
   end
 end

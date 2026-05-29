@@ -1,10 +1,11 @@
 class DashboardSummary
   DISCRETIONARY_CATEGORIES = %w[Restaurants Shopping Subscriptions Entertainment Travel].freeze
 
-  attr_reader :range
+  attr_reader :range, :user
 
-  def initialize(range: Date.current.beginning_of_month..Date.current.end_of_month)
+  def initialize(range: Date.current.beginning_of_month..Date.current.end_of_month, user: Current.user)
     @range = range
+    @user = user
   end
 
   def total_spend_cents
@@ -51,7 +52,7 @@ class DashboardSummary
   def month_trend(months: 4)
     end_month = Date.current.beginning_of_month
     start_month = (months - 1).months.ago.to_date.beginning_of_month
-    records = ExpenseTransaction.expenses.where(occurred_on: start_month..end_month.end_of_month)
+    records = transaction_scope.expenses.where(occurred_on: start_month..end_month.end_of_month)
     totals = records.group_by { |transaction| transaction.occurred_on.beginning_of_month }
 
     months.times.map do |offset|
@@ -98,7 +99,7 @@ class DashboardSummary
   private
 
   def transactions
-    @transactions ||= ExpenseTransaction.includes(:category).between(range.begin, range.end)
+    @transactions ||= transaction_scope.includes(:category).between(range.begin, range.end)
   end
 
   def expenses
@@ -201,6 +202,10 @@ class DashboardSummary
 
   def uncategorized_category
     @uncategorized_category ||= Category.new(name: "Uncategorized", color: "#64748b")
+  end
+
+  def transaction_scope
+    user&.expense_transactions || ExpenseTransaction.all
   end
 
   def money(cents)

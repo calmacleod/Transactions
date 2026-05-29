@@ -7,7 +7,8 @@ class SessionsController < ApplicationController
       email_address: params[:email_address],
       actions: {
         session: session_path,
-        new_password: new_password_path
+        new_password: new_password_path,
+        new_registration: new_registration_path
       }
     }
   end

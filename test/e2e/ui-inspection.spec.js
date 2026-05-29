@@ -312,7 +312,7 @@ test("theme toggle persists dark mode in local storage", async ({ page }) => {
 })
 
 test("secondary pages render without blank or broken Inertia content", async ({ page }) => {
-  for (const path of ["/insights", "/models"]) {
+  for (const path of ["/insights", "/admin/models"]) {
     await page.goto(path)
     await expect(page.locator("#app")).not.toBeEmpty()
     await expectNoViewportOverflow(page)

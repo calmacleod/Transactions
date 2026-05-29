@@ -1,4 +1,6 @@
 class ClassificationRun < ApplicationRecord
+  include UserOwned
+
   ACTIVE_STATUSES = %w[queued running canceling].freeze
   TERMINAL_STATUSES = %w[complete canceled failed].freeze
   STATUSES = (ACTIVE_STATUSES + TERMINAL_STATUSES).freeze

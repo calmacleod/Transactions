@@ -13,7 +13,8 @@ module Ai
       def execute(start_date: nil, end_date: nil)
         start_on = parse_date(start_date) || Date.current.beginning_of_month
         end_on = parse_date(end_date) || Date.current
-        transactions = ExpenseTransaction.expenses.includes(:category).between(start_on, end_on).to_a
+        transaction_scope = Current.user&.expense_transactions || ExpenseTransaction.all
+        transactions = transaction_scope.expenses.includes(:category).between(start_on, end_on).to_a
 
         {
           start_date: start_on,

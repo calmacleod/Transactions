@@ -5,13 +5,14 @@ class StatementCsvImporter
   HEADERLESS_COLUMNS = %i[occurred_on description debit credit card_number].freeze
   SOURCE = "statement_csv"
 
-  def initialize(io:, filename:)
+  def initialize(io:, filename:, user: Current.user)
     @io = io
     @filename = filename.presence || "transactions.csv"
+    @user = user
   end
 
   def call
-    batch = ImportBatch.create!(filename:, imported_at: Time.current, status: "processing")
+    batch = ImportBatch.create!(filename:, imported_at: Time.current, status: "processing", user:)
     rows_count = 0
     transactions_count = 0
 
@@ -25,7 +26,7 @@ class StatementCsvImporter
       if transaction
         transaction.update!(external_id: attributes[:external_id]) if transaction.external_id.blank?
       else
-        ExpenseTransaction.create!(attributes.merge(import_batch: batch))
+        ExpenseTransaction.create!(attributes.merge(import_batch: batch, user:))
         transactions_count += 1
       end
     end
@@ -41,7 +42,7 @@ class StatementCsvImporter
 
   private
 
-  attr_reader :io, :filename
+  attr_reader :io, :filename, :user
 
   def attributes_for(row)
     values = HEADERLESS_COLUMNS.zip(row).to_h
@@ -66,8 +67,8 @@ class StatementCsvImporter
   end
 
   def find_existing_transaction(attributes)
-    ExpenseTransaction.find_by(external_id: attributes[:external_id]) ||
-      ExpenseTransaction.find_by(
+    transaction_scope.find_by(external_id: attributes[:external_id]) ||
+      transaction_scope.find_by(
         occurred_on: attributes[:occurred_on],
         description: attributes[:description],
         amount_cents: attributes[:amount_cents],
@@ -75,13 +76,17 @@ class StatementCsvImporter
         card_last4: attributes[:card_last4],
         source: attributes[:source]
       ) ||
-      ExpenseTransaction.find_by(
+      transaction_scope.find_by(
         occurred_on: attributes[:occurred_on],
         description: attributes[:description],
         amount_cents: attributes[:amount_cents],
         direction: attributes[:direction],
         card_last4: attributes[:card_last4]
       )
+  end
+
+  def transaction_scope
+    ExpenseTransaction.where(user:)
   end
 
   def parse_money(value)

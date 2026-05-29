@@ -1,6 +1,6 @@
 class ClassificationRunsController < ApplicationController
   def show
-    classification_run = ClassificationRun.find(params[:id])
+    classification_run = current_user.classification_runs.find(params[:id])
 
     respond_to do |format|
       format.json { render json: { classification_run: classification_run_props(classification_run) } }
@@ -9,7 +9,7 @@ class ClassificationRunsController < ApplicationController
   end
 
   def cancel
-    classification_run = ClassificationRun.find(params[:id])
+    classification_run = current_user.classification_runs.find(params[:id])
     classification_run.request_cancel!
     classification_run.cancel! if discard_queued_job(classification_run)
 
@@ -17,7 +17,7 @@ class ClassificationRunsController < ApplicationController
   end
 
   def dismiss
-    classification_run = ClassificationRun.find(params[:id])
+    classification_run = current_user.classification_runs.find(params[:id])
     session[:dismissed_classification_run_id] = classification_run.id
 
     redirect_to root_path, notice: "Classification dismissed."

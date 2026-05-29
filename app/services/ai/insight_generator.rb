@@ -1,11 +1,12 @@
 module Ai
   class InsightGenerator
-    def initialize(model: Ai::Controls.model_for(:insights))
+    def initialize(model: Ai::Controls.model_for(:insights), user: Current.user)
       @model = model
+      @user = user
     end
 
     def call(start_date: 4.months.ago.to_date.beginning_of_month, end_date: Date.current)
-      transactions = ExpenseTransaction.includes(:category).between(start_date, end_date)
+      transactions = transaction_scope.includes(:category).between(start_date, end_date)
       payload = summary_payload(transactions)
       source = "automatic"
       insights = llm_insights(payload) if Ai::Controls.enabled?(:insights)
@@ -15,7 +16,7 @@ module Ai
         insights = fallback_insights(payload)
       end
 
-      Insight.where(starts_on: start_date, ends_on: end_date).destroy_all
+      insight_scope.where(starts_on: start_date, ends_on: end_date).destroy_all
       insights.map do |attributes|
         transaction_ids = Array(attributes[:transaction_ids]).map(&:to_i) & payload[:transaction_ids]
         insight = Insight.create!(
@@ -25,7 +26,8 @@ module Ai
           starts_on: start_date,
           ends_on: end_date,
           generation_source: source,
-          payload:
+          payload:,
+          user:
         )
         insight.expense_transaction_ids = transaction_ids
         insight
@@ -34,7 +36,7 @@ module Ai
 
     private
 
-    attr_reader :model
+    attr_reader :model, :user
 
     def llm_insights(payload)
       response = Ai::RubyLlmClient.new(feature: :insights, model:).ask(<<~PROMPT, schema: ExpenseInsightsSchema)
@@ -179,6 +181,14 @@ module Ai
         weekday_totals: transactions.group_by { |transaction| transaction.occurred_on.strftime("%A") }
                                     .transform_values { |items| items.sort_by { |transaction| -transaction.amount_cents }.first(10).map(&:id) }
       }
+    end
+
+    def transaction_scope
+      user&.expense_transactions || ExpenseTransaction.all
+    end
+
+    def insight_scope
+      user&.insights || Insight.all
     end
   end
 end

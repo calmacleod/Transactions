@@ -1,0 +1,10 @@
+You have been invited to Transactions.
+
+Use this one-time code to create your account:
+
+<%= @code %>
+
+Create account:
+<%= @registration_url %>
+
+This invitation expires on <%= @invitation.expires_at.strftime("%B %-d, %Y") %>.

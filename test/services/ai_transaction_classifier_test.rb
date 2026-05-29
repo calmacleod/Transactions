@@ -10,10 +10,11 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
         direction: "debit",
         card_last4: "2222",
         source: "test",
-        external_id: "pet-valu-row"
+        external_id: "pet-valu-row",
+        user: users(:one)
       )
 
-      Ai::TransactionClassifier.new.classify(transaction)
+      Ai::TransactionClassifier.new(user: users(:one)).classify(transaction)
 
       assert_equal "Pets", transaction.reload.category.name
       assert_equal 0.65.to_d, transaction.classification_confidence
@@ -30,10 +31,11 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
         direction: "credit",
         card_last4: "2222",
         source: "test",
-        external_id: "payment-row"
+        external_id: "payment-row",
+        user: users(:one)
       )
 
-      Ai::TransactionClassifier.new.classify(transaction)
+      Ai::TransactionClassifier.new(user: users(:one)).classify(transaction)
 
       assert_equal "Payments", transaction.reload.category.name
       assert_equal 1.0.to_d, transaction.classification_confidence
@@ -50,10 +52,11 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
         direction: "debit",
         card_last4: "2222",
         source: "test",
-        external_id: "openai-subscription-row"
+        external_id: "openai-subscription-row",
+        user: users(:one)
       )
 
-      Ai::TransactionClassifier.new.classify(transaction)
+      Ai::TransactionClassifier.new(user: users(:one)).classify(transaction)
 
       assert_equal "Subscriptions", transaction.reload.category.name
       assert_equal 0.65.to_d, transaction.classification_confidence
@@ -70,14 +73,15 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
       direction: "debit",
       card_last4: "2222",
       source: "test",
-      external_id: "pet-valu-local-first-row"
+      external_id: "pet-valu-local-first-row",
+      user: users(:one)
     )
 
     RubyLLM.singleton_class.alias_method :chat_without_local_first_test, :chat
     RubyLLM.define_singleton_method(:chat) { |*| raise "AI should not be called for local rule matches" }
 
     begin
-      Ai::TransactionClassifier.new.classify(transaction)
+      Ai::TransactionClassifier.new(user: users(:one)).classify(transaction)
     ensure
       RubyLLM.singleton_class.alias_method :chat, :chat_without_local_first_test
       RubyLLM.singleton_class.remove_method :chat_without_local_first_test

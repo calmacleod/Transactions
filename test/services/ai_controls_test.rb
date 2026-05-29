@@ -37,4 +37,21 @@ class AiControlsTest < ActiveSupport::TestCase
     assert_equal "chat-model", Ai::Controls.model_for(:chat)
     assert_equal "default-model", Ai::Controls.model_for(:insights)
   end
+
+  test "uses a user's selected model when admins have made it selectable" do
+    Model.create!(provider: "openai", model_id: "user-model", name: "User Model", user_selectable: true)
+    users(:two).update!(preferred_ai_model: "user-model")
+    AiSetting.set("chat_model", "chat-model")
+
+    assert_equal "user-model", Ai::Controls.model_for(:chat, user: users(:two))
+  end
+
+  test "ignores user model preferences that are no longer selectable" do
+    model = Model.create!(provider: "openai", model_id: "temporary-model", name: "Temporary Model", user_selectable: true)
+    users(:two).update!(preferred_ai_model: "temporary-model")
+    model.update!(user_selectable: false)
+    AiSetting.set("chat_model", "chat-model")
+
+    assert_equal "chat-model", Ai::Controls.model_for(:chat, user: users(:two))
+  end
 end

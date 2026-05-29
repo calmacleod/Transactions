@@ -1,0 +1,11 @@
+<h1>You have been invited to Transactions</h1>
+
+<p>Use this one-time code to create your account:</p>
+
+<p class="code"><%= @code %></p>
+
+<p><a class="button" href="<%= @registration_url %>">Create account</a></p>
+
+<p>This invitation expires on <%= @invitation.expires_at.strftime("%B %-d, %Y") %>.</p>
+
+<p class="muted">Transactions is a local-first expense tracker for credit card CSV exports.</p>

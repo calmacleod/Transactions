@@ -4,11 +4,12 @@
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { Input } from "$lib/components/ui/input"
-  import { Label } from "$lib/components/ui/label"
   import { NativeSelect, NativeSelectOption } from "$lib/components/ui/native-select"
+  import AdminBreadcrumbs from "../admin/AdminBreadcrumbs.svelte"
+  import ModelSelect from "../components/ModelSelect.svelte"
 
   export let settings
-  export let favorite_models = []
+  export let selectable_models = []
   export let provider_status
   export let usage
   export let feature_statuses = []
@@ -32,6 +33,8 @@
   ]
 </script>
 
+<AdminBreadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "AI controls" }]} />
+
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-primary">AI visibility</p>
@@ -49,39 +52,30 @@
     <CardContent>
       <form class="grid gap-4" on:submit|preventDefault={save}>
         <div class="space-y-1.5">
-          <Label for="ai-model">Default model</Label>
-          <Input id="ai-model" bind:value={form.model} placeholder="gpt-5-nano" list="favorite-models" />
-          <datalist id="favorite-models">
-            {#each favorite_models as model}
-              <option value={model.model_id}>{model.label}</option>
-            {/each}
-          </datalist>
+          <ModelSelect id="ai-model" label="Default model" bind:value={form.model} models={selectable_models} />
         </div>
         <div class="grid gap-3 md:grid-cols-3">
           {#each modelInputs as input}
-            <div class="space-y-1.5">
-              <Label for={input.id}>{input.label}</Label>
-              <Input id={input.id} bind:value={form[input.key]} placeholder={form.model || "gpt-5-nano"} list="favorite-models" />
-            </div>
+            <ModelSelect id={input.id} label={input.label} bind:value={form[input.key]} models={selectable_models} />
           {/each}
         </div>
         <div class="grid gap-3 sm:grid-cols-3">
           <div class="space-y-1.5">
-            <Label for="classification-enabled">Classification</Label>
+            <label for="classification-enabled" class="text-sm leading-none font-medium">Classification</label>
             <NativeSelect id="classification-enabled" bind:value={form.classification_enabled}>
               <NativeSelectOption value="true">Enabled</NativeSelectOption>
               <NativeSelectOption value="false">Disabled</NativeSelectOption>
             </NativeSelect>
           </div>
           <div class="space-y-1.5">
-            <Label for="insights-enabled">Insights</Label>
+            <label for="insights-enabled" class="text-sm leading-none font-medium">Insights</label>
             <NativeSelect id="insights-enabled" bind:value={form.insights_enabled}>
               <NativeSelectOption value="true">Enabled</NativeSelectOption>
               <NativeSelectOption value="false">Disabled</NativeSelectOption>
             </NativeSelect>
           </div>
           <div class="space-y-1.5">
-            <Label for="chat-enabled">Chat</Label>
+            <label for="chat-enabled" class="text-sm leading-none font-medium">Chat</label>
             <NativeSelect id="chat-enabled" bind:value={form.chat_enabled}>
               <NativeSelectOption value="true">Enabled</NativeSelectOption>
               <NativeSelectOption value="false">Disabled</NativeSelectOption>
@@ -89,7 +83,7 @@
           </div>
         </div>
         <div class="space-y-1.5">
-          <Label for="monthly-request-limit">Monthly request limit</Label>
+          <label for="monthly-request-limit" class="text-sm leading-none font-medium">Monthly request limit</label>
           <Input id="monthly-request-limit" type="number" min="0" bind:value={form.monthly_request_limit} />
           <p class="text-xs text-muted-foreground">Use 0 for no app-level request cap.</p>
         </div>

@@ -1,9 +1,11 @@
 groceries:
+  user: one
   name: Groceries
   color: "#059669"
   monthly_budget_cents: 80000
 
 restaurants:
+  user: one
   name: Restaurants
   color: "#dc2626"
   monthly_budget_cents: 45000

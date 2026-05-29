@@ -1,10 +1,10 @@
 class DashboardController < ApplicationController
   def index
-    transactions = ExpenseTransaction.includes(:category).recent.limit(4)
-    insights = Insight.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6)
-    categories = Category.by_name
+    transactions = current_user.expense_transactions.includes(:category).recent.limit(4)
+    insights = current_user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6)
+    categories = current_user.categories.by_name
     month_range = Date.current.beginning_of_month..Date.current.end_of_month
-    dashboard = DashboardSummary.new(range: month_range)
+    dashboard = DashboardSummary.new(range: month_range, user: current_user)
     category_totals = dashboard.category_totals
     day_totals = dashboard.day_of_week_totals
     month_trend = dashboard.month_trend
@@ -20,7 +20,7 @@ class DashboardController < ApplicationController
         expense_count: dashboard.expense_count,
         transaction_count: dashboard.transaction_count,
         average_expense_label: money_from_cents(dashboard.average_expense_cents),
-        unclassified_count: ExpenseTransaction.unclassified.count,
+        unclassified_count: current_user.expense_transactions.unclassified.count,
         category_count: categories.count
       },
       category_totals: category_totals.map { |item| dashboard_item_props(item) },
@@ -52,7 +52,7 @@ class DashboardController < ApplicationController
   end
 
   def visible_classification_run
-    latest_run = ClassificationRun.latest.first
+    latest_run = current_user.classification_runs.latest.first
     return if latest_run.blank?
     return if session[:dismissed_classification_run_id] == latest_run.id
 

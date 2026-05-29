@@ -3,7 +3,7 @@ require "test_helper"
 class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
   test "shows classification progress" do
     sign_in_as users(:one)
-    run = ClassificationRun.create!(status: "running", total_count: 10, processed_count: 4, classified_count: 4, rule_based_count: 4)
+    run = users(:one).classification_runs.create!(status: "running", total_count: 10, processed_count: 4, classified_count: 4, rule_based_count: 4)
 
     get classification_run_path(run)
 
@@ -15,7 +15,7 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
 
   test "requests cancellation" do
     sign_in_as users(:one)
-    run = ClassificationRun.create!(status: "running")
+    run = users(:one).classification_runs.create!(status: "running")
 
     patch cancel_classification_run_path(run)
 
@@ -26,7 +26,7 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
 
   test "cancels without solid queue tables in the test adapter" do
     sign_in_as users(:one)
-    run = ClassificationRun.create!(status: "queued", active_job_id: "missing-solid-queue-row")
+    run = users(:one).classification_runs.create!(status: "queued", active_job_id: "missing-solid-queue-row")
 
     patch cancel_classification_run_path(run)
 
@@ -36,7 +36,7 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
 
   test "requests cancellation through Inertia redirect" do
     sign_in_as users(:one)
-    run = ClassificationRun.create!(status: "running")
+    run = users(:one).classification_runs.create!(status: "running")
 
     patch cancel_classification_run_path(run), headers: { "X-Inertia" => "true" }
 
@@ -46,7 +46,7 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
 
   test "dismisses classification progress for the session" do
     sign_in_as users(:one)
-    run = ClassificationRun.create!(status: "complete", total_count: 0, finished_at: Time.current)
+    run = users(:one).classification_runs.create!(status: "complete", total_count: 0, finished_at: Time.current)
 
     patch dismiss_classification_run_path(run)
 
@@ -60,7 +60,7 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
 
   test "dismisses classification progress through Inertia redirect" do
     sign_in_as users(:one)
-    run = ClassificationRun.create!(status: "complete", total_count: 0, finished_at: Time.current)
+    run = users(:one).classification_runs.create!(status: "complete", total_count: 0, finished_at: Time.current)
 
     patch dismiss_classification_run_path(run), headers: { "X-Inertia" => "true" }
 

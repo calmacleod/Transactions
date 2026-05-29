@@ -4,6 +4,7 @@ class ProcessAiChatMessageJob < ApplicationJob
   def perform(chat_id, assistant_message_id)
     chat = AiChat.find(chat_id)
     assistant_message = chat.messages.find(assistant_message_id)
+    Current.session = Session.new(user: chat.user)
 
     assistant_message.update!(status: "thinking")
     AiChatChannel.broadcast_message_update(chat, assistant_message)

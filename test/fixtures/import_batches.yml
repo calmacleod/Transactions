@@ -1,4 +1,5 @@
 statement:
+  user: one
   filename: sample.csv
   imported_at: 2026-05-25 09:36:19
   rows_count: 1

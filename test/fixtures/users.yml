@@ -3,7 +3,11 @@
 one:
   email_address: one@example.com
   password_digest: <%= password_digest %>
+  role: admin
+  onboarding_dismissed_at: 2026-05-25 09:00:00
 
 two:
   email_address: two@example.com
   password_digest: <%= password_digest %>
+  role: regular
+  onboarding_dismissed_at:

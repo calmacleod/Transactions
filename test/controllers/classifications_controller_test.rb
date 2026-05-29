@@ -9,14 +9,14 @@ class ClassificationsControllerTest < ActionDispatch::IntegrationTest
     end
 
     run = ClassificationRun.latest.first
-    assert_enqueued_with(job: ClassifyTransactionsJob, args: [ run.id ])
+    assert_enqueued_with(job: ClassifyTransactionsJob, args: [ run.id, nil, users(:one).id ])
     assert_equal ExpenseTransaction.unclassified.count, run.total_count
     assert_redirected_to root_path
   end
 
   test "does not queue a second active classification" do
     sign_in_as users(:one)
-    ClassificationRun.create!(status: "running")
+    users(:one).classification_runs.create!(status: "running")
 
     assert_no_difference -> { ClassificationRun.count } do
       post classifications_path

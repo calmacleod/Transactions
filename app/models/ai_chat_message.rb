@@ -1,4 +1,6 @@
 class AiChatMessage < ApplicationRecord
+  include UserOwned
+
   belongs_to :ai_chat
 
   validates :role, presence: true

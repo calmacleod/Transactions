@@ -1,4 +1,6 @@
 class AiControlsController < ApplicationController
+  before_action :require_admin_user
+
   def show
     render inertia: ai_controls_props
   end
@@ -8,7 +10,7 @@ class AiControlsController < ApplicationController
       AiSetting.set(key, value)
     end
 
-    redirect_to ai_controls_path, notice: "AI controls updated."
+    redirect_to admin_ai_controls_path, notice: "AI controls updated."
   end
 
   private
@@ -16,11 +18,11 @@ class AiControlsController < ApplicationController
   def ai_controls_props
     requests = AiRequest.recent.limit(20)
     this_month = AiRequest.this_month
-    favorite_models = Model.ordered.where(favorite: true).limit(20)
+    selectable_models = Model.user_selectable.ordered.limit(20)
 
     {
       settings: AiSetting.values,
-      favorite_models: favorite_models.map { |model| model_option_props(model) },
+      selectable_models: selectable_models.map { |model| model_option_props(model) },
       provider_status: {
         configured: Ai::Controls.provider_configured?,
         openai: ENV["OPENAI_API_KEY"].present?,
@@ -30,7 +32,7 @@ class AiControlsController < ApplicationController
       usage: {
         month_count: this_month.count,
         month_success_count: this_month.successful.count,
-        estimated_cost_label: money_from_microdollars(total_microdollars(this_month)),
+        estimated_cost_label: money_from_microdollars(ai_request_microdollars(this_month)),
         monthly_request_limit: Ai::Controls.monthly_request_limit,
         remaining_requests: remaining_requests(this_month.count)
       },
@@ -44,7 +46,7 @@ class AiControlsController < ApplicationController
       end,
       recent_requests: requests.map { |request| request_props(request) },
       actions: {
-        update: ai_controls_path
+        update: admin_ai_controls_path
       }
     }
   end
@@ -72,26 +74,6 @@ class AiControlsController < ApplicationController
       error_message: request.error_message,
       created_at_label: request.created_at.strftime("%b %-d, %H:%M")
     }
-  end
-
-  def model_option_props(model)
-    {
-      id: model.id,
-      label: "#{model.name} (#{model.model_id})",
-      model_id: model.model_id,
-      provider: model.provider
-    }
-  end
-
-  def money_from_microdollars(microdollars)
-    helpers.number_to_currency(microdollars.to_i / 1_000_000.0)
-  end
-
-  def total_microdollars(scope)
-    microdollars = scope.sum(:estimated_cost_microdollars)
-    return microdollars if microdollars.positive?
-
-    scope.sum(:estimated_cost_cents) * 10_000
   end
 
   def request_microdollars(request)

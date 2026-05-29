@@ -2,14 +2,14 @@ class BudgetsController < ApplicationController
   def index
     month = budget_month
     range = month..month.end_of_month
-    totals = ExpenseTransaction.expenses.includes(:category).between(range.begin, range.end).group(:category_id).sum(:amount_cents)
+    totals = current_user.expense_transactions.expenses.includes(:category).between(range.begin, range.end).group(:category_id).sum(:amount_cents)
 
     render inertia: {
       month: {
         value: month.strftime("%Y-%m"),
         label: month.strftime("%B %Y")
       },
-      categories: Category.by_name.map { |category| budget_category_props(category, totals.fetch(category.id, 0), range) },
+      categories: current_user.categories.by_name.map { |category| budget_category_props(category, totals.fetch(category.id, 0), range) },
       unclassified: unclassified_props(totals.fetch(nil, 0), range),
       actions: {
         index: budgets_path,
@@ -19,7 +19,7 @@ class BudgetsController < ApplicationController
   end
 
   def update
-    category = Category.find(params[:id])
+    category = current_user.categories.find(params[:id])
     category.update!(monthly_budget_cents: dollars_to_cents(params.dig(:category, :monthly_budget)))
 
     redirect_back fallback_location: budgets_path, notice: "#{category.name} budget updated."

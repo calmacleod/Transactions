@@ -8,7 +8,7 @@ class StatementCsvImporterTest < ActiveSupport::TestCase
       2026-05-20,"SAMPLE REFUND",,4.99,1111********2222
     CSV
 
-    batch = StatementCsvImporter.new(io: csv, filename: "sample.csv").call
+    batch = StatementCsvImporter.new(io: csv, filename: "sample.csv", user: users(:one)).call
 
     assert_equal "complete", batch.status
     assert_equal 2, batch.rows_count
@@ -29,11 +29,11 @@ class StatementCsvImporterTest < ActiveSupport::TestCase
     csv = "2026-05-22,\"SAMPLE ONLINE STORE TORONTO, ON\",17.24,,1111********2222\n"
 
     assert_difference -> { ExpenseTransaction.count }, 1 do
-      StatementCsvImporter.new(io: StringIO.new(csv), filename: "sample.csv").call
+      StatementCsvImporter.new(io: StringIO.new(csv), filename: "sample.csv", user: users(:one)).call
     end
 
     assert_no_difference -> { ExpenseTransaction.count } do
-      StatementCsvImporter.new(io: StringIO.new(csv), filename: "sample.csv").call
+      StatementCsvImporter.new(io: StringIO.new(csv), filename: "sample.csv", user: users(:one)).call
     end
   end
 
@@ -47,13 +47,14 @@ class StatementCsvImporterTest < ActiveSupport::TestCase
       card_last4: "2222",
       source: "statement_csv",
       external_id: "legacy-id",
-      import_batch: original_batch
+      import_batch: original_batch,
+      user: users(:one)
     )
 
     csv = "2026-05-22,\"SAMPLE ONLINE STORE TORONTO, ON\",17.24,,1111********2222\n"
 
     assert_no_difference -> { ExpenseTransaction.count } do
-      batch = StatementCsvImporter.new(io: StringIO.new(csv), filename: "reimport.csv").call
+      batch = StatementCsvImporter.new(io: StringIO.new(csv), filename: "reimport.csv", user: users(:one)).call
       assert_equal 0, batch.transactions_count
     end
 

@@ -9,9 +9,10 @@ class TransactionClassificationFastPassTest < ActiveSupport::TestCase
       direction: "debit",
       card_last4: "2222",
       source: "test",
-      external_id: "fast-pass-pet-row"
+      external_id: "fast-pass-pet-row",
+      user: users(:one)
     )
-    run = ClassificationRun.create!
+    run = users(:one).classification_runs.create!
 
     TransactionClassification::FastPass.new(run:).call(ExpenseTransaction.where(id: transaction.id))
 
@@ -32,9 +33,10 @@ class TransactionClassificationFastPassTest < ActiveSupport::TestCase
       direction: "debit",
       card_last4: "2222",
       source: "test",
-      external_id: "fast-pass-cancel-row"
+      external_id: "fast-pass-cancel-row",
+      user: users(:one)
     )
-    run = ClassificationRun.create!(cancel_requested_at: Time.current)
+    run = users(:one).classification_runs.create!(cancel_requested_at: Time.current)
 
     TransactionClassification::FastPass.new(run:).call(ExpenseTransaction.where(id: transaction.id))
 

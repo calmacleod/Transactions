@@ -2,6 +2,7 @@ class Model < ApplicationRecord
   acts_as_model
 
   scope :ordered, -> { order(favorite: :desc, provider: :asc, name: :asc) }
+  scope :user_selectable, -> { where(user_selectable: true) }
   scope :by_provider, ->(provider) { provider.present? ? where(provider:) : all }
   scope :matching, ->(query) {
     next all if query.blank?
