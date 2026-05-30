@@ -7,6 +7,25 @@ class AuthenticationAccessTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_path
   end
 
+  test "returns authenticated visitors to the requested page" do
+    get transactions_path
+
+    assert_redirected_to new_session_path
+
+    post session_path, params: { email_address: users(:one).email_address, password: "password" }
+
+    assert_redirected_to transactions_path
+  end
+
+  test "does not replace the sign in return path with background json requests" do
+    get transactions_path
+    get offline_snapshot_path(format: :json)
+
+    post session_path, params: { email_address: users(:one).email_address, password: "password" }
+
+    assert_redirected_to transactions_path
+  end
+
   test "allows authenticated visitors through" do
     sign_in_as users(:one)
 

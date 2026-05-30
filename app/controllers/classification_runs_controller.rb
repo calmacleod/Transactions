@@ -18,6 +18,7 @@ class ClassificationRunsController < ApplicationController
 
   def dismiss
     classification_run = current_user.classification_runs.find(params[:id])
+    classification_run.update!(dismissed_at: Time.current)
     session[:dismissed_classification_run_id] = classification_run.id
 
     redirect_to root_path, notice: "Classification dismissed."

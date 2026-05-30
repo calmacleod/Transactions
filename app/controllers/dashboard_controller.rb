@@ -57,6 +57,7 @@ class DashboardController < ApplicationController
   def visible_classification_run
     latest_run = current_user.classification_runs.latest.first
     return if latest_run.blank?
+    return if latest_run.dismissed_at.present?
     return if session[:dismissed_classification_run_id] == latest_run.id
 
     latest_run

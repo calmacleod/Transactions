@@ -3,7 +3,7 @@ Rails.application.routes.draw do
   constraints(host: "127.0.0.1") do
     get "(*path)", to: redirect { |_params, req| "#{req.protocol}localhost:#{req.port}#{req.fullpath}" }
   end
-  resource :session
+  resource :session, only: %i[new create destroy]
   resources :passwords, param: :token
   resources :registrations, only: %i[new create]
   root "dashboard#index"

@@ -12,13 +12,21 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
   test "create with valid credentials" do
     post session_path, params: { email_address: @user.email_address, password: "password" }
 
+    assert_response :see_other
     assert_redirected_to root_path
     assert cookies[:session_id]
+  end
+
+  test "does not route unused session member actions" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("/session", method: :get)
+    end
   end
 
   test "create with invalid credentials" do
     post session_path, params: { email_address: @user.email_address, password: "wrong" }
 
+    assert_response :see_other
     assert_redirected_to new_session_path
     assert_nil cookies[:session_id]
   end

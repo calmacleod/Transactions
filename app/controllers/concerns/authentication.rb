@@ -30,12 +30,25 @@ module Authentication
     end
 
     def request_authentication
-      session[:return_to_after_authenticating] = request.url
+      store_return_to_after_authenticating
       redirect_to Rails.application.routes.url_helpers.new_session_path
     end
 
     def after_authentication_url
-      session.delete(:return_to_after_authenticating) || root_url
+      session.delete(:return_to_after_authenticating) || root_path
+    end
+
+    def store_return_to_after_authenticating
+      return unless storable_authentication_return_path?
+
+      session[:return_to_after_authenticating] = request.fullpath
+    end
+
+    def storable_authentication_return_path?
+      request.get? &&
+        request.format.html? &&
+        request.path != "/session" &&
+        request.path != "/session/new"
     end
 
     def start_new_session_for(user)

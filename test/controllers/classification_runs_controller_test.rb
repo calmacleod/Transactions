@@ -44,14 +44,17 @@ class ClassificationRunsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "canceling", run.reload.status
   end
 
-  test "dismisses classification progress for the session" do
+  test "dismisses classification progress permanently" do
     sign_in_as users(:one)
     run = users(:one).classification_runs.create!(status: "complete", total_count: 0, finished_at: Time.current)
 
     patch dismiss_classification_run_path(run)
 
     assert_redirected_to root_path
+    assert run.reload.dismissed_at
 
+    reset!
+    sign_in_as users(:one)
     get root_path
 
     assert_response :success
