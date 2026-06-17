@@ -167,5 +167,4 @@ class ApplicationController < ActionController::Base
       transactions: insight.expense_transactions.includes(:category, :subcategories).recent.limit(25).map { |transaction| transaction_props(transaction) }
     }
   end
-
 end
