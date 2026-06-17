@@ -43,10 +43,6 @@ Rails.application.routes.draw do
   resource :onboarding, only: :update, controller: :onboarding
   resources :ai_chats, only: %i[index show]
   resource :classifications, only: :create
-  resources :classification_runs, only: :show do
-    patch :cancel, on: :member
-    patch :dismiss, on: :member
-  end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

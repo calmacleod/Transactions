@@ -4,7 +4,9 @@ class DashboardControllerTest < ActionDispatch::IntegrationTest
   test "shows upload prompt with days since last completed import" do
     sign_in_as users(:one)
 
-    get root_path
+    travel_to Date.new(2026, 5, 29) do
+      get root_path
+    end
 
     assert_response :success
     assert_equal 4, inertia_props.dig("upload_prompt", "days_since_last_upload")

@@ -33,7 +33,6 @@ class DashboardController < ApplicationController
       recommendations: dashboard.recommendations.map { |item| dashboard_item_props(item) },
       transactions: transactions.map { |transaction| transaction_props(transaction) },
       insights: insights.map { |insight| insight_props(insight) },
-      classification_run: classification_run_props(visible_classification_run),
       upload_prompt: upload_prompt_props(latest_completed_import),
       unfinished_import: unfinished_import_props(unfinished_import),
       actions: {
@@ -52,15 +51,6 @@ class DashboardController < ApplicationController
       amount_label: money_from_cents(item[:cents].to_i),
       filters_path: transactions_path(item[:filters] || {})
     )
-  end
-
-  def visible_classification_run
-    latest_run = current_user.classification_runs.latest.first
-    return if latest_run.blank?
-    return if latest_run.dismissed_at.present?
-    return if session[:dismissed_classification_run_id] == latest_run.id
-
-    latest_run
   end
 
   def upload_prompt_props(import_batch)

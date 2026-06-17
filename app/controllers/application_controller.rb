@@ -168,25 +168,4 @@ class ApplicationController < ActionController::Base
     }
   end
 
-  def classification_run_props(classification_run)
-    return nil if classification_run.blank?
-
-    {
-      id: classification_run.id,
-      status: classification_run.status,
-      status_label: classification_run.status.humanize,
-      active: classification_run.active?,
-      cancellable: classification_run.cancellable?,
-      processed_count: classification_run.processed_count,
-      total_count: classification_run.total_count,
-      classified_count: classification_run.classified_count,
-      rule_based_count: classification_run.rule_based_count,
-      failed_count: classification_run.failed_count,
-      progress_percent: classification_run.progress_percent,
-      notes: classification_run.notes,
-      show_path: classification_run_path(classification_run),
-      cancel_path: cancel_classification_run_path(classification_run),
-      dismiss_path: dismiss_classification_run_path(classification_run)
-    }
-  end
 end

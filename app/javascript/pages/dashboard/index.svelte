@@ -7,7 +7,6 @@
   import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "$lib/components/ui/sheet"
   import { Table, TableBody, TableCell, TableRow } from "$lib/components/ui/table"
   import CategoryBadge from "../components/CategoryBadge.svelte"
-  import ClassificationRun from "../components/ClassificationRun.svelte"
   import { badgeVariant } from "$lib/formatters"
   import CalendarDays from "@lucide/svelte/icons/calendar-days"
   import CreditCard from "@lucide/svelte/icons/credit-card"
@@ -27,7 +26,6 @@
   export let recommendations = []
   export let transactions = []
   export let insights = []
-  export let classification_run = null
   export let upload_prompt = { title: "Upload transactions", body: "Import your latest card CSV and review every row before it is added.", days_since_last_upload: null }
   export let unfinished_import = null
   export let actions
@@ -155,8 +153,6 @@
       </div>
     </section>
   {/if}
-
-  <ClassificationRun run={classification_run} />
 
   <section class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
     {#each kpis as kpi}
