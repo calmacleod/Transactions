@@ -266,6 +266,26 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal categories(:groceries), restaurant.reload.category
   end
 
+  test "bulk update adds selected subcategories without replacing existing ones" do
+    sign_in_as users(:one)
+    grocery = expense_transactions(:grocery)
+    restaurant = expense_transactions(:restaurant)
+
+    patch bulk_update_transactions_path,
+      params: {
+        bulk_transaction: {
+          subcategory_ids: [ transaction_subcategories(:work).id ],
+          transaction_ids: [ grocery.id, restaurant.id ]
+        }
+      }
+
+    assert_redirected_to transactions_path
+    assert_equal categories(:groceries), grocery.reload.category
+    assert_equal categories(:restaurants), restaurant.reload.category
+    assert_equal [ "Work" ], grocery.subcategories.by_name.pluck(:name)
+    assert_equal [ "Gift", "Work" ], restaurant.subcategories.by_name.pluck(:name)
+  end
+
   test "bulk update can clear selected transaction categories" do
     sign_in_as users(:one)
     grocery = expense_transactions(:grocery)

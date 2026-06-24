@@ -428,6 +428,7 @@ test("selected transaction bulk actions float over the viewport", async ({ page 
 
   const bulkBar = page.getByText("1 selected").locator("xpath=ancestor::*[@data-slot='card'][1]")
   await expect(bulkBar).toBeVisible()
+  await expect(bulkBar.getByLabel("Add subcategory")).toBeVisible()
 
   const position = await bulkBar.evaluate((element) => {
     const styles = window.getComputedStyle(element)

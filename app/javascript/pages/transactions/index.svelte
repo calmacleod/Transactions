@@ -20,6 +20,9 @@
   import X from "@lucide/svelte/icons/x"
   import CategoryPicker from "./CategoryPicker.svelte"
 
+  const BULK_CATEGORY_KEEP = "__keep__"
+  const BULK_CATEGORY_CLEAR = "__clear__"
+
   export let categories = []
   export let subcategories = []
   export let saved_queries = []
@@ -38,7 +41,8 @@
   let filters = { ...filter_params, saved_query_id: selected_saved_query_id || "" }
   let saveName = ""
   let selectedIds = new Set()
-  let bulkCategoryId = ""
+  let bulkCategoryId = BULK_CATEGORY_KEEP
+  let bulkSubcategoryId = ""
   let chatQuestion = ""
   let chatAnswer = ""
   let chatSource = ""
@@ -74,6 +78,7 @@
   $: selectedTransactions = transactions.filter((transaction) => selectedIds.has(transaction.id))
   $: selectedTotal = selectedTransactions.reduce((sum, transaction) => sum + Number(transaction.signed_amount_cents || 0), 0)
   $: allVisibleSelected = transactions.length > 0 && transactions.every((transaction) => selectedIds.has(transaction.id))
+  $: bulkHasAction = bulkCategoryId !== BULK_CATEGORY_KEEP || Boolean(bulkSubcategoryId)
   $: activeFilterLabels = Object.entries(compact(filter_params))
     .filter(([key]) => !["sort", "sort_direction"].includes(key))
     .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`)
@@ -679,11 +684,22 @@
   }
 
   function bulkUpdate() {
+    if (!bulkHasAction) return
+
+    const bulkTransaction = {
+      transaction_ids: Array.from(selectedIds),
+    }
+
+    if (bulkCategoryId !== BULK_CATEGORY_KEEP) {
+      bulkTransaction.category_id = bulkCategoryId === BULK_CATEGORY_CLEAR ? "" : bulkCategoryId
+    }
+
+    if (bulkSubcategoryId) {
+      bulkTransaction.subcategory_ids = [bulkSubcategoryId]
+    }
+
     router.patch(actions.bulk_update, {
-      bulk_transaction: {
-        category_id: bulkCategoryId,
-        transaction_ids: Array.from(selectedIds),
-      },
+      bulk_transaction: bulkTransaction,
     }, { preserveScroll: true, preserveState: true })
   }
 
@@ -1263,15 +1279,25 @@
 
         <form class="flex flex-col gap-2 sm:flex-row sm:items-end" onsubmit={(event) => preventAndRun(event, bulkUpdate)}>
           <div class="space-y-1.5">
-            <Label for="bulk-category">Reclassify</Label>
+            <Label for="bulk-category">Category</Label>
             <NativeSelect id="bulk-category" bind:value={bulkCategoryId} class="w-full sm:w-56">
-              <NativeSelectOption value="">Unclassified</NativeSelectOption>
+              <NativeSelectOption value={BULK_CATEGORY_KEEP}>No category change</NativeSelectOption>
+              <NativeSelectOption value={BULK_CATEGORY_CLEAR}>Unclassified</NativeSelectOption>
               {#each categories as category}
                 <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>
               {/each}
             </NativeSelect>
           </div>
-          <Button type="submit">
+          <div class="space-y-1.5">
+            <Label for="bulk-subcategory">Add subcategory</Label>
+            <NativeSelect id="bulk-subcategory" bind:value={bulkSubcategoryId} class="w-full sm:w-48">
+              <NativeSelectOption value="">No subcategory</NativeSelectOption>
+              {#each subcategories as subcategory}
+                <NativeSelectOption value={subcategory.id}>{subcategory.name}</NativeSelectOption>
+              {/each}
+            </NativeSelect>
+          </div>
+          <Button type="submit" disabled={!bulkHasAction}>
             <Check class="size-4" />
             Apply
           </Button>

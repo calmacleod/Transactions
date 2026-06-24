@@ -49,11 +49,16 @@ class TransactionsController < ApplicationController
   end
 
   def bulk_update
-    category_id = bulk_category_id
+    bulk_attributes = {}
+    bulk_attributes[:category_id] = bulk_category_id if bulk_category_update?
+    subcategory_ids = bulk_subcategory_ids
 
     transactions = current_user.expense_transactions.where(id: bulk_transaction_ids)
+    transactions = transactions.includes(:subcategories) if subcategory_ids.any?
     transactions.find_each do |transaction|
-      transaction.update!(category_id:)
+      attributes = bulk_attributes.dup
+      attributes[:subcategory_ids] = (transaction.subcategory_ids + subcategory_ids).uniq if subcategory_ids.any?
+      transaction.update!(attributes) if attributes.any?
     end
 
     redirect_back fallback_location: transactions_path, notice: "Updated #{helpers.pluralize(transactions.size, "transaction")}."
@@ -106,16 +111,24 @@ class TransactionsController < ApplicationController
   end
 
   def bulk_transaction_params
-    params.fetch(:bulk_transaction, {}).permit(:category_id, transaction_ids: [])
+    params.fetch(:bulk_transaction, {}).permit(:category_id, subcategory_ids: [], transaction_ids: [])
   end
 
   def bulk_transaction_ids
     bulk_transaction_params.fetch(:transaction_ids, []).compact_blank
   end
 
+  def bulk_category_update?
+    bulk_transaction_params.key?(:category_id)
+  end
+
   def bulk_category_id
     category_id = bulk_transaction_params[:category_id].presence
     current_user.categories.find(category_id).id if category_id.present?
+  end
+
+  def bulk_subcategory_ids
+    current_user.transaction_subcategories.where(id: bulk_transaction_params.fetch(:subcategory_ids, []).compact_blank).ids
   end
 
   def transaction_per_page_options
