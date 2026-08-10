@@ -1,8 +1,8 @@
 class AiPreferencesController < ApplicationController
   def show
     this_month = current_user.ai_requests.this_month
-    selectable_models = Model.user_selectable.ordered.limit(20)
-    selected_model = current_user.preferred_ai_model.presence || selectable_models.first&.model_id
+    selectable_models = Ai::Controls.selectable_models.first(20)
+    selected_model = current_user.preferred_ai_model.presence_in(selectable_models.map(&:model_id)) || selectable_models.first&.model_id
 
     render inertia: {
       selected_model:,

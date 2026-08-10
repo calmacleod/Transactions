@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "lint:svelte": "svelte-check --tsconfig ./tsconfig.json",
+    "lint:svelte": "svelte-check --config ./svelte.config.js --tsconfig ./tsconfig.json",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },

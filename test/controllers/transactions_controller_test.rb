@@ -229,6 +229,13 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     ENV["OPENAI_API_KEY"] = "present"
     sign_in_as users(:one)
     AiSetting.set("monthly_request_limit", "100")
+    Model.create!(
+      provider: "openai",
+      model_id: "gpt-5-nano",
+      name: "GPT-5 Nano",
+      capabilities: Model::APP_CAPABILITIES,
+      modalities: { input: [ "text" ], output: [ "text" ] }
+    )
 
     assert_enqueued_with(job: ProcessAiChatMessageJob) do
       post chat_transactions_path,

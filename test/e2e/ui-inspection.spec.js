@@ -56,13 +56,11 @@ test("dashboard top merchants panel stays within the mobile viewport", async ({ 
 })
 
 test("internal navigation links prefetch Inertia payloads", async ({ page }) => {
-  await page.goto("/")
-
   const prefetchRequest = page.waitForRequest((request) => {
     return request.url().includes("/transactions") && request.headers().purpose === "prefetch"
   })
 
-  await page.getByRole("link", { name: /^Transactions$/ }).first().hover()
+  await page.goto("/")
   await prefetchRequest
 })
 

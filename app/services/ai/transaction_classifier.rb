@@ -1,21 +1,9 @@
 module Ai
   class TransactionClassifier
-    CATEGORY_RULES = {
-      "Subscriptions" => /ai service|openai|chatgpt|anthropic|claude|cursor|perplexity|github copilot|netflix|spotify|crunchyroll|disney\+|prime video|youtube premium|google \*cloud|google \*google one|google one|dropbox|icloud|adobe|canva|figma|namecheap|godaddy|hover\.com|porkbun|cloudflare/i,
-      "Groceries" => /supermarket|grocery|wal-mart|walmart|t&t|farm boy|loblaw|metro|food basics|costco/i,
-      "Restaurants" => /restaurant|pub|tim hortons|coffee|cafe|dairy|kitchen|pizza|thirst/i,
-      "Shopping" => /amazon|amzn|dollarama|marketplace|store|mktp/i,
-      "Pets" => /pet valu|petsmart|pet supply|veterinary|vet /i,
-      "Entertainment" => /theatre|cinema|spotify|netflix|concert|ticket/i,
-      "Transportation" => /uber|lyft|presto|parking|shell|esso|petro|gas/i,
-      "Health" => /pharmacy|drug|medical|dental|clinic/i,
-      "Home" => /home depot|canadian tire|ikea|hydro|enbridge|internet|bell|rogers/i,
-      "Travel" => /hotel|air canada|westjet|airbnb|booking/i
-    }.freeze
-
-    def initialize(model: Ai::Controls.model_for(:classification), user: Current.user)
+    def initialize(model: nil, user: Current.user, rulebook: TransactionClassification::Rulebook.new)
       @model = model
       @user = user
+      @rulebook = rulebook
     end
 
     def classify_all(scope = ExpenseTransaction.unclassified.recent)
@@ -23,8 +11,7 @@ module Ai
     end
 
     def classify(transaction)
-      result = credit_classification(transaction) unless transaction.expense?
-      result ||= rule_based_classification(transaction)
+      result = rule_based_classification(transaction)
       result = llm_classification(transaction) if result[:category] == "Uncategorized" && Ai::Controls.enabled?(:classification)
       result ||= rule_based_classification(transaction)
       apply_result(transaction, result)
@@ -32,7 +19,7 @@ module Ai
 
     private
 
-    attr_reader :model, :user
+    attr_reader :model, :user, :rulebook
 
     def llm_classification(transaction)
       response = Ai::RubyLlmClient.new(feature: :classification, model:).ask(prompt_for(transaction), schema: TransactionClassificationSchema)
@@ -64,29 +51,13 @@ module Ai
     end
 
     def rule_based_classification(transaction)
-      category_name = CATEGORY_RULES.find { |_name, pattern| transaction.description.match?(pattern) }&.first || "Uncategorized"
+      result = rulebook.call(description: transaction.description, direction: transaction.direction)
 
       {
-        category: category_name,
-        confidence: category_name == "Uncategorized" ? 0.25 : 0.65,
-        reason: "Matched local merchant rules. Add an AI provider key to enable RubyLLM classification."
+        category: result.category_name,
+        confidence: result.confidence,
+        reason: result.reason
       }
-    end
-
-    def credit_classification(transaction)
-      if transaction.description.match?(/payment thank you|paiemen t merci|payment/i)
-        {
-          category: "Payments",
-          confidence: 1.0,
-          reason: "Credit card payment; excluded from expense totals."
-        }
-      else
-        {
-          category: "Refunds & Credits",
-          confidence: 0.8,
-          reason: "Credit or refund; excluded from expense totals."
-        }
-      end
     end
 
     def apply_result(transaction, result)

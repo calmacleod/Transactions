@@ -18,7 +18,7 @@ class AiControlsController < ApplicationController
   def ai_controls_props
     requests = AiRequest.recent.limit(20)
     this_month = AiRequest.this_month
-    selectable_models = Model.user_selectable.ordered.limit(20)
+    selectable_models = Ai::Controls.selectable_models.first(20)
 
     {
       settings: AiSetting.values,

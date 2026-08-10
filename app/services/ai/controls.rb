@@ -1,35 +1,82 @@
 module Ai
   class Controls
+    class ModelUnavailableError < StandardError; end
+
     FEATURES = {
       classification: "classification_enabled",
       insights: "insights_enabled",
       chat: "chat_enabled"
+    }.freeze
+    FEATURE_CAPABILITIES = {
+      classification: %w[structured_output],
+      insights: %w[structured_output],
+      chat: %w[function_calling]
+    }.freeze
+    PROVIDER_API_KEYS = {
+      "anthropic" => "ANTHROPIC_API_KEY",
+      "gemini" => "GEMINI_API_KEY",
+      "openai" => "OPENAI_API_KEY"
     }.freeze
 
     def self.model
       AiSetting.get("model")
     end
 
-    def self.model_for(feature, user: Current.user)
+    def self.model_for(feature, user: Current.user, requested: nil)
+      model_record_for(feature, user:, requested:)&.model_id
+    end
+
+    def self.model_record_for(feature, user: Current.user, requested: nil)
+      feature = feature.to_sym
+
+      return eligible_model(requested, feature) if requested.present?
+
       preferred_model = user&.preferred_ai_model
-      return preferred_model if preferred_model.present? && Model.user_selectable.exists?(model_id: preferred_model)
+      preferred = eligible_model(preferred_model, feature, user_selectable: true)
+      return preferred if preferred
 
-      key = "#{feature}_model"
-      configured = AiSetting.find_by(key:)&.value.presence
-      return configured if configured.present?
+      configured_model_ids(feature).each do |model_id|
+        configured = eligible_model(model_id, feature)
+        return configured if configured
+      end
 
-      ENV["RUBYLLM_#{feature.to_s.upcase}_MODEL"].presence || model
+      available_models_for(feature).first
+    end
+
+    def self.model_for!(feature, user: Current.user, requested: nil)
+      model_record_for!(feature, user:, requested:).model_id
+    end
+
+    def self.model_record_for!(feature, user: Current.user, requested: nil)
+      model_record_for(feature, user:, requested:) || raise(ModelUnavailableError, "No configured RubyLLM model supports #{feature}")
+    end
+
+    def self.available_models_for(feature, scope: Model.all)
+      unambiguous_models(scope.ordered.select { |candidate| candidate.supports_feature?(feature) && provider_configured?(candidate.provider) })
+    end
+
+    def self.selectable_models
+      candidates = Model.user_selectable.ordered.select { |candidate| candidate.supports_app_features? && provider_configured?(candidate.provider) }
+      unambiguous_models(candidates)
+    end
+
+    def self.required_capabilities(feature)
+      FEATURE_CAPABILITIES.fetch(feature.to_sym)
     end
 
     def self.enabled?(feature)
       return false unless provider_configured?
       return false unless AiSetting.enabled?(FEATURES.fetch(feature))
+      return false if model_for(feature).blank?
 
       monthly_request_limit.zero? || AiRequest.this_month.count < monthly_request_limit
     end
 
-    def self.provider_configured?
-      ENV.values_at("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY").any?(&:present?)
+    def self.provider_configured?(provider = nil)
+      return PROVIDER_API_KEYS.values.any? { |key| ENV[key].present? } if provider.blank?
+
+      key = PROVIDER_API_KEYS[provider.to_s]
+      key.present? && ENV[key].present?
     end
 
     def self.monthly_request_limit
@@ -98,5 +145,34 @@ module Ai
     rescue StandardError
       nil
     end
+
+    def self.configured_model_ids(feature)
+      feature_setting = AiSetting.find_by(key: "#{feature}_model")&.value.presence
+
+      [
+        feature_setting,
+        ENV["RUBYLLM_#{feature.to_s.upcase}_MODEL"].presence,
+        model,
+        ENV["RUBYLLM_MODEL"].presence,
+        RubyLLM.config.default_model
+      ].compact_blank.uniq
+    end
+    private_class_method :configured_model_ids
+
+    def self.eligible_model(model_id, feature, user_selectable: false)
+      return if model_id.blank?
+
+      candidates = Model.where(model_id:).select do |candidate|
+        (!user_selectable || candidate.user_selectable?) && candidate.supports_feature?(feature) && provider_configured?(candidate.provider)
+      end
+
+      candidates.one? ? candidates.first : nil
+    end
+    private_class_method :eligible_model
+
+    def self.unambiguous_models(models)
+      models.group_by(&:model_id).values.filter_map { |matches| matches.first if matches.one? }
+    end
+    private_class_method :unambiguous_models
   end
 end

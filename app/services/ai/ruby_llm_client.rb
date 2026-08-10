@@ -7,13 +7,15 @@ module Ai
     PROMPT
 
     def initialize(feature:, model: nil, tools: [])
-      @feature = feature
-      @model = model.presence || Ai::Controls.model_for(feature)
+      @feature = feature.to_sym
+      selected_model = Ai::Controls.model_record_for!(@feature, requested: model)
+      @model = selected_model.model_id
+      @provider = selected_model.provider
       @tools = tools
     end
 
     def ask(prompt, schema: nil, on_event: nil, &)
-      chat = RubyLLM.chat(model: model).with_instructions(SYSTEM_PROMPT)
+      chat = RubyLLM.chat(model:, provider:).with_instructions(SYSTEM_PROMPT)
       chat.with_tools(*tools) if tools.any?
       chat.with_schema(schema) if schema.present?
       wire_callbacks(chat, on_event) if on_event.present?
@@ -29,7 +31,7 @@ module Ai
 
     private
 
-    attr_reader :feature, :model, :tools
+    attr_reader :feature, :model, :provider, :tools
 
     def wire_callbacks(chat, on_event)
       current_tool_call = nil

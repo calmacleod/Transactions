@@ -1,15 +1,11 @@
 class ImportPreviewClassifier
-  CATEGORY_RULES = TransactionClassification::FastPass::CATEGORY_RULES
   MERCHANT_REASON = "Matched a previously classified transaction from the same merchant."
-  LOCAL_RULE_REASON = "Matched local merchant rules during import preview."
-  UNCATEGORIZED_REASON = "No merchant history or local rule matched during import preview."
-  PAYMENT_REASON = "Credit card payment; excluded from expense totals."
-  CREDIT_REASON = "Credit or refund; excluded from expense totals."
 
   Result = Data.define(:category, :confidence, :reason)
 
-  def initialize(user:)
+  def initialize(user:, rulebook: TransactionClassification::Rulebook.new)
     @user = user
+    @rulebook = rulebook
   end
 
   def call(import_row)
@@ -26,7 +22,7 @@ class ImportPreviewClassifier
 
   private
 
-  attr_reader :user
+  attr_reader :user, :rulebook
 
   def category_from_merchant_history(description)
     merchant_key = normalized_merchant(description)
@@ -48,23 +44,8 @@ class ImportPreviewClassifier
   end
 
   def category_from_rules(import_row)
-    return credit_category(import_row) unless import_row.direction == "debit"
-
-    category_name = CATEGORY_RULES.find { |_name, pattern| import_row.description.match?(pattern) }&.first
-
-    if category_name
-      [ category_name, 0.65, LOCAL_RULE_REASON ]
-    else
-      [ "Uncategorized", 0.25, UNCATEGORIZED_REASON ]
-    end
-  end
-
-  def credit_category(import_row)
-    if import_row.description.match?(/payment thank you|paiemen t merci|payment/i)
-      [ "Payments", 1.0, PAYMENT_REASON ]
-    else
-      [ "Refunds & Credits", 0.8, CREDIT_REASON ]
-    end
+    result = rulebook.call(description: import_row.description, direction: import_row.direction)
+    [ result.category_name, result.confidence, result.reason ]
   end
 
   def ensure_category(name)

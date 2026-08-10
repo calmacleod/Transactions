@@ -22,7 +22,7 @@ class TransactionClassificationFastPassTest < ActiveSupport::TestCase
     assert_equal 1, run.rule_based_count
     assert_equal 0, run.ai_count
     assert_equal "Pets", transaction.reload.category.name
-    assert_match "fast classification pass", transaction.classification_reason
+    assert_match "local merchant rules", transaction.classification_reason
   end
 
   test "stops before processing the next batch when cancellation is requested" do

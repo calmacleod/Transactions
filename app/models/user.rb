@@ -86,9 +86,7 @@ class User < ApplicationRecord
   end
 
   def effective_ai_model
-    return preferred_ai_model if preferred_ai_model.present? && Model.user_selectable.exists?(model_id: preferred_ai_model)
-
-    Ai::Controls.model
+    Ai::Controls.model_for(:chat, user: self)
   end
 
   private
@@ -110,8 +108,9 @@ class User < ApplicationRecord
 
   def preferred_ai_model_is_user_selectable
     return if preferred_ai_model.blank?
-    return if Model.user_selectable.exists?(model_id: preferred_ai_model)
+    models = Model.user_selectable.where(model_id: preferred_ai_model).to_a
+    return if models.one? && models.first.supports_app_features?
 
-    errors.add(:preferred_ai_model, "must be available for users")
+    errors.add(:preferred_ai_model, "must uniquely identify a user-selectable text model with tools and structured output")
   end
 end

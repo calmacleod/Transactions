@@ -1,10 +1,26 @@
 require "test_helper"
 
 class AiControlsControllerTest < ActionDispatch::IntegrationTest
+  setup do
+    @old_openai_key = ENV["OPENAI_API_KEY"]
+    ENV["OPENAI_API_KEY"] = "test-key"
+  end
+
+  teardown do
+    @old_openai_key.nil? ? ENV.delete("OPENAI_API_KEY") : ENV["OPENAI_API_KEY"] = @old_openai_key
+  end
+
   test "shows AI settings and usage visibility" do
     sign_in_as users(:one)
     AiRequest.create!(feature: "chat", model: "test-model", successful: true, estimated_cost_microdollars: 15_000)
-    Model.create!(provider: "openai", model_id: "visible-model", name: "Visible Model", user_selectable: true)
+    Model.create!(
+      provider: "openai",
+      model_id: "visible-model",
+      name: "Visible Model",
+      capabilities: Model::APP_CAPABILITIES,
+      modalities: { input: [ "text" ], output: [ "text" ] },
+      user_selectable: true
+    )
 
     get admin_ai_controls_path
 

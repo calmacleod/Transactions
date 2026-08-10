@@ -75,13 +75,30 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
 
   test "updates model curation flags" do
     sign_in_as users(:one)
-    model = Model.create!(provider: "openai", model_id: "favorite-model", name: "Favorite Model")
+    model = Model.create!(
+      provider: "openai",
+      model_id: "favorite-model",
+      name: "Favorite Model",
+      capabilities: Model::APP_CAPABILITIES,
+      modalities: { input: [ "text" ], output: [ "text" ] }
+    )
 
     patch admin_model_path(model), params: { model: { favorite: "true", user_selectable: "true" } }
 
     assert_redirected_to admin_models_path
     assert_equal true, model.reload.favorite?
     assert_equal true, model.user_selectable?
+  end
+
+  test "rejects exposing a model that cannot support app AI features" do
+    sign_in_as users(:one)
+    model = Model.create!(provider: "openai", model_id: "embedding-model", name: "Embedding Model")
+
+    patch admin_model_path(model), params: { model: { user_selectable: "true" } }
+
+    assert_redirected_to admin_models_path
+    assert_equal false, model.reload.user_selectable?
+    assert_match "requires text input/output", flash[:alert]
   end
 
   test "redirects regular users" do

@@ -5,6 +5,7 @@
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { Progress } from "$lib/components/ui/progress"
   import { loadOfflineSnapshot, warmOfflineSnapshot } from "$lib/offline-snapshot"
+  import { connectionAvailable } from "$lib/connection"
   import { badgeVariant } from "$lib/formatters"
   import BarChart3 from "@lucide/svelte/icons/bar-chart-3"
   import CreditCard from "@lucide/svelte/icons/credit-card"
@@ -46,12 +47,15 @@
   onMount(() => {
     let cancelled = false
 
-    const syncConnectionState = () => {
-      online = navigator.onLine
+    const syncConnectionState = async () => {
+      const available = await connectionAvailable()
+      if (!cancelled) online = available
     }
 
     window.addEventListener("online", syncConnectionState)
     window.addEventListener("offline", syncConnectionState)
+    syncConnectionState()
+    const connectionTimer = window.setInterval(syncConnectionState, 2_000)
 
     const loadSnapshot = async () => {
       try {
@@ -75,6 +79,7 @@
 
     return () => {
       cancelled = true
+      window.clearInterval(connectionTimer)
       window.removeEventListener("online", syncConnectionState)
       window.removeEventListener("offline", syncConnectionState)
       window.removeEventListener("transactions-offline-snapshot", handleSnapshotRefresh)
