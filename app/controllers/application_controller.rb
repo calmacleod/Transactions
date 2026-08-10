@@ -135,7 +135,8 @@ class ApplicationController < ActionController::Base
       notes: transaction.notes,
       classification_reason: transaction.classification_reason,
       confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending",
-      update_path: transaction_path(transaction)
+      update_path: transaction_path(transaction),
+      view_path: transactions_path(transaction_id: transaction.id)
     }
   end
 
@@ -154,17 +155,32 @@ class ApplicationController < ActionController::Base
   end
 
   def insight_props(insight)
+    filters = insight.payload.to_h["filters"] || insight.payload.to_h[:filters] || {}
+
     {
       id: insight.id,
       title: insight.title,
       body: insight.body,
+      action: insight.action,
+      kind: insight.kind,
+      kind_label: insight.kind.humanize,
+      metric: insight.metric,
       severity: insight.severity,
       generation_source: insight.generation_source,
       generation_source_label: insight.generation_source == "ai" ? "AI generated" : "Automatic",
       starts_on: insight.starts_on&.iso8601,
       starts_on_label: insight.starts_on&.strftime("%b %Y"),
       ends_on: insight.ends_on&.iso8601,
-      transactions: insight.expense_transactions.includes(:category, :subcategories).recent.limit(25).map { |transaction| transaction_props(transaction) }
+      evidence_path: transactions_path(filters),
+      transactions: insight_transactions_for_props(insight).map { |transaction| transaction_props(transaction) }
     }
+  end
+
+  def insight_transactions_for_props(insight)
+    if insight.association(:expense_transactions).loaded?
+      insight.expense_transactions.sort_by { |transaction| [ transaction.occurred_on, transaction.id ] }.reverse.first(25)
+    else
+      insight.expense_transactions.includes(:category, :subcategories).recent.limit(25).to_a
+    end
   end
 end

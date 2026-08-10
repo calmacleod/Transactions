@@ -2,7 +2,15 @@ category:
   user: one
   title: Groceries leads spending
   body: Groceries account for the largest spend.
+  action: Review the linked grocery transactions.
+  kind: category_shift
+  metric: { label: "This month", value: "$58.79", comparison_label: "Prior average", comparison_value: "$40.00" }
   severity: info
   starts_on: 2026-05-01
   ends_on: 2026-05-31
-  payload: {}
+  payload:
+    filters:
+      category_id: <%= ActiveRecord::FixtureSet.identify(:groceries) %>
+      start_date: 2026-05-01
+      end_date: 2026-05-31
+      direction: debit

@@ -1,6 +1,6 @@
 class TransactionFilter
   FILTER_KEYS = %w[
-    start_date end_date quick_range category_id direction classified query
+    start_date end_date quick_range transaction_id category_id direction classified query
     min_amount max_amount day_of_week subcategory_id sort sort_direction
   ].freeze
   SORT_COLUMNS = {
@@ -31,6 +31,7 @@ class TransactionFilter
   def call(scope = Current.user&.expense_transactions || ExpenseTransaction.all)
     relation = scope.includes(:category)
     relation = apply_dates(relation)
+    relation = relation.where(id: params["transaction_id"]) if params["transaction_id"].present?
     relation = relation.where(category_id: params["category_id"]) if params["category_id"].present?
     relation = relation.joins(:subcategories).where(transaction_subcategories: { id: params["subcategory_id"] }).distinct if params["subcategory_id"].present?
     relation = relation.where(direction: params["direction"]) if params["direction"].present?

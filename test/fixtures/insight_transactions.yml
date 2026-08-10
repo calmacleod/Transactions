@@ -1,0 +1,4 @@
+category_grocery:
+  user: one
+  insight: category
+  expense_transaction: grocery

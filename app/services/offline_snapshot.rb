@@ -163,7 +163,8 @@ class OfflineSnapshot
       subcategories: transaction_subcategories_for_props(transaction).map { |subcategory| subcategory_props(subcategory) },
       notes: transaction.notes,
       classification_reason: transaction.classification_reason,
-      confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending"
+      confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending",
+      view_path: transactions_path(transaction_id: transaction.id)
     }
   end
 
@@ -179,6 +180,10 @@ class OfflineSnapshot
       id: insight.id,
       title: insight.title,
       body: insight.body,
+      action: insight.action,
+      kind: insight.kind,
+      kind_label: insight.kind.humanize,
+      metric: insight.metric,
       severity: insight.severity,
       generation_source: insight.generation_source,
       generation_source_label: insight.generation_source == "ai" ? "AI generated" : "Automatic",

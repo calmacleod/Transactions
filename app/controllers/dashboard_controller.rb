@@ -1,7 +1,10 @@
 class DashboardController < ApplicationController
   def index
     transactions = current_user.expense_transactions.includes(:category, :subcategories).recent.limit(4)
-    insights = current_user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6)
+    insights = current_user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..)
+      .recent
+      .limit(6)
+      .includes(expense_transactions: [ :category, :subcategories ])
     categories = current_user.categories.by_name
     month_range = Date.current.beginning_of_month..Date.current.end_of_month
     dashboard = DashboardSummary.new(range: month_range, user: current_user)
@@ -39,6 +42,7 @@ class DashboardController < ApplicationController
       actions: {
         import: imports_path,
         imports: imports_path,
+        insights: insights_path,
         month_transactions: transactions_path(start_date: month_range.begin, end_date: month_range.end, direction: "debit"),
         unclassified_transactions: transactions_path(classified: "unclassified")
       }

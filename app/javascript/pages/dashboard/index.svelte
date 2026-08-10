@@ -330,8 +330,18 @@
             </div>
             <Badge variant={badgeVariant(insight.severity)}>{insight.severity}</Badge>
           </div>
-          <p class="mt-2 text-xs leading-5 text-muted-foreground">{insight.body}</p>
-          <Badge class="mt-3" variant={insight.generation_source === "ai" ? "success" : "secondary"}>{insight.generation_source_label}</Badge>
+          <div class="mt-3 flex items-end justify-between gap-3 rounded-lg bg-background px-3 py-2">
+            <div>
+              <p class="text-xs text-muted-foreground">{insight.metric?.label}</p>
+              <p class="money-value mt-1 text-lg font-semibold text-foreground">{insight.metric?.value}</p>
+            </div>
+            <p class="text-right text-xs text-muted-foreground">vs {insight.metric?.comparison_value}</p>
+          </div>
+          <p class="mt-3 text-xs leading-5 text-muted-foreground">{insight.body}</p>
+          <div class="mt-3 flex items-center justify-between gap-3">
+            <Badge variant={insight.generation_source === "ai" ? "success" : "secondary"}>{insight.generation_source_label}</Badge>
+            <Button href={actions.insights} variant="ghost" size="sm">Review</Button>
+          </div>
         </CardContent>
       </Card>
     {/each}

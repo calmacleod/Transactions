@@ -1,10 +1,10 @@
 class ExpenseInsightsSchema < RubyLLM::Schema
   array :insights do
     object do
-      string :title, description: "Short insight headline"
-      string :body, description: "One or two sentence explanation grounded in the supplied data"
-      string :severity, enum: %w[info warning success], description: "Tone for the insight"
-      array :transaction_ids, of: :integer, required: false, description: "IDs of the supplied transactions that support this insight"
+      string :finding_key, description: "Exact key of one supplied candidate finding"
+      string :title, description: "Short decision-oriented headline grounded in that candidate"
+      string :body, description: "One or two sentences explaining why the comparison matters without repeating the headline"
+      string :action, description: "One concrete next step supported by the finding"
     end
   end
 end

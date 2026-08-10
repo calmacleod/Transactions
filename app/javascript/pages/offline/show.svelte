@@ -323,17 +323,25 @@
     </Card>
   {:else if activeView === "insights"}
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {#each insights.insights || [] as insight}
+      {#each insights.insights || [] as insight (insight.id)}
         <Card>
           <CardHeader>
             <div class="flex items-start justify-between gap-4">
-              <CardTitle class="text-base">{insight.title}</CardTitle>
+              <div>
+                <Badge variant="outline">{insight.kind_label}</Badge>
+                <CardTitle class="mt-2 text-base">{insight.title}</CardTitle>
+              </div>
               <Badge variant={badgeVariant(insight.severity)}>{insight.severity}</Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent class="grid gap-3">
+            <div class="grid grid-cols-2 gap-3 rounded-lg border border-border bg-background p-3">
+              <div><p class="text-xs text-muted-foreground">{insight.metric?.label}</p><p class="money-value mt-1 font-semibold text-foreground">{insight.metric?.value}</p></div>
+              <div><p class="text-xs text-muted-foreground">{insight.metric?.comparison_label}</p><p class="money-value mt-1 font-semibold text-foreground">{insight.metric?.comparison_value}</p></div>
+            </div>
             <p class="text-sm leading-6 text-muted-foreground">{insight.body}</p>
-            <p class="mt-4 text-xs font-medium text-muted-foreground">{insight.starts_on} to {insight.ends_on}</p>
+            <p class="rounded-lg bg-muted px-3 py-2 text-sm text-foreground"><span class="font-semibold">Next:</span> {insight.action}</p>
+            <p class="text-xs font-medium text-muted-foreground">{insight.starts_on} to {insight.ends_on}</p>
           </CardContent>
         </Card>
       {/each}

@@ -106,6 +106,26 @@ test("document titles follow Inertia navigation", async ({ page }) => {
   await expect(page).toHaveTitle("Imports - Transactions")
 })
 
+test("insights explain comparisons and drill into their exact evidence", async ({ page }) => {
+  await page.goto("/insights")
+
+  await expect(page.getByText("Changes, risks, and recurring commitments")).toBeVisible()
+  const insight = page.getByTestId(/insight-card-/).filter({ hasText: "Groceries leads spending" })
+  await expect(insight).toContainText("This month")
+  await expect(insight).toContainText("Prior average")
+  await insight.click()
+
+  const dialog = page.getByRole("dialog", { name: "Groceries leads spending" })
+  await expect(dialog.getByText("Recommended next step:")).toBeVisible()
+  await expect(dialog.getByText("LOCAL GROCERY MARKET")).toBeVisible()
+
+  await dialog.getByRole("link", { name: "Open" }).click()
+  await expect(page).toHaveURL(/\/transactions\?transaction_id=\d+/)
+  await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible()
+  await expect(page.locator("[data-transaction-row-id]")).toHaveCount(1)
+  await expect(page.getByText("LOCAL GROCERY MARKET")).toBeVisible()
+})
+
 test("app chrome navigation starts on mouse down", async ({ page }) => {
   await page.goto("/")
 

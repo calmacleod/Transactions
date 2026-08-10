@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_30_140622) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_120000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -229,10 +229,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_140622) do
   end
 
   create_table "insights", force: :cascade do |t|
+    t.text "action"
     t.text "body"
     t.datetime "created_at", null: false
     t.date "ends_on"
     t.string "generation_source", default: "automatic", null: false
+    t.string "kind", default: "observation", null: false
+    t.json "metric", default: {}, null: false
     t.json "payload"
     t.string "severity", default: "info", null: false
     t.date "starts_on"
@@ -241,6 +244,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_30_140622) do
     t.integer "user_id"
     t.index ["generation_source"], name: "index_insights_on_generation_source"
     t.index ["starts_on", "ends_on"], name: "index_insights_on_starts_on_and_ends_on"
+    t.index ["user_id", "kind"], name: "index_insights_on_user_id_and_kind"
     t.index ["user_id"], name: "index_insights_on_user_id"
   end
 

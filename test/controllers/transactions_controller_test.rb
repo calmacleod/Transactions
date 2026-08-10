@@ -13,6 +13,16 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal ai_chats_path, props.dig("actions", "chats")
   end
 
+  test "filters to an exact transaction for insight evidence links" do
+    sign_in_as users(:one)
+    transaction = expense_transactions(:restaurant)
+
+    get transactions_path, params: { transaction_id: transaction.id }
+
+    assert_response :success
+    assert_equal [ transaction.id ], inertia_props.fetch("transactions").map { |item| item.fetch("id") }
+  end
+
   test "ignores invalid date filters" do
     sign_in_as users(:one)
 

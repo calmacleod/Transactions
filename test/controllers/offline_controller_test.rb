@@ -27,6 +27,8 @@ class OfflineControllerTest < ActionDispatch::IntegrationTest
     users(:one).insights.create!(
       title: "Groceries are trending",
       body: "Grocery spending is up.",
+      action: "Review grocery purchases.",
+      kind: "category_shift",
       severity: "info",
       starts_on: Date.new(2026, 5, 1),
       ends_on: Date.new(2026, 5, 31),
@@ -35,6 +37,8 @@ class OfflineControllerTest < ActionDispatch::IntegrationTest
     users(:one).insights.create!(
       title: "Restaurants are notable",
       body: "Restaurant spending is notable.",
+      action: "Review restaurant purchases.",
+      kind: "merchant_frequency",
       severity: "warning",
       starts_on: Date.new(2026, 5, 1),
       ends_on: Date.new(2026, 5, 31),
