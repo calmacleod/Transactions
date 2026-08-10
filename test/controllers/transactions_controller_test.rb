@@ -55,6 +55,52 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "Gift" ], subcategory_names.fetch("NEIGHBOURHOOD RESTAURANT")
   end
 
+  test "preloads transaction categories for the paginated result" do
+    sign_in_as users(:one)
+
+    30.times do |index|
+      ExpenseTransaction.create!(
+        user: users(:one),
+        occurred_on: Date.new(2026, 4, 1) + index.days,
+        description: "Preloaded category transaction #{index}",
+        amount_cents: 1000 + index,
+        direction: "debit",
+        category: index.even? ? categories(:groceries) : categories(:restaurants),
+        external_id: "preloaded-category-row-#{index}",
+        raw_data: {}
+      )
+    end
+
+    category_selects = 0
+    callback = lambda do |_name, _started, _finished, _unique_id, payload|
+      category_selects += 1 if payload[:sql].match?(/FROM "categories"/) && !payload[:cached]
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      get transactions_path
+    end
+
+    assert_response :success
+    assert_operator category_selects, :<=, 2
+  end
+
+  test "partial reload evaluates only requested transaction props" do
+    sign_in_as users(:one)
+
+    get transactions_path,
+      headers: {
+        "X-Inertia" => "true",
+        "X-Inertia-Version" => ViteRuby.digest,
+        "X-Inertia-Partial-Component" => "transactions/index",
+        "X-Inertia-Partial-Data" => "transactions,pagination"
+      }
+
+    assert_response :success
+    props = JSON.parse(response.body).fetch("props")
+    assert_equal %w[errors pagination transactions], props.keys.sort
+    assert_equal 2, props.fetch("transactions").size
+  end
+
   test "paginates transaction list" do
     sign_in_as users(:one)
     import_batch = import_batches(:statement)

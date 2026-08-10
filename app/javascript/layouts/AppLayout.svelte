@@ -24,7 +24,7 @@
   import Sun from "@lucide/svelte/icons/sun"
 
   const navLinkClass = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-  const navPrefetch = ["hover", "mount"]
+  const navPrefetch = "hover"
   const flashDismissDelay = 4_000
   const sidebarPreviewDelay = 450
   const page = usePage()

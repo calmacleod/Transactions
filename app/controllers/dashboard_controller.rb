@@ -8,6 +8,7 @@ class DashboardController < ApplicationController
     category_totals = dashboard.category_totals
     day_totals = dashboard.day_of_week_totals
     month_trend = dashboard.month_trend
+    month_delta = dashboard.month_to_month_delta
     latest_completed_import = current_user.import_batches.complete.where.not(imported_at: nil).order(imported_at: :desc).first
     unfinished_import = current_user.import_batches.unfinished.first
 
@@ -28,7 +29,7 @@ class DashboardController < ApplicationController
       category_totals: category_totals.map { |item| dashboard_item_props(item) },
       day_totals: day_totals.map { |item| dashboard_item_props(item) },
       month_trend: month_trend.map { |item| dashboard_item_props(item) },
-      month_delta: dashboard.month_to_month_delta.merge(label: money_from_cents(dashboard.month_to_month_delta[:cents])),
+      month_delta: month_delta.merge(label: money_from_cents(month_delta[:cents])),
       top_merchants: dashboard.top_merchants.map { |item| dashboard_item_props(item).merge(merchant_label: item[:merchant].titleize) },
       recommendations: dashboard.recommendations.map { |item| dashboard_item_props(item) },
       transactions: transactions.map { |transaction| transaction_props(transaction) },

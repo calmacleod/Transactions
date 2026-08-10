@@ -22,6 +22,18 @@
 
   const BULK_CATEGORY_KEEP = "__keep__"
   const BULK_CATEGORY_CLEAR = "__clear__"
+  const TRANSACTION_RESULT_PROPS = [
+    "selected_saved_query_id",
+    "filter_params",
+    "filter_active",
+    "date_summary",
+    "sort",
+    "transactions",
+    "pagination",
+    "per_page",
+    "flash",
+  ]
+  const TRANSACTION_MUTATION_PROPS = ["transactions", "pagination", "flash"]
 
   export let categories = []
   export let subcategories = []
@@ -165,6 +177,7 @@
     const scrollPosition = { x: window.scrollX, y: window.scrollY }
 
     router.get(url, data, {
+      only: TRANSACTION_RESULT_PROPS,
       preserveScroll: true,
       preserveState: true,
       onSuccess: (page) => syncTransactionProps(page.props),
@@ -176,6 +189,7 @@
     const scrollPosition = { x: window.scrollX, y: window.scrollY }
 
     router.visit(path, {
+      only: TRANSACTION_RESULT_PROPS,
       preserveScroll: true,
       preserveState: true,
       onSuccess: (page) => syncTransactionProps(page.props),
@@ -294,14 +308,14 @@
   }
 
   function updateCategory(transaction, categoryId) {
-    router.patch(transaction.update_path, { expense_transaction: { category_id: categoryId } }, { preserveScroll: true, preserveState: true })
+    router.patch(transaction.update_path, { expense_transaction: { category_id: categoryId } }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
   }
 
   function updateTransactionField(transaction, field, value) {
     if ((transaction[field] || "") === (value || "")) return
 
     transaction[field] = value
-    router.patch(transaction.update_path, { expense_transaction: { [field]: value } }, { preserveScroll: true, preserveState: true })
+    router.patch(transaction.update_path, { expense_transaction: { [field]: value } }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
   }
 
   function sortPath(field) {
@@ -373,7 +387,7 @@
     const next = new Set(editingSubcategoryIds)
     next.delete(transaction.id)
     editingSubcategoryIds = next
-    router.patch(transaction.update_path, { expense_transaction: { subcategory_ids: nextIds } }, { preserveScroll: true, preserveState: true })
+    router.patch(transaction.update_path, { expense_transaction: { subcategory_ids: nextIds } }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
   }
 
   function saveNote(transaction, value) {
@@ -700,7 +714,7 @@
 
     router.patch(actions.bulk_update, {
       bulk_transaction: bulkTransaction,
-    }, { preserveScroll: true, preserveState: true })
+    }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
   }
 
   function saveFilter() {
@@ -1050,7 +1064,7 @@
     {#if !desktopLayout}
     <div class="divide-y divide-border" data-testid="mobile-transactions-list">
       {#if transactions.length}
-        {#each transactions as transaction}
+        {#each transactions as transaction (transaction.id)}
           <div
             data-testid="mobile-transaction-row"
             class={`grid gap-2 px-3 py-2 ${selectedIds.has(transaction.id) ? "bg-accent" : ""}`}
@@ -1156,7 +1170,7 @@
         </TableHeader>
         <TableBody>
           {#if transactions.length}
-            {#each transactions as transaction}
+            {#each transactions as transaction (transaction.id)}
               <TableRow
                 data-transaction-row-id={transaction.id}
                 class={`${selectedIds.has(transaction.id) ? "bg-accent" : ""} ${dragSelecting ? "cursor-cell select-none hover:bg-primary/10" : ""}`}

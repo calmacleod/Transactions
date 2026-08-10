@@ -1,13 +1,14 @@
 class SpendingController < ApplicationController
   def index
     months = months_on_record
+    monthly_totals = monthly_totals(months)
     category_rows = category_month_rows(months)
 
     render inertia: {
       months: months.map { |month| month_props(month) },
-      monthly_totals: monthly_totals(months),
+      monthly_totals:,
       category_rows:,
-      max_month_cents: monthly_totals(months).map { |item| item[:cents] }.max.to_i,
+      max_month_cents: monthly_totals.map { |item| item[:cents] }.max.to_i,
       max_category_cents: category_rows.flat_map { |row| row[:months].map { |month| month[:cents] } }.max.to_i
     }
   end
@@ -52,30 +53,32 @@ class SpendingController < ApplicationController
   end
 
   def category_month_rows(months)
-    grouped = current_user.expense_transactions.expenses.includes(:category).to_a.group_by { |transaction| transaction.category || uncategorized_category }
+    grouped_totals = current_user.expense_transactions.expenses
+      .group(:category_id, "strftime('%Y-%m-01', occurred_on)")
+      .sum(:amount_cents)
+      .each_with_object(Hash.new { |categories, category_id| categories[category_id] = {} }) do |((category_id, month), cents), categories|
+        categories[category_id][Date.iso8601(month)] = cents
+      end
+    categories_by_id = current_user.categories.where(id: grouped_totals.keys.compact).index_by(&:id)
 
-    grouped.map do |category, transactions|
-      month_totals = transactions.group_by { |transaction| transaction.occurred_on.beginning_of_month }
-                                  .transform_values { |items| items.sum(&:amount_cents) }
+    grouped_totals.map do |category_id, month_totals|
+      category = categories_by_id[category_id]
+      total_cents = month_totals.values.sum
 
       {
-        category: category_props(category.persisted? ? category : nil).merge(name: category.name),
-        total_cents: transactions.sum(&:amount_cents),
-        total_label: money_from_cents(transactions.sum(&:amount_cents)),
+        category: category_props(category).merge(name: category&.name || "Uncategorized"),
+        total_cents:,
+        total_label: money_from_cents(total_cents),
         months: months.map do |month|
           cents = month_totals.fetch(month, 0)
           {
             month: month.iso8601,
             cents:,
             amount_label: money_from_cents(cents),
-            filters_path: transactions_path(start_date: month.iso8601, end_date: month.end_of_month.iso8601, direction: "debit", category_id: category.persisted? ? category.id : nil, classified: category.persisted? ? nil : "unclassified")
+            filters_path: transactions_path(start_date: month.iso8601, end_date: month.end_of_month.iso8601, direction: "debit", category_id:, classified: category_id.present? ? nil : "unclassified")
           }
         end
       }
     end.sort_by { |row| -row[:total_cents] }
-  end
-
-  def uncategorized_category
-    @uncategorized_category ||= Category.new(name: "Uncategorized", color: "#71717a")
   end
 end

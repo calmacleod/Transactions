@@ -9,15 +9,15 @@ class DashboardSummary
   end
 
   def total_spend_cents
-    expenses.sum(:amount_cents)
+    @total_spend_cents ||= expenses.sum(:amount_cents)
   end
 
   def transaction_count
-    transactions.count
+    @transaction_count ||= transactions.count
   end
 
   def expense_count
-    expenses.count
+    @expense_count ||= expenses.count
   end
 
   def average_expense_cents
@@ -33,62 +33,71 @@ class DashboardSummary
   end
 
   def day_of_week_totals
-    totals = expense_records.group_by { |transaction| transaction.occurred_on.wday }
+    @day_of_week_totals ||= begin
+      totals = expense_records.group_by { |transaction| transaction.occurred_on.wday }
 
-    Date::DAYNAMES.each_with_index.map do |name, wday|
-      records = totals.fetch(wday, [])
+      Date::DAYNAMES.each_with_index.map do |name, wday|
+        records = totals.fetch(wday, [])
 
-      {
-        name: name.first(3),
-        full_name: name,
-        wday:,
-        count: records.size,
-        cents: records.sum(&:amount_cents),
-        filters: range_filters.merge(day_of_week: wday)
-      }
+        {
+          name: name.first(3),
+          full_name: name,
+          wday:,
+          count: records.size,
+          cents: records.sum(&:amount_cents),
+          filters: range_filters.merge(day_of_week: wday)
+        }
+      end
     end
   end
 
   def month_trend(months: 4)
-    end_month = Date.current.beginning_of_month
-    start_month = (months - 1).months.ago.to_date.beginning_of_month
-    records = transaction_scope.expenses.where(occurred_on: start_month..end_month.end_of_month)
-    totals = records.group_by { |transaction| transaction.occurred_on.beginning_of_month }
+    @month_trends ||= {}
+    @month_trends[months] ||= begin
+      end_month = Date.current.beginning_of_month
+      start_month = (months - 1).months.ago.to_date.beginning_of_month
+      totals = transaction_scope.expenses.where(occurred_on: start_month..end_month.end_of_month).group_by_month
 
-    months.times.map do |offset|
-      month = start_month.advance(months: offset)
+      months.times.map do |offset|
+        month = start_month.advance(months: offset)
 
-      {
-        label: month.strftime("%b"),
-        full_label: month.strftime("%B %Y"),
-        cents: totals.fetch(month, []).sum(&:amount_cents),
-        filters: {
-          start_date: month.iso8601,
-          end_date: month.end_of_month.iso8601,
-          direction: "debit"
+        {
+          label: month.strftime("%b"),
+          full_label: month.strftime("%B %Y"),
+          cents: totals.fetch(month, 0),
+          filters: {
+            start_date: month.iso8601,
+            end_date: month.end_of_month.iso8601,
+            direction: "debit"
+          }
         }
-      }
+      end
     end
   end
 
   def month_to_month_delta
-    current_month, previous_month = month_trend.last(2).reverse
-    return { cents: 0, percent: 0 } if current_month.blank? || previous_month.blank?
-
-    cents = current_month[:cents] - previous_month[:cents]
-    percent = percentage(cents.abs, previous_month[:cents])
-    { cents:, percent: }
+    @month_to_month_delta ||= begin
+      current_month, previous_month = month_trend.last(2).reverse
+      if current_month.blank? || previous_month.blank?
+        { cents: 0, percent: 0 }
+      else
+        cents = current_month[:cents] - previous_month[:cents]
+        percent = percentage(cents.abs, previous_month[:cents])
+        { cents:, percent: }
+      end
+    end
   end
 
   def top_merchants(limit: 5)
-    expense_records.group_by { |transaction| normalized_merchant(transaction.description) }
-                   .map { |merchant, records| { merchant:, count: records.size, cents: records.sum(&:amount_cents), filters: range_filters.merge(query: merchant) } }
-                   .sort_by { |item| -item[:cents] }
-                   .first(limit)
+    @top_merchants ||= {}
+    @top_merchants[limit] ||= expense_records.group_by { |transaction| normalized_merchant(transaction.description) }
+                                            .map { |merchant, records| { merchant:, count: records.size, cents: records.sum(&:amount_cents), filters: range_filters.merge(query: merchant) } }
+                                            .sort_by { |item| -item[:cents] }
+                                            .first(limit)
   end
 
   def recommendations
-    [
+    @recommendations ||= [
       budget_recommendation,
       discretionary_recommendation,
       frequency_recommendation,

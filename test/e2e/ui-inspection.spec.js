@@ -55,12 +55,23 @@ test("dashboard top merchants panel stays within the mobile viewport", async ({ 
   await expectNoViewportOverflow(page)
 })
 
-test("internal navigation links prefetch Inertia payloads", async ({ page }) => {
+test("internal navigation prefetches on intent without eager sidebar requests", async ({ page }) => {
+  const transactionPrefetches = []
+  page.on("request", (request) => {
+    if (request.url().includes("/transactions") && request.headers().purpose === "prefetch") {
+      transactionPrefetches.push(request)
+    }
+  })
+
+  await page.goto("/")
+  await page.waitForTimeout(100)
+  expect(transactionPrefetches).toHaveLength(0)
+
   const prefetchRequest = page.waitForRequest((request) => {
     return request.url().includes("/transactions") && request.headers().purpose === "prefetch"
   })
 
-  await page.goto("/")
+  await page.getByRole("link", { name: /^Transactions$/ }).first().hover()
   await prefetchRequest
 })
 

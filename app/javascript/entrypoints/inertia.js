@@ -3,13 +3,7 @@ import { warmOfflineSnapshot } from '../lib/offline-snapshot'
 import Layout from '../layouts/AppLayout.svelte'
 import './application.css'
 
-const warmRouteChunks = [
-  () => import("../pages/transactions/index.svelte"),
-  () => import("../pages/spending/index.svelte"),
-  () => import("../pages/budgets/index.svelte"),
-  () => import("../pages/dashboard/index.svelte"),
-  () => import("../pages/offline/show.svelte"),
-]
+const warmOfflineRouteChunk = () => import("../pages/offline/show.svelte")
 const OFFLINE_PAGE_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 const OFFLINE_PAGE_FETCHED_AT_KEY = "transactions-offline-page-fetched-at"
 let serviceWorkerRegistrationPromise = null
@@ -45,7 +39,7 @@ if ("serviceWorker" in navigator) {
 
 window.addEventListener("load", () => {
   scheduleIdleWork(() => {
-    warmRouteChunks.forEach((loadChunk) => loadChunk().catch(() => {}))
+    warmOfflineRouteChunk().catch(() => {})
     warmOfflineSupport(authenticatedPage())
   })
 })

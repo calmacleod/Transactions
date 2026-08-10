@@ -67,33 +67,19 @@ class TransactionsController < ApplicationController
   private
 
   def transaction_index_props
-    categories = current_user.categories.by_name
-    saved_queries = Current.session.user.saved_transaction_queries.ordered
-    selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
-    filter_params = merged_filter_params(selected_saved_query)
-    filter = TransactionFilter.new(filter_params)
-    filtered_transactions = filter.call(current_user.expense_transactions).includes(:subcategories)
-    transactions_per_page = transactions_per_page()
-    pagy, transactions = pagy(:offset, filtered_transactions, limit: transactions_page_limit(filtered_transactions, transactions_per_page))
-    start_date = filter.start_date
-    end_date = filter.end_date
-
     {
-      categories: category_options(categories),
-      subcategories: current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory) },
-      saved_queries: saved_queries.map { |query| saved_query_props(query) },
-      selected_saved_query_id: selected_saved_query&.id,
-      filter_params: filter_params,
+      categories: -> { category_options(transaction_categories) },
+      subcategories: -> { current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory) } },
+      saved_queries: -> { saved_queries.map { |query| saved_query_props(query) } },
+      selected_saved_query_id: -> { selected_saved_query&.id },
+      filter_params: -> { transaction_filter_params },
       quick_ranges: TransactionFilter::QUICK_RANGES.map { |value, label| { value:, label: } },
-      filter_active: filter.active?,
-      date_summary: date_summary(start_date, end_date),
-      sort: {
-        field: filter_params["sort"].presence || "date",
-        direction: filter_params["sort_direction"].presence || "desc"
-      },
-      transactions: transactions.map { |transaction| transaction_props(transaction) },
-      pagination: pagination_props(pagy, filter_params, selected_saved_query),
-      per_page: transactions_per_page,
+      filter_active: -> { transaction_filter.active? },
+      date_summary: -> { date_summary(transaction_filter.start_date, transaction_filter.end_date) },
+      sort: -> { transaction_sort_props },
+      transactions: -> { paginated_transactions.map { |transaction| transaction_props(transaction) } },
+      pagination: -> { pagination_props(transaction_pagy, transaction_filter_params, selected_saved_query) },
+      per_page: -> { transactions_per_page },
       per_page_options: transaction_per_page_options.map { |label, value| { label:, value: } },
       actions: {
         index: transactions_path,
@@ -104,6 +90,52 @@ class TransactionsController < ApplicationController
         chats: ai_chats_path
       }
     }
+  end
+
+  def transaction_categories
+    @transaction_categories ||= current_user.categories.by_name
+  end
+
+  def saved_queries
+    @saved_queries ||= Current.session.user.saved_transaction_queries.ordered
+  end
+
+  def selected_saved_query
+    return @selected_saved_query if defined?(@selected_saved_query)
+
+    @selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
+  end
+
+  def transaction_filter_params
+    @transaction_filter_params ||= merged_filter_params(selected_saved_query)
+  end
+
+  def transaction_filter
+    @transaction_filter ||= TransactionFilter.new(transaction_filter_params)
+  end
+
+  def transaction_sort_props
+    {
+      field: transaction_filter_params["sort"].presence || "date",
+      direction: transaction_filter_params["sort_direction"].presence || "desc"
+    }
+  end
+
+  def paginated_transaction_result
+    @paginated_transaction_result ||= begin
+      filtered_transactions = transaction_filter.call(current_user.expense_transactions).includes(:category, :subcategories)
+      limit = transactions_page_limit(filtered_transactions, transactions_per_page)
+
+      pagy(:offset, filtered_transactions, limit:)
+    end
+  end
+
+  def transaction_pagy
+    paginated_transaction_result.first
+  end
+
+  def paginated_transactions
+    paginated_transaction_result.last
   end
 
   def transaction_params
@@ -136,21 +168,21 @@ class TransactionsController < ApplicationController
   end
 
   def transactions_per_page
+    return @transactions_per_page if defined?(@transactions_per_page)
+
     requested_limit = params[:limit]
     requested_limit_value = Integer(requested_limit, exception: false) if requested_limit.present?
 
     if requested_limit == ALL_PER_PAGE
-      session[:transactions_per_page] = ALL_PER_PAGE
-      ALL_PER_PAGE
+      @transactions_per_page = session[:transactions_per_page] = ALL_PER_PAGE
     elsif PER_PAGE_OPTIONS.include?(requested_limit_value)
-      session[:transactions_per_page] = requested_limit_value
-      requested_limit_value
+      @transactions_per_page = session[:transactions_per_page] = requested_limit_value
     elsif PER_PAGE_OPTIONS.include?(session[:transactions_per_page])
-      session[:transactions_per_page]
+      @transactions_per_page = session[:transactions_per_page]
     elsif session[:transactions_per_page] == ALL_PER_PAGE
-      ALL_PER_PAGE
+      @transactions_per_page = ALL_PER_PAGE
     else
-      DEFAULT_PER_PAGE
+      @transactions_per_page = DEFAULT_PER_PAGE
     end
   end
 
