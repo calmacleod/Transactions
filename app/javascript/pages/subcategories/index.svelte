@@ -24,6 +24,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Subcategories - Transactions</title>
+</svelte:head>
+
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-primary">Transaction labels</p>
@@ -57,7 +61,7 @@
   </CardHeader>
   <CardContent>
     <div class="flex flex-wrap gap-2">
-      {#each subcategories as subcategory}
+      {#each subcategories as subcategory (subcategory.id)}
         <Badge variant="outline" class="h-7 gap-1.5 pl-2 pr-1">
           <span class="size-2 rounded-full" style={`background-color: ${subcategory.color}`}></span>
           {subcategory.name}

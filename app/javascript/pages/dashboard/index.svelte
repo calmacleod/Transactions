@@ -67,6 +67,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Dashboard - Transactions</title>
+</svelte:head>
+
   <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div class="max-w-3xl">
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Expense control</p>
@@ -316,7 +320,7 @@
   </section>
 
   <section class="grid gap-3 md:grid-cols-2">
-    {#each insights as insight}
+    {#each insights as insight (insight.id)}
       <Card>
         <CardContent>
           <div class="flex items-start justify-between gap-3">

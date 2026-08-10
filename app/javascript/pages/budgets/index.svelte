@@ -20,6 +20,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Budgets - Transactions</title>
+</svelte:head>
+
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-primary">Budget controls</p>
@@ -40,7 +44,7 @@
     <CardTitle class="text-sm">{month.label}</CardTitle>
   </CardHeader>
   <CardContent class="grid gap-3">
-    {#each categories as category}
+    {#each categories as category (category.id)}
       <div class="grid min-w-0 gap-3 rounded-lg border border-border bg-background p-3 xl:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_minmax(0,12rem)] xl:items-center">
         <a href={category.filters_path} class="min-w-0">
           <div class="flex items-center gap-2">

@@ -26,6 +26,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Imports - Transactions</title>
+</svelte:head>
+
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div class="max-w-3xl">
     <p class="text-xs font-semibold uppercase tracking-wider text-primary">Import history</p>
@@ -110,7 +114,7 @@
             </TableRow>
           </TableHeader>
           <TableBody>
-            {#each import_batches as batch}
+            {#each import_batches as batch (batch.id)}
               <TableRow>
                 <TableCell>
                   <div class="flex min-w-0 items-start gap-3">

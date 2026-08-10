@@ -1,4 +1,5 @@
 <script>
+  import { onDestroy } from "svelte"
   import { router } from "@inertiajs/svelte"
   import { Badge } from "$lib/components/ui/badge"
   import { Button } from "$lib/components/ui/button"
@@ -29,6 +30,11 @@
   let form = { ...filters }
   let refreshing = false
   let catalogScroller
+  let restoreTimers = []
+
+  onDestroy(() => {
+    restoreTimers.forEach((timer) => window.clearTimeout(timer))
+  })
 
   $: statCards = [
     { label: "Available models", value: stats.available_models, icon: Sparkles },
@@ -89,8 +95,8 @@
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(restore)
     })
-    window.setTimeout(restore, 50)
-    window.setTimeout(restore, 150)
+    restoreTimers.forEach((timer) => window.clearTimeout(timer))
+    restoreTimers = [window.setTimeout(restore, 50), window.setTimeout(restore, 150)]
   }
 
   function queryParams(overrides = {}) {
@@ -127,6 +133,10 @@
     router.patch(model.update_path, { model: { user_selectable: !model.user_selectable } }, { preserveScroll: true, preserveState: true })
   }
 </script>
+
+<svelte:head>
+  <title>Models - Transactions</title>
+</svelte:head>
 
 <AdminBreadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Models" }]} />
 
@@ -243,7 +253,7 @@
           </TableRow>
         </TableHeader>
         <TableBody>
-          {#each models as model}
+          {#each models as model (model.id)}
             <TableRow>
               <TableCell>
                 <Button type="button" variant="ghost" size="icon" aria-label={model.favorite ? `Unfavorite ${model.name}` : `Favorite ${model.name}`} onclick={() => toggleFavorite(model)}>

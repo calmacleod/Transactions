@@ -26,6 +26,7 @@
   let cableConsumer
   let classificationSubscription
   let classificationRuntimePromise
+  let destroyed = false
 
   $: groupedRowIds = new Map(groups.map((group) => [group.key, new Set(group.row_ids)]))
   $: visibleRows = selectedGroupKey === "all" ? draftRows : draftRows.filter((row) => groupedRowIds.get(selectedGroupKey)?.has(row.id))
@@ -42,11 +43,14 @@
     : "Review each CSV row before it becomes a transaction."
 
   onMount(() => {
+    destroyed = false
     subscribeToClassification()
   })
 
   onDestroy(() => {
+    destroyed = true
     classificationSubscription?.unsubscribe()
+    cableConsumer?.disconnect()
   })
 
   function addRow() {
@@ -162,6 +166,11 @@
     if (readOnly || !actions.classification_stream) return
 
     await ensureClassificationRuntime()
+    if (destroyed) {
+      cableConsumer?.disconnect()
+      return
+    }
+
     classificationSubscription = cableConsumer.subscriptions.create(actions.classification_stream, {
       received(data) {
         if (data.type !== "row_classified") return
@@ -192,6 +201,10 @@
     await classificationRuntimePromise
   }
 </script>
+
+<svelte:head>
+  <title>Review {import_batch.filename} - Transactions</title>
+</svelte:head>
 
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div class="max-w-3xl">

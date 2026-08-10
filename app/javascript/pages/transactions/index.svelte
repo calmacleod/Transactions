@@ -86,6 +86,9 @@
   let lastShiftHoverId = null
   let suppressNextRowClick = false
   let desktopLayout = typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : true
+  let mutationError = ""
+  let mutationErrorTimer = null
+  const transactionMutationVersions = new Map()
 
   $: selectedTransactions = transactions.filter((transaction) => selectedIds.has(transaction.id))
   $: selectedTotal = selectedTransactions.reduce((sum, transaction) => sum + Number(transaction.signed_amount_cents || 0), 0)
@@ -144,6 +147,7 @@
     return () => {
       chatSubscription?.unsubscribe()
       cableConsumer?.disconnect()
+      if (mutationErrorTimer) window.clearTimeout(mutationErrorTimer)
       document.removeEventListener("pointermove", selectRowUnderPointer)
       document.removeEventListener("pointerup", stopDrag)
       layoutMedia.removeEventListener("change", updateLayout)
@@ -308,14 +312,81 @@
   }
 
   function updateCategory(transaction, categoryId) {
-    router.patch(transaction.update_path, { expense_transaction: { category_id: categoryId } }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
+    const category = categories.find((item) => `${item.id}` === `${categoryId}`) || null
+    const category_id = category?.id || null
+
+    persistTransactionUpdate(
+      transaction,
+      "category",
+      { category_id },
+      { category_id, category: category || { id: null, name: "Unclassified", color: "#71717a" } },
+      { category_id: transaction.category_id, category: transaction.category },
+      "The category could not be saved."
+    )
   }
 
   function updateTransactionField(transaction, field, value) {
     if ((transaction[field] || "") === (value || "")) return
 
-    transaction[field] = value
-    router.patch(transaction.update_path, { expense_transaction: { [field]: value } }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
+    persistTransactionUpdate(
+      transaction,
+      field,
+      { [field]: value },
+      { [field]: value },
+      { [field]: transaction[field] },
+      `The ${field} could not be saved.`
+    )
+  }
+
+  async function persistTransactionUpdate(transaction, field, attributes, optimisticValues, previousValues, failureMessage) {
+    const mutationKey = `${transaction.id}:${field}`
+    const version = (transactionMutationVersions.get(mutationKey) || 0) + 1
+    transactionMutationVersions.set(mutationKey, version)
+    mutationError = ""
+    replaceTransactionValues(transaction.id, optimisticValues)
+
+    try {
+      const response = await fetch(transaction.update_path, {
+        method: "PATCH",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": document.querySelector("meta[name='csrf-token']")?.content || "",
+        },
+        body: JSON.stringify({ expense_transaction: attributes }),
+      })
+      if (!response.ok) throw new Error(`Transaction update failed with ${response.status}`)
+
+      const data = await response.json()
+      if (transactionMutationVersions.get(mutationKey) !== version) return
+      if (!data.transaction) throw new Error("Transaction update response was incomplete")
+
+      const confirmedValues = Object.fromEntries(Object.keys(optimisticValues).map((key) => [key, data.transaction[key]]))
+      replaceTransactionValues(transaction.id, confirmedValues)
+    } catch (_error) {
+      if (transactionMutationVersions.get(mutationKey) !== version) return
+
+      replaceTransactionValues(transaction.id, previousValues)
+      showMutationError(`${failureMessage} Your change was reverted.`)
+    } finally {
+      if (transactionMutationVersions.get(mutationKey) === version) transactionMutationVersions.delete(mutationKey)
+    }
+  }
+
+  function replaceTransactionValues(transactionId, values) {
+    const replace = (item) => item.id === transactionId ? { ...item, ...values } : item
+    transactions = transactions.map(replace)
+    chatTransactions = chatTransactions.map(replace)
+    chatReferencedTransactions = chatReferencedTransactions.map(replace)
+  }
+
+  function showMutationError(message) {
+    mutationError = message
+    if (mutationErrorTimer) window.clearTimeout(mutationErrorTimer)
+    mutationErrorTimer = window.setTimeout(() => {
+      mutationError = ""
+      mutationErrorTimer = null
+    }, 6_000)
   }
 
   function sortPath(field) {
@@ -373,21 +444,27 @@
 
     const currentIds = transactionSubcategoryIds(transaction)
     const nextIds = currentIds.includes(selected.id) ? currentIds : [...currentIds, selected.id]
-    transaction.subcategories = subcategories.filter((subcategory) => nextIds.includes(subcategory.id))
-    updateTransactionSubcategories(transaction, nextIds)
+    const nextSubcategories = subcategories.filter((subcategory) => nextIds.includes(subcategory.id))
+    updateTransactionSubcategories(transaction, nextSubcategories)
   }
 
   function removeSubcategory(transaction, subcategoryId) {
-    const nextIds = transactionSubcategoryIds(transaction).filter((id) => id !== subcategoryId)
-    transaction.subcategories = (transaction.subcategories || []).filter((subcategory) => subcategory.id !== subcategoryId)
-    updateTransactionSubcategories(transaction, nextIds)
+    const nextSubcategories = (transaction.subcategories || []).filter((subcategory) => subcategory.id !== subcategoryId)
+    updateTransactionSubcategories(transaction, nextSubcategories)
   }
 
-  function updateTransactionSubcategories(transaction, nextIds) {
+  function updateTransactionSubcategories(transaction, nextSubcategories) {
     const next = new Set(editingSubcategoryIds)
     next.delete(transaction.id)
     editingSubcategoryIds = next
-    router.patch(transaction.update_path, { expense_transaction: { subcategory_ids: nextIds } }, { only: TRANSACTION_MUTATION_PROPS, preserveScroll: true, preserveState: true })
+    persistTransactionUpdate(
+      transaction,
+      "subcategories",
+      { subcategory_ids: nextSubcategories.map((subcategory) => subcategory.id) },
+      { subcategories: nextSubcategories },
+      { subcategories: transaction.subcategories || [] },
+      "The subcategories could not be saved."
+    )
   }
 
   function saveNote(transaction, value) {
@@ -742,7 +819,11 @@
   }
 </script>
 
-  <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+<svelte:head>
+  <title>Transactions</title>
+</svelte:head>
+
+<section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Transaction ledger</p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Transactions</h1>
@@ -753,6 +834,13 @@
       matching records
     </Badge>
   </section>
+
+  {#if mutationError}
+    <div class="mb-4 flex items-start justify-between gap-3 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100" role="alert" data-testid="transaction-update-error">
+      <span>{mutationError}</span>
+      <button type="button" class="shrink-0 font-medium underline underline-offset-2" onclick={() => (mutationError = "")}>Dismiss</button>
+    </div>
+  {/if}
 
   <Card class="mb-4">
     <CardHeader class="border-b border-border">

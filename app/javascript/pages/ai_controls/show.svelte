@@ -33,6 +33,10 @@
   ]
 </script>
 
+<svelte:head>
+  <title>AI Controls - Transactions</title>
+</svelte:head>
+
 <AdminBreadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "AI controls" }]} />
 
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

@@ -31,6 +31,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Join - Transactions</title>
+</svelte:head>
+
 <AuthLayout>
   {#if auth.authenticated}
     <Card>

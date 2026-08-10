@@ -18,6 +18,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Sign In - Transactions</title>
+</svelte:head>
+
 <AuthLayout>
   <Card>
     <CardHeader>

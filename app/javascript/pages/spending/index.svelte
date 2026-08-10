@@ -33,6 +33,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Spending - Transactions</title>
+</svelte:head>
+
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-primary">Spend history</p>

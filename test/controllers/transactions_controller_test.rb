@@ -225,6 +225,21 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal categories(:restaurants), transaction.reload.category
   end
 
+  test "returns the updated transaction for background JSON updates" do
+    sign_in_as users(:one)
+    transaction = expense_transactions(:grocery)
+
+    patch transaction_path(transaction),
+      params: { expense_transaction: { category_id: categories(:restaurants).id, notes: "Saved without a page visit" } },
+      as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body).fetch("transaction")
+    assert_equal categories(:restaurants).id, body["category_id"]
+    assert_equal "Restaurants", body.dig("category", "name")
+    assert_equal "Saved without a page visit", body["notes"]
+  end
+
   test "updates manual subcategories and notes" do
     sign_in_as users(:one)
     transaction = expense_transactions(:grocery)

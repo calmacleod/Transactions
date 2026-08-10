@@ -14,7 +14,11 @@
   let selectedInsight = null
 </script>
 
-  <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+<svelte:head>
+  <title>Insights - Transactions</title>
+</svelte:head>
+
+<section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
       <p class="text-xs font-semibold uppercase tracking-wider text-primary">Recent analysis</p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Insights</h1>
@@ -27,7 +31,7 @@
   </section>
 
   <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-    {#each insights as insight}
+    {#each insights as insight (insight.id)}
       <Card class="cursor-pointer transition-colors hover:border-primary/40" onclick={() => (selectedInsight = insight)}>
         <CardHeader>
           <div class="flex items-start justify-between gap-4">

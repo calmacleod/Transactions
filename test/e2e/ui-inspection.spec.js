@@ -95,6 +95,17 @@ test("sidebar active state follows Inertia navigation without reload", async ({ 
   await expect(transactionsLink).not.toHaveClass(/bg-primary/)
 })
 
+test("document titles follow Inertia navigation", async ({ page }) => {
+  await page.goto("/")
+  await expect(page).toHaveTitle("Dashboard - Transactions")
+
+  await page.getByRole("link", { name: /^Transactions$/ }).first().click()
+  await expect(page).toHaveTitle("Transactions")
+
+  await page.getByRole("link", { name: /^Imports$/ }).first().click()
+  await expect(page).toHaveTitle("Imports - Transactions")
+})
+
 test("app chrome navigation starts on mouse down", async ({ page }) => {
   await page.goto("/")
 
@@ -247,6 +258,26 @@ test("transaction note and subcategory controls open from the row", async ({ pag
 
   await subcategorySelect.selectOption({ label: "Gift" })
   await expect(row.getByText("Gift")).toBeVisible()
+})
+
+test("transaction updates apply immediately and roll back with feedback on failure", async ({ page }) => {
+  await page.route("**/transactions/*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue()
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await route.fulfill({ status: 200, contentType: "application/json", body: "" })
+  })
+  await page.goto("/transactions")
+
+  const row = page.locator("[data-transaction-row-id]").first()
+  const categoryControl = row.getByRole("button", { name: /Change category for/i })
+  await expect(categoryControl).toContainText("Restaurants")
+  await categoryControl.click()
+  await row.getByRole("combobox").selectOption({ label: "Groceries" })
+
+  await expect(row.getByRole("button", { name: /Change category for/i })).toContainText("Groceries")
+  await expect(page.getByTestId("transaction-update-error")).toContainText("change was reverted")
+  await expect(row.getByRole("button", { name: /Change category for/i })).toContainText("Restaurants")
 })
 
 test("mobile title bar stays fixed without covering page content", async ({ page }) => {

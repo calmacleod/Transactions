@@ -45,7 +45,13 @@ class TransactionsController < ApplicationController
     transaction = current_user.expense_transactions.find(params[:id])
     transaction.update!(normalized_transaction_params)
 
-    redirect_back fallback_location: transactions_path, notice: "Transaction updated."
+    respond_to do |format|
+      format.html { redirect_back fallback_location: transactions_path, notice: "Transaction updated." }
+      format.json do
+        updated_transaction = current_user.expense_transactions.includes(:category, :subcategories).find(transaction.id)
+        render json: { transaction: transaction_props(updated_transaction) }
+      end
+    end
   end
 
   def bulk_update

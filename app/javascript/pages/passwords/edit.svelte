@@ -19,6 +19,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Choose a New Password - Transactions</title>
+</svelte:head>
+
 <AuthLayout>
   <Card>
     <CardHeader>

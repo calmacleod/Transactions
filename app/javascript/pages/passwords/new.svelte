@@ -12,6 +12,10 @@
   let email = email_address || ""
 </script>
 
+<svelte:head>
+  <title>Reset Password - Transactions</title>
+</svelte:head>
+
 <AuthLayout>
   <Card>
     <CardHeader>
