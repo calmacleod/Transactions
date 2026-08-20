@@ -1,13 +1,13 @@
 source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem "rails", "~> 8.1.3"
+gem "rails"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 gem "propshaft"
 # Use sqlite3 as the database for Active Record
-gem "sqlite3", ">= 2.1"
+gem "sqlite3"
 # Use the Puma web server [https://github.com/puma/puma]
-gem "puma", ">= 5.0"
+gem "puma"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
 
@@ -15,7 +15,7 @@ gem "jbuilder"
 gem "resend"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
-gem "bcrypt", "~> 3.1.7"
+gem "bcrypt"
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[ windows jruby ]
@@ -52,7 +52,7 @@ group :development, :test do
   gem "rubocop-rails-omakase", require: false
 
   # Load local .env files for development and test secrets.
-  gem "dotenv-rails", "~> 3.2"
+  gem "dotenv-rails"
 end
 
 group :development do
@@ -66,16 +66,16 @@ group :test do
   gem "selenium-webdriver"
 end
 
-gem "ruby_llm", "~> 1.16"
-gem "ruby_llm-schema", "~> 0.4.0"
+gem "ruby_llm"
+gem "schematist"
 
-gem "csv", "~> 3.3"
+gem "csv"
 
-gem "pagy", "~> 43.5"
+gem "pagy"
 
-gem "inertia_rails", "~> 3.21"
+gem "inertia_rails"
 
-gem "vite_rails", "~> 3.11"
+gem "vite_rails"
 
 # Application performance monitoring and production log forwarding.
-gem "newrelic_rpm", "~> 10.2"
+gem "newrelic_rpm"

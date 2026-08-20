@@ -1,5 +1,5 @@
 require "ruby_llm"
-require "ruby_llm/schema"
+require "schematist"
 
 RubyLLM.configure do |config|
   config.openai_api_key = ENV["OPENAI_API_KEY"]

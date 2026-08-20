@@ -1,4 +1,4 @@
-class ExpenseInsightsSchema < RubyLLM::Schema
+class ExpenseInsightsSchema < Schematist::Schema
   array :insights do
     object do
       string :finding_key, description: "Exact key of one supplied candidate finding"
