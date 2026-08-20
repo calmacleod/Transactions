@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_20_150000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -173,7 +173,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_120000) do
     t.index ["import_batch_id"], name: "index_expense_transactions_on_import_batch_id"
     t.index ["occurred_on"], name: "index_expense_transactions_on_occurred_on"
     t.index ["user_id", "external_id"], name: "index_expense_transactions_on_user_and_external_id", unique: true
-    t.index ["user_id"], name: "index_expense_transactions_on_user_id"
+    t.index ["user_id", "occurred_on", "id"], name: "index_expense_transactions_on_user_date_and_id"
   end
 
   create_table "import_batches", force: :cascade do |t|

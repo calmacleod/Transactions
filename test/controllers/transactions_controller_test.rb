@@ -1,6 +1,67 @@
 require "test_helper"
 
 class TransactionsControllerTest < ActionDispatch::IntegrationTest
+  test "defers transaction controls outside the initial render" do
+    sign_in_as users(:one)
+
+    get transactions_path
+
+    page = inertia_page
+    assert_equal %w[categories saved_queries subcategories], page.dig("deferredProps", "transaction_controls").sort
+    assert_equal [ "NEIGHBOURHOOD RESTAURANT", "LOCAL GROCERY MARKET" ], page.dig("props", "transactions").map { |transaction| transaction["description"] }
+    assert_not page.fetch("props").key?("categories")
+    assert_not page.fetch("props").key?("subcategories")
+    assert_not page.fetch("props").key?("saved_queries")
+
+    get transactions_path,
+      headers: {
+        "X-Inertia" => "true",
+        "X-Inertia-Version" => ViteRuby.digest,
+        "X-Inertia-Partial-Component" => "transactions/index",
+        "X-Inertia-Partial-Data" => "categories,subcategories,saved_queries"
+      }
+
+    assert_response :success
+    deferred_props = JSON.parse(response.body).fetch("props")
+    assert_equal [ "Groceries", "Restaurants" ], deferred_props.fetch("categories").map { |category| category.fetch("name") }
+    assert_equal [ "Gift", "Work" ], deferred_props.fetch("subcategories").map { |subcategory| subcategory.fetch("name") }
+    assert_equal [], deferred_props.fetch("saved_queries")
+  end
+
+  test "does not query saved queries without a selected id on the initial render" do
+    sign_in_as users(:one)
+    saved_query_selects = 0
+    callback = lambda do |_name, _started, _finished, _unique_id, payload|
+      saved_query_selects += 1 if payload[:sql].include?('FROM "saved_transaction_queries"') && !payload[:cached]
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      get transactions_path
+    end
+
+    assert_response :success
+    assert_equal 0, saved_query_selects
+  end
+
+  test "loads only transaction columns used by the index" do
+    sign_in_as users(:one)
+    transaction_load_sql = nil
+    callback = lambda do |_name, _started, _finished, _unique_id, payload|
+      transaction_load_sql = payload[:sql] if payload[:name] == "ExpenseTransaction Load" && !payload[:cached]
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      get transactions_path
+    end
+
+    assert_response :success
+    assert transaction_load_sql
+    assert_not_includes transaction_load_sql, '"expense_transactions".*'
+    assert_not_includes transaction_load_sql, '"expense_transactions"."raw_data"'
+    assert_not_includes transaction_load_sql, '"expense_transactions"."external_id"'
+    assert_not_includes transaction_load_sql, '"expense_transactions"."created_at"'
+  end
+
   test "filters transactions by start and end date" do
     sign_in_as users(:one)
 

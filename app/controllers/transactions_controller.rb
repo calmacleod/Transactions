@@ -2,6 +2,10 @@ class TransactionsController < ApplicationController
   PER_PAGE_OPTIONS = [ 10, 25, 50, 100 ].freeze
   DEFAULT_PER_PAGE = 25
   ALL_PER_PAGE = "all"
+  INDEX_COLUMNS = %i[
+    id occurred_on description amount_cents direction category_id notes
+    classification_reason classification_confidence
+  ].freeze
 
   helper_method :transaction_per_page_options
 
@@ -74,9 +78,9 @@ class TransactionsController < ApplicationController
 
   def transaction_index_props
     {
-      categories: -> { category_options(transaction_categories) },
-      subcategories: -> { current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory) } },
-      saved_queries: -> { saved_queries.map { |query| saved_query_props(query) } },
+      categories: InertiaRails.defer(group: "transaction_controls") { category_options(transaction_categories) },
+      subcategories: InertiaRails.defer(group: "transaction_controls") { current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory) } },
+      saved_queries: InertiaRails.defer(group: "transaction_controls") { saved_queries.map { |query| saved_query_props(query) } },
       selected_saved_query_id: -> { selected_saved_query&.id },
       filter_params: -> { transaction_filter_params },
       quick_ranges: TransactionFilter::QUICK_RANGES.map { |value, label| { value:, label: } },
@@ -108,6 +112,7 @@ class TransactionsController < ApplicationController
 
   def selected_saved_query
     return @selected_saved_query if defined?(@selected_saved_query)
+    return @selected_saved_query = nil if params[:saved_query_id].blank?
 
     @selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
   end
@@ -129,7 +134,10 @@ class TransactionsController < ApplicationController
 
   def paginated_transaction_result
     @paginated_transaction_result ||= begin
-      filtered_transactions = transaction_filter.call(current_user.expense_transactions).includes(:category, :subcategories)
+      filtered_transactions = transaction_filter
+        .call(current_user.expense_transactions)
+        .select(*INDEX_COLUMNS)
+        .includes(:category, :subcategories)
       limit = transactions_page_limit(filtered_transactions, transactions_per_page)
 
       pagy(:offset, filtered_transactions, limit:)
@@ -193,7 +201,7 @@ class TransactionsController < ApplicationController
   end
 
   def transactions_page_limit(filtered_transactions, transactions_per_page)
-    return [ filtered_transactions.count, 1 ].max if transactions_per_page == ALL_PER_PAGE
+    return [ filtered_transactions.unscope(:select).count, 1 ].max if transactions_per_page == ALL_PER_PAGE
 
     transactions_per_page
   end
