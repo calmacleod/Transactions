@@ -76,3 +76,6 @@ gem "pagy", "~> 43.5"
 gem "inertia_rails", "~> 3.21"
 
 gem "vite_rails", "~> 3.11"
+
+# Application performance monitoring and production log forwarding.
+gem "newrelic_rpm", "~> 10.2"

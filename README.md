@@ -8,6 +8,7 @@ A Rails 8 + SQLite expense tracker for headerless credit card CSV exports.
 - Local SQLite storage for transactions, import batches, categories, and generated insights.
 - RubyLLM-backed transaction classification with structured output.
 - RubyLLM-backed spending insight generation with a rule-based fallback when no AI provider key is configured.
+- New Relic application performance monitoring, distributed tracing, and log forwarding in production.
 - Inertia Rails + Svelte dashboard and transaction review UI using local shadcn-svelte style components.
 - Rails-generated Docker, Thruster, Solid Queue/Cache/Cable, and Kamal configuration.
 
@@ -126,6 +127,7 @@ Kamal expects these Bitwarden Secrets Manager keys:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `OPENAI_API_KEY`
+- `NEW_RELIC_LICENSE_KEY`
 - `RESEND_API_KEY`
 - `MAILER_FROM`
 

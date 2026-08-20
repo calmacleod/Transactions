@@ -22,6 +22,7 @@ env:
     - ADMIN_EMAIL
     - ADMIN_PASSWORD
     - OPENAI_API_KEY
+    - NEW_RELIC_LICENSE_KEY
     - RESEND_API_KEY
     - MAILER_FROM
   clear:

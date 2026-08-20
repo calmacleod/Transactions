@@ -220,6 +220,8 @@ GEM
     net-smtp (0.5.1)
       net-protocol
     net-ssh (7.3.3)
+    newrelic_rpm (10.7.0)
+      logger
     nio4r (2.7.5)
     nokogiri (1.19.4-aarch64-linux-gnu)
       racc (~> 1.4)
@@ -462,6 +464,7 @@ DEPENDENCIES
   jbuilder
   kamal
   mission_control-jobs
+  newrelic_rpm (~> 10.2)
   pagy (~> 43.5)
   propshaft
   puma (>= 5.0)
@@ -559,6 +562,7 @@ CHECKSUMS
   net-sftp (4.0.0) sha256=65bb91c859c2f93b09826757af11b69af931a3a9155050f50d1b06d384526364
   net-smtp (0.5.1) sha256=ed96a0af63c524fceb4b29b0d352195c30d82dd916a42f03c62a3a70e5b70736
   net-ssh (7.3.3) sha256=831def58b2c51dcef66ec00d29397d4f210de89c19fe78f95873ca30f386e86a
+  newrelic_rpm (10.7.0) sha256=34df45bc186ac80ee6a8f314f39fd6c659901f5174fb5b39c3432636f88a6033
   nio4r (2.7.5) sha256=6c90168e48fb5f8e768419c93abb94ba2b892a1d0602cb06eef16d8b7df1dca1
   nokogiri (1.19.4-aarch64-linux-gnu) sha256=1269fb644a6de405057a53dd5c762b1209b43ca7424f839454d3dbc677c31a8f
   nokogiri (1.19.4-aarch64-linux-musl) sha256=35c65b9ce72b3bb03207bdbe7067915019dc18c1b9b59139684bd6690fdd01af

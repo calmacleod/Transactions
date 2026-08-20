@@ -1,0 +1,38 @@
+common: &default_settings
+  # Required license key associated with your New Relic account.
+  license_key: <%= ENV.fetch("NEW_RELIC_LICENSE_KEY", nil) %>
+
+  # Renaming this value changes the application entity shown in New Relic.
+  app_name: "Transactions"
+
+  distributed_tracing:
+    enabled: true
+
+  log_level: info
+
+  application_logging:
+    enabled: true
+    forwarding:
+      enabled: true
+      max_samples_stored: 10000
+    metrics:
+      enabled: true
+    local_decorating:
+      enabled: false
+
+development:
+  <<: *default_settings
+  app_name: "Transactions (Development)"
+  agent_enabled: false
+  monitor_mode: false
+
+test:
+  <<: *default_settings
+  monitor_mode: false
+
+staging:
+  <<: *default_settings
+  app_name: "Transactions (Staging)"
+
+production:
+  <<: *default_settings
