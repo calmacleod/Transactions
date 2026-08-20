@@ -7,5 +7,4 @@ RubyLLM.configure do |config|
   config.anthropic_api_key = ENV["ANTHROPIC_API_KEY"]
   config.gemini_api_key = ENV["GEMINI_API_KEY"]
   config.default_model = ENV.fetch("RUBYLLM_MODEL", "gpt-5-nano")
-  config.use_new_acts_as = true
 end

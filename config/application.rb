@@ -18,6 +18,12 @@ require "rails/test_unit/railtie"
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
+# RubyLLM selects its Active Record integration while Rails is booting. Configure
+# the association-based API before the application and its models initialize.
+RubyLLM.configure do |config|
+  config.use_new_acts_as = true
+end
+
 module Transactions
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
