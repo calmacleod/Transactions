@@ -51,6 +51,6 @@ class ExpenseTransaction < ApplicationRecord
   private
 
   def description_parts
-    description.to_s.split(/\s{2,}| #|\*/, 2)
+    description.to_s.split(/\s{2,}| #/, 2)
   end
 end

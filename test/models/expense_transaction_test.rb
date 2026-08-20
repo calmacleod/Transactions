@@ -14,4 +14,11 @@ class ExpenseTransactionTest < ActiveSupport::TestCase
     assert_equal "NEIGHBOURHOOD RESTAURANT", transaction.merchant_name
     assert_equal "", transaction.description_detail
   end
+
+  test "merchant name preserves asterisks in card statement descriptors" do
+    transaction = ExpenseTransaction.new(description: "ABC*5068-ANYTIME FITNE OTTAWA, ON")
+
+    assert_equal "ABC*5068-ANYTIME FITNE OTTAWA, ON", transaction.merchant_name
+    assert_equal "", transaction.description_detail
+  end
 end
