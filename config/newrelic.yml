@@ -13,6 +13,10 @@ common: &default_settings
   ai_monitoring.enabled: true
   span_events.max_samples_stored: 10000
   custom_insights_events.max_samples_stored: 100000
+  active_support_custom_events_names:
+    - render.inertia_rails
+    - resolve_props.inertia_rails
+    - ssr.inertia_rails
 
   application_logging:
     enabled: true

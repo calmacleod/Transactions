@@ -73,7 +73,7 @@ gem "csv"
 
 gem "pagy"
 
-gem "inertia_rails"
+gem "inertia_rails", github: "inertiajs/inertia-rails", ref: "d74f3b96b556a23dd62e7949b8911946d8341db5"
 
 gem "vite_rails"
 
