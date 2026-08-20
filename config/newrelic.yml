@@ -10,6 +10,10 @@ common: &default_settings
 
   log_level: info
 
+  ai_monitoring.enabled: true
+  span_events.max_samples_stored: 10000
+  custom_insights_events.max_samples_stored: 100000
+
   application_logging:
     enabled: true
     forwarding:
