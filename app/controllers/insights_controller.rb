@@ -20,6 +20,11 @@ class InsightsController < ApplicationController
     end_date = Date.current
     GenerateInsightsJob.perform_later(start_date, end_date, current_user.id)
 
-    redirect_to insights_path, notice: "Queued a fresh analysis of recent spending patterns."
+    message = "Insight regeneration queued. New insights will appear when the background job finishes."
+
+    respond_to do |format|
+      format.html { redirect_to insights_path, notice: message }
+      format.json { render json: { message: }, status: :accepted }
+    end
   end
 end

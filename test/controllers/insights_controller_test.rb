@@ -9,6 +9,18 @@ class InsightsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to insights_path
+    assert_equal "Insight regeneration queued. New insights will appear when the background job finishes.", flash[:notice]
+  end
+
+  test "accepts asynchronous insight generation without rendering the insights page" do
+    sign_in_as users(:one)
+
+    assert_enqueued_with(job: GenerateInsightsJob) do
+      post insights_path, as: :json
+    end
+
+    assert_response :accepted
+    assert_equal({ "message" => "Insight regeneration queued. New insights will appear when the background job finishes." }, response.parsed_body)
   end
 
   test "renders decision metrics and evidence drill downs" do

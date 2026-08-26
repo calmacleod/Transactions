@@ -138,6 +138,16 @@ test("insights explain comparisons and drill into their exact evidence", async (
   await expect(page.getByText("LOCAL GROCERY MARKET")).toBeVisible()
 })
 
+test("regenerating insights queues in place without a loading bar", async ({ page }) => {
+  await page.goto("/insights")
+
+  await page.getByRole("button", { name: "Regenerate" }).click()
+
+  await expect(page.getByTestId("regeneration-feedback")).toContainText("Insight regeneration queued")
+  await expect(page.locator("#nprogress")).toHaveCount(0)
+  await expect(page).toHaveURL(/\/insights$/)
+})
+
 test("app chrome navigation starts on mouse down", async ({ page }) => {
   await page.goto("/")
 

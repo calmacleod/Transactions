@@ -1,11 +1,12 @@
 <script>
-  import { router } from "@inertiajs/svelte"
   import { Badge } from "$lib/components/ui/badge"
   import { Button } from "$lib/components/ui/button"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { badgeVariant } from "$lib/formatters"
   import ArrowDown from "@lucide/svelte/icons/arrow-down"
   import ArrowUp from "@lucide/svelte/icons/arrow-up"
+  import CircleAlert from "@lucide/svelte/icons/circle-alert"
+  import CircleCheck from "@lucide/svelte/icons/circle-check"
   import Lightbulb from "@lucide/svelte/icons/lightbulb"
   import RefreshCcw from "@lucide/svelte/icons/refresh-ccw"
   import Repeat2 from "@lucide/svelte/icons/repeat-2"
@@ -19,6 +20,8 @@
   export let actions
 
   let selectedInsight = null
+  let regenerationState = "idle"
+  let regenerationMessage = ""
 
   $: overviewCards = [
     { label: overview.spend?.label || "Spend", value: overview.spend?.value || "$0.00", note: overview.month_label, icon: WalletCards },
@@ -33,8 +36,31 @@
     { label: "Unusual purchases", value: overview.unusual_count || 0, note: `${overview.unclassified?.value || "$0.00"} unclassified`, icon: SearchCheck },
   ]
 
-  function regenerate() {
-    router.post(actions.regenerate, {}, { preserveScroll: true, preserveState: true })
+  async function regenerate() {
+    if (regenerationState === "submitting") return
+
+    regenerationState = "submitting"
+    regenerationMessage = ""
+
+    try {
+      const response = await fetch(actions.regenerate, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+        },
+      })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) throw new Error(payload.message || "Request failed")
+
+      regenerationState = "queued"
+      regenerationMessage = payload.message || "Insight regeneration queued."
+    } catch (_error) {
+      regenerationState = "error"
+      regenerationMessage = "Insight regeneration could not be queued. Please try again."
+    }
   }
 </script>
 
@@ -48,10 +74,27 @@
     <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Insights</h1>
     <p class="mt-2 max-w-3xl text-sm text-muted-foreground">Changes, risks, and recurring commitments that differ from your normal spending—not a restatement of totals. Analysis through {period.analysis_month_label}.</p>
   </div>
-  <Button onclick={regenerate}>
-    <RefreshCcw class="size-4" />
-    Regenerate
-  </Button>
+  <div class="flex flex-col items-start gap-2 lg:items-end">
+    <Button onclick={regenerate} disabled={regenerationState === "submitting"}>
+      <RefreshCcw class="size-4" />
+      {regenerationState === "submitting" ? "Queuing…" : "Regenerate"}
+    </Button>
+    {#if regenerationMessage}
+      <p
+        class={`flex max-w-sm items-center gap-1.5 text-xs font-medium ${regenerationState === "error" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"}`}
+        role="status"
+        aria-live="polite"
+        data-testid="regeneration-feedback"
+      >
+        {#if regenerationState === "error"}
+          <CircleAlert class="size-3.5 shrink-0" />
+        {:else}
+          <CircleCheck class="size-3.5 shrink-0" />
+        {/if}
+        {regenerationMessage}
+      </p>
+    {/if}
+  </div>
 </section>
 
 <section class="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
