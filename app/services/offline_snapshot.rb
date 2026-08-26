@@ -94,8 +94,12 @@ class OfflineSnapshot
     months = months_on_record
     category_rows = category_month_rows(months)
     monthly_totals = monthly_totals(months)
+    weekly_summary = WeeklySpendingSummary.new(user:)
+    completed_week_delta = weekly_summary.completed_week_delta
 
     {
+      week_trend: weekly_summary.trend.map { |item| dashboard_item_props(item) },
+      completed_week_delta: completed_week_delta.merge(label: money_from_cents(completed_week_delta[:cents])),
       months: months.map { |month| month_props(month) },
       monthly_totals:,
       category_rows:,

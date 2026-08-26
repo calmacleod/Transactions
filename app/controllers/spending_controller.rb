@@ -3,8 +3,12 @@ class SpendingController < ApplicationController
     months = months_on_record
     monthly_totals = monthly_totals(months)
     category_rows = category_month_rows(months)
+    weekly_summary = WeeklySpendingSummary.new(user: current_user)
+    completed_week_delta = weekly_summary.completed_week_delta
 
     render inertia: {
+      week_trend: weekly_summary.trend.map { |week| week_props(week) },
+      completed_week_delta: completed_week_delta.merge(label: money_from_cents(completed_week_delta[:cents])),
       months: months.map { |month| month_props(month) },
       monthly_totals:,
       category_rows:,
@@ -14,6 +18,13 @@ class SpendingController < ApplicationController
   end
 
   private
+
+  def week_props(week)
+    week.merge(
+      amount_label: money_from_cents(week[:cents]),
+      filters_path: transactions_path(week[:filters])
+    ).except(:filters)
+  end
 
   def months_on_record
     first_date = current_user.expense_transactions.expenses.minimum(:occurred_on)&.beginning_of_month || Date.current.beginning_of_month

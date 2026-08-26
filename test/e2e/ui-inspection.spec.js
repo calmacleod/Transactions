@@ -55,6 +55,18 @@ test("dashboard top merchants panel stays within the mobile viewport", async ({ 
   await expectNoViewportOverflow(page)
 })
 
+test("spending page exposes the recent weekly trend on desktop and mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/spending")
+
+  await expect(page.getByRole("heading", { name: "Spending trends" })).toBeVisible()
+  const weeklyPanel = page.getByTestId("weekly-spending-panel")
+  await expect(weeklyPanel).toBeVisible()
+  await expect(weeklyPanel.getByRole("link")).toHaveCount(8)
+  await expect(weeklyPanel.getByText("Last full week")).toBeVisible()
+  await expectNoViewportOverflow(page)
+})
+
 test("internal navigation prefetches on intent without eager sidebar requests", async ({ page }) => {
   const transactionPrefetches = []
   page.on("request", (request) => {

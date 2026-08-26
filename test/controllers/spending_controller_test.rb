@@ -1,6 +1,20 @@
 require "test_helper"
 
 class SpendingControllerTest < ActionDispatch::IntegrationTest
+  test "shows recent weekly spending with transaction drill-downs" do
+    sign_in_as users(:one)
+
+    travel_to Date.new(2026, 5, 29) do
+      get spending_path
+    end
+
+    assert_response :success
+    assert_equal 8, inertia_props["week_trend"].size
+    assert_equal "$131.53", inertia_props["week_trend"][-2]["amount_label"]
+    assert_equal transactions_path(start_date: "2026-05-18", end_date: "2026-05-24", direction: "debit"), inertia_props["week_trend"][-2]["filters_path"]
+    assert_equal "$131.53", inertia_props.dig("completed_week_delta", "label")
+  end
+
   test "shows monthly totals and category history for all recorded months" do
     sign_in_as users(:one)
 

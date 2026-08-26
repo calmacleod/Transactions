@@ -35,6 +35,7 @@
   $: visibleTransactions = filteredTransactions(transactions, query)
   $: generatedAt = snapshot?.generated_at ? new Date(snapshot.generated_at).toLocaleString() : ""
   $: maxMonthCents = spending.max_month_cents || 0
+  $: maxWeekCents = Math.max(...(spending.week_trend || []).map((week) => week.cents || 0), 0)
   $: views = [
     { value: "dashboard", label: "Dashboard", icon: BarChart3 },
     { value: "transactions", label: "Transactions", icon: CreditCard },
@@ -261,6 +262,25 @@
       {/each}
     </div>
   {:else if activeView === "spending"}
+    <Card class="mb-4">
+      <CardHeader class="border-b border-border">
+        <div class="flex items-center justify-between gap-3">
+          <CardTitle class="text-sm">Weekly spending</CardTitle>
+          <Badge variant={spending.completed_week_delta?.cents === 0 ? "secondary" : spending.completed_week_delta?.cents > 0 ? "destructive" : "success"}>
+            Last full week {spending.completed_week_delta?.cents > 0 ? "+" : ""}{spending.completed_week_delta?.label}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent class="grid gap-2">
+        {#each spending.week_trend || [] as week}
+          <div class="grid grid-cols-[5rem_minmax(0,1fr)_6rem] items-center gap-3 rounded-lg bg-background px-2 py-2">
+            <p class="text-xs font-medium text-foreground">{week.label}</p>
+            <Progress value={percent(week.cents, maxWeekCents)} class="h-2" />
+            <p class="money-value text-right text-xs font-semibold text-foreground">{week.amount_label}</p>
+          </div>
+        {/each}
+      </CardContent>
+    </Card>
     <section class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {#each spending.monthly_totals || [] as month}
         <Card>

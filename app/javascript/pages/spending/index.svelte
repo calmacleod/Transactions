@@ -1,16 +1,20 @@
 <script>
   import { Link } from "@inertiajs/svelte"
+  import { Badge } from "$lib/components/ui/badge"
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card"
   import { Progress } from "$lib/components/ui/progress"
   import TrendingUp from "@lucide/svelte/icons/trending-up"
 
   export let months = []
+  export let week_trend = []
+  export let completed_week_delta = { cents: 0, label: "$0.00" }
   export let monthly_totals = []
   export let category_rows = []
   export let max_month_cents = 0
   export let max_category_cents = 0
 
   $: yearGroups = buildYearGroups(months)
+  $: maxWeek = Math.max(...week_trend.map((item) => item.cents || 0), 0)
 
   function percent(value, max, floor = 0) {
     if (!max) return floor
@@ -40,14 +44,52 @@
 <section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
   <div>
     <p class="text-xs font-semibold uppercase tracking-wider text-primary">Spend history</p>
-    <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Monthly spending</h1>
-    <p class="mt-2 text-sm text-muted-foreground">All recorded months and category movement over time.</p>
+    <h1 class="mt-1 text-3xl font-semibold tracking-tight text-foreground">Spending trends</h1>
+    <p class="mt-2 text-sm text-muted-foreground">Recent weekly movement, recorded months, and category changes over time.</p>
   </div>
   <span class="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground">
     <TrendingUp class="size-4" />
     {months.length} month{months.length === 1 ? "" : "s"} on record
   </span>
 </section>
+
+<Card class="mb-4" data-testid="weekly-spending-panel">
+  <CardHeader class="border-b border-border">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <CardTitle class="text-sm">Weekly spending</CardTitle>
+        <p class="mt-1 text-xs text-muted-foreground">Eight weeks of debit purchases, Monday through Sunday</p>
+      </div>
+      <Badge class="money-value w-fit" variant={completed_week_delta.cents === 0 ? "secondary" : completed_week_delta.cents > 0 ? "destructive" : "success"}>
+        Last full week {completed_week_delta.cents > 0 ? "+" : ""}{completed_week_delta.label}
+      </Badge>
+    </div>
+  </CardHeader>
+  <CardContent>
+    <div class="overflow-x-auto pb-1">
+      <div class="mt-1 flex h-56 min-w-[44rem] items-end gap-2">
+        {#each week_trend as week}
+          <Link
+            href={week.filters_path}
+            prefetch
+            cacheFor="30s"
+            class={`flex min-w-0 flex-1 flex-col items-center gap-2 rounded-lg p-1 transition-colors hover:bg-muted ${week.current_week ? "bg-primary/5" : "bg-background"}`}
+            aria-label={`${week.full_label}: ${week.amount_label}${week.current_week ? ", so far" : ""}`}
+          >
+            <p class="money-value text-xs font-semibold text-foreground">{week.amount_label}</p>
+            <div class="flex h-36 w-full items-end overflow-hidden rounded-lg bg-muted">
+              <div class="w-full rounded-lg bg-gradient-to-t from-primary to-teal-500" style={`height: ${percent(week.cents, maxWeek, week.cents > 0 ? 6 : 0)}%`}></div>
+            </div>
+            <div class="text-center">
+              <p class="text-xs font-semibold text-foreground">{week.label}</p>
+              <p class="text-[0.7rem] text-muted-foreground">{week.current_week ? "So far" : "Mon–Sun"}</p>
+            </div>
+          </Link>
+        {/each}
+      </div>
+    </div>
+  </CardContent>
+</Card>
 
 <Card class="mb-4">
   <CardHeader class="border-b border-border">

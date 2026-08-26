@@ -24,6 +24,12 @@ class ExpenseTransaction < ApplicationRecord
     group("strftime('%Y-%m-01', occurred_on)").sum(:amount_cents).transform_keys { |month| Date.iso8601(month) }
   end
 
+  def self.group_by_week
+    week_start_sql = "date(occurred_on, '-' || ((CAST(strftime('%w', occurred_on) AS integer) + 6) % 7) || ' days')"
+
+    group(week_start_sql).sum(:amount_cents).transform_keys { |week| Date.iso8601(week) }
+  end
+
   def amount
     amount_cents.to_d / 100
   end
