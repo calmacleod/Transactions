@@ -32,7 +32,9 @@ class AiControlsTest < ActiveSupport::TestCase
 
   test "reads token counts and cost directly from RubyLLM message responses" do
     cost = Struct.new(:total).new(0.00125)
-    response = Struct.new(:input_tokens, :output_tokens, :cost).new(500_000, 250_000, cost)
+    tokens = RubyLLM::Tokens.new(input: 500_000, output: 250_000)
+    response = RubyLLM::Message.new(role: :assistant, content: "Answer", tokens:)
+    response.define_singleton_method(:cost) { cost }
 
     assert_equal 500_000, Ai::Controls.token_count(response, :input_tokens)
     assert_equal 250_000, Ai::Controls.token_count(response, :output_tokens)

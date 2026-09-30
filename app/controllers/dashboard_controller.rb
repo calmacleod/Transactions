@@ -4,7 +4,6 @@ class DashboardController < ApplicationController
     insights = current_user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..)
       .recent
       .limit(6)
-      .includes(expense_transactions: [ :category, :subcategories ])
     categories = current_user.categories.by_name
     month_range = Date.current.beginning_of_month..Date.current.end_of_month
     dashboard = DashboardSummary.new(range: month_range, user: current_user)

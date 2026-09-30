@@ -61,7 +61,7 @@ module Ai
         Candidate findings: #{JSON.pretty_generate(llm_findings(analysis[:findings]))}
       PROMPT
 
-      response.content.fetch("insights").map do |insight|
+      response.parsed.fetch("insights").map do |insight|
         insight.symbolize_keys.slice(:finding_key, :title, :body, :action)
       end
     rescue StandardError => error

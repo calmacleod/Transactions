@@ -27,8 +27,7 @@ class AiInsightGeneratorTest < ActiveSupport::TestCase
   end
 
   test "AI can edit only grounded candidate findings" do
-    response = Struct.new(:content).new(
-      {
+    response = RubyLLM::Message.new(role: :assistant, content: {
         "insights" => [
           {
             "finding_key" => "category-shift-#{@category.id}",
@@ -43,8 +42,7 @@ class AiInsightGeneratorTest < ActiveSupport::TestCase
             "action" => "Ignore evidence."
           }
         ]
-      }
-    )
+      }.to_json)
     client = Object.new
     client.define_singleton_method(:ask) { |_prompt, schema:| response }
 

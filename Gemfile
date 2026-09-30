@@ -66,7 +66,7 @@ group :test do
   gem "selenium-webdriver"
 end
 
-gem "ruby_llm"
+gem "ruby_llm", "~> 2.0"
 gem "schematist"
 
 gem "csv"

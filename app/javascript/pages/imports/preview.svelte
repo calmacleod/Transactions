@@ -27,6 +27,7 @@
   let classificationSubscription
   let classificationRuntimePromise
   let destroyed = false
+  let desktopLayout = typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : true
 
   $: groupedRowIds = new Map(groups.map((group) => [group.key, new Set(group.row_ids)]))
   $: visibleRows = selectedGroupKey === "all" ? draftRows : draftRows.filter((row) => groupedRowIds.get(selectedGroupKey)?.has(row.id))
@@ -45,6 +46,12 @@
   onMount(() => {
     destroyed = false
     subscribeToClassification()
+    const layoutMedia = window.matchMedia("(min-width: 768px)")
+    const updateLayout = () => (desktopLayout = layoutMedia.matches)
+    updateLayout()
+    layoutMedia.addEventListener("change", updateLayout)
+
+    return () => layoutMedia.removeEventListener("change", updateLayout)
   })
 
   onDestroy(() => {
@@ -302,7 +309,8 @@
     </div>
   </CardHeader>
   <CardContent class="p-0">
-    <div class="space-y-2 p-3 md:hidden">
+    {#if !desktopLayout}
+    <div class="space-y-2 p-3">
       {#each visibleRows as row, index (row.id)}
         <section class={`rounded-lg border p-3 ${row.duplicate ? "border-amber-200 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20" : "border-border bg-background"}`}>
           <div class="mb-2 flex items-start justify-between gap-3">
@@ -391,7 +399,8 @@
       {/each}
     </div>
 
-    <div class="hidden overflow-x-auto md:block">
+    {:else}
+    <div class="overflow-x-auto">
       <Table class="min-w-[76rem] table-fixed text-xs">
         <TableHeader>
           <TableRow>
@@ -501,5 +510,6 @@
         </TableBody>
       </Table>
     </div>
+    {/if}
   </CardContent>
 </Card>

@@ -1,5 +1,10 @@
+<script context="module">
+  const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" })
+  const dateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" })
+</script>
+
 <script>
-  import { onDestroy, onMount, tick } from "svelte"
+  import { onDestroy, tick } from "svelte"
   import { Button } from "$lib/components/ui/button"
   import CalendarIcon from "@lucide/svelte/icons/calendar"
   import ChevronLeft from "@lucide/svelte/icons/chevron-left"
@@ -29,22 +34,23 @@
   let panelStyle = ""
 
   $: selectedDate = parseIsoDate(value)
-  $: monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(viewDate)
-  $: weeks = calendarWeeks(viewDate)
-  $: label = selectedDate ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(selectedDate) : placeholder
+  $: monthLabel = open ? monthFormatter.format(viewDate) : ""
+  $: weeks = open ? calendarWeeks(viewDate) : []
+  $: label = selectedDate ? dateFormatter.format(selectedDate) : placeholder
   $: controlSizeClass = size === "sm" ? "h-7 rounded-[min(var(--radius-md),10px)] text-sm" : "h-8 rounded-lg text-base md:text-sm"
 
-  onMount(() => {
-    window.addEventListener("pointerdown", closeWhenOutside, true)
-    window.addEventListener("resize", positionPanel)
-    window.addEventListener("scroll", positionPanel, true)
-  })
+  $: updatePanelListeners(open)
 
-  onDestroy(() => {
-    window.removeEventListener("pointerdown", closeWhenOutside, true)
-    window.removeEventListener("resize", positionPanel)
-    window.removeEventListener("scroll", positionPanel, true)
-  })
+  onDestroy(() => updatePanelListeners(false))
+
+  function updatePanelListeners(active) {
+    if (typeof window === "undefined") return
+
+    const method = active ? "addEventListener" : "removeEventListener"
+    window[method]("pointerdown", closeWhenOutside, true)
+    window[method]("resize", positionPanel)
+    window[method]("scroll", positionPanel, true)
+  }
 
   async function toggleOpen() {
     if (disabled) return

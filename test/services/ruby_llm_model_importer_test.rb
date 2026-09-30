@@ -19,4 +19,20 @@ class RubyLlmModelImporterTest < ActiveSupport::TestCase
 
     assert_equal imported_count, Model.count
   end
+
+  test "catalog updates preserve model ids favorites and user access" do
+    RubyLlmModelImporter.load_cached!
+    model = Model.find_by!(provider: "openai", model_id: "gpt-5-nano")
+    model.update!(favorite: true, user_selectable: true)
+    original_id = model.id
+    original_count = Model.count
+
+    RubyLlmModelImporter.load_cached!
+
+    assert_equal original_count, Model.count
+    assert_equal original_id, model.reload.id
+    assert_predicate model, :favorite?
+    assert_predicate model, :user_selectable?
+    assert model.price(:input).present?
+  end
 end

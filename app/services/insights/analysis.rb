@@ -14,12 +14,14 @@ module Insights
     end
 
     def call
-      {
-        period: period,
-        overview: overview,
+      summary.merge(
         transaction_ids: records.map(&:id),
         findings: findings
-      }
+      )
+    end
+
+    def summary
+      { period:, overview: }
     end
 
     private
@@ -219,16 +221,21 @@ module Insights
 
     def unusual_transactions
       @unusual_transactions ||= current_expenses.filter_map do |transaction|
-        history = expenses_by_merchant.fetch(merchant_key(transaction), []).select { |candidate| candidate.occurred_on < analysis_month }
-        next if history.size < 2
-
-        baseline = median(history.map(&:amount_cents))
+        baseline = historical_merchant_baselines[merchant_key(transaction)]
+        next if baseline.nil?
         difference = transaction.amount_cents - baseline
         multiple = baseline.positive? ? (transaction.amount_cents.to_f / baseline).round(1) : 0
         next unless difference >= MIN_MEANINGFUL_CENTS && multiple >= 1.75
 
         { transaction:, baseline:, difference:, multiple: }
       end.sort_by { |candidate| -candidate[:difference] }
+    end
+
+    def historical_merchant_baselines
+      @historical_merchant_baselines ||= expenses_by_merchant.transform_values do |transactions|
+        history = transactions.select { |transaction| transaction.occurred_on < analysis_month }
+        median(history.map(&:amount_cents)) if history.size >= 2
+      end
     end
 
     def recurring_finding

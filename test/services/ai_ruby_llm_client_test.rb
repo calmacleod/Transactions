@@ -40,7 +40,9 @@ class AiRubyLlmClientTest < ActiveSupport::TestCase
 
   test "configures RubyLLM chat and records normalized response usage" do
     cost = Struct.new(:total).new(0.001)
-    response = Struct.new(:content, :input_tokens, :output_tokens, :cost).new({ "category" => "Pets" }, 12, 4, cost)
+    tokens = RubyLLM::Tokens.new(input: 12, output: 4)
+    response = RubyLLM::Message.new(role: :assistant, content: '{"category":"Pets"}', tokens:)
+    response.define_singleton_method(:cost) { cost }
     chat = FakeChat.new(response:)
     selected_model = nil
     selected_provider = nil
@@ -52,6 +54,7 @@ class AiRubyLlmClientTest < ActiveSupport::TestCase
       )
 
       assert_equal response, result
+      assert_equal({ "category" => "Pets" }, result.parsed)
     end
 
     assert_equal "integration-model", selected_model
@@ -79,6 +82,16 @@ class AiRubyLlmClientTest < ActiveSupport::TestCase
     assert_raises(Ai::Controls::ModelUnavailableError) do
       Ai::RubyLlmClient.new(feature: :classification, model: "tools-only")
     end
+  end
+
+  test "builds real RubyLLM 2 schemas and tool definitions without a provider request" do
+    chat = RubyLLM.chat(model: "gpt-5-nano", provider: :openai)
+      .with_schema(TransactionClassificationSchema)
+      .with_tools(Ai::Tools::SearchTransactionsTool, Ai::Tools::SpendingSummaryTool, Ai::Tools::BudgetSummaryTool)
+
+    assert_equal "object", chat.schema.dig(:schema, :type)
+    assert_equal %i[budget_summary search_transactions spending_summary], chat.tools.keys.sort
+    assert_equal "string", chat.tools.fetch(:search_transactions).parameters_schema.dig("properties", "query", "type")
   end
 
   private

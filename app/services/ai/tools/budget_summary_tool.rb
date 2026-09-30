@@ -3,7 +3,7 @@ module Ai
     class BudgetSummaryTool < RubyLLM::Tool
       description "Return category budgets and spending for a month."
 
-      param :month, desc: "Month in YYYY-MM format. Defaults to the current month.", required: false
+      parameter :month, description: "Month in YYYY-MM format. Defaults to the current month.", required: false
 
       def name
         "budget_summary"

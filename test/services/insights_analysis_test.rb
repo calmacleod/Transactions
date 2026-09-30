@@ -54,6 +54,18 @@ class InsightsAnalysisTest < ActiveSupport::TestCase
     end
   end
 
+  test "summary matches generated overview without generating findings" do
+    create_expense(Date.new(2026, 1, 5), "LOCAL MARKET", 1000)
+    create_expense(Date.new(2026, 2, 5), "LOCAL MARKET", 1200)
+    create_expense(Date.new(2026, 4, 5), "LOCAL MARKET", 5000)
+    full = analyze(Date.new(2026, 1, 1), Date.new(2026, 4, 30))
+    summary = Insights::Analysis.new(transactions: @user.expense_transactions, start_date: Date.new(2026, 1, 1), end_date: Date.new(2026, 4, 30), user: @user)
+    summary.define_singleton_method(:findings) { raise "Findings should only be generated in background work" }
+
+    assert_equal full.slice(:period, :overview), summary.summary
+    assert_equal 1, summary.summary.dig(:overview, :unusual_count)
+  end
+
   private
 
   def analyze(start_date, end_date)

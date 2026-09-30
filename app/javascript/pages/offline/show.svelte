@@ -22,6 +22,8 @@
   let loading = true
   let activeView = "dashboard"
   let query = ""
+  const PAGE_SIZE = 25
+  let currentPage = 1
   let online = typeof navigator === "undefined" ? true : navigator.onLine
 
   $: pages = snapshot?.pages || {}
@@ -33,6 +35,9 @@
   $: subcategories = pages.subcategories || {}
   $: transactions = transactionsPage.transactions || []
   $: visibleTransactions = filteredTransactions(transactions, query)
+  $: totalPages = Math.max(1, Math.ceil(visibleTransactions.length / PAGE_SIZE))
+  $: transactionPage = Math.min(currentPage, totalPages)
+  $: paginatedTransactions = visibleTransactions.slice((transactionPage - 1) * PAGE_SIZE, transactionPage * PAGE_SIZE)
   $: generatedAt = snapshot?.generated_at ? new Date(snapshot.generated_at).toLocaleString() : ""
   $: maxMonthCents = spending.max_month_cents || 0
   $: maxWeekCents = Math.max(...(spending.week_trend || []).map((week) => week.cents || 0), 0)
@@ -245,11 +250,11 @@
         <h2 class="text-xl font-semibold tracking-tight text-foreground">Transactions</h2>
         <p class="mt-1 text-sm text-muted-foreground">{visibleTransactions.length} of {transactions.length} records</p>
       </div>
-      <input class="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-72" placeholder="Search offline transactions" bind:value={query} />
+      <input class="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-72" placeholder="Search offline transactions" value={query} oninput={(event) => { query = event.currentTarget.value; currentPage = 1 }} />
     </section>
     <div class="grid gap-2">
-      {#each visibleTransactions as transaction}
-        <Card>
+      {#each paginatedTransactions as transaction (transaction.id)}
+        <Card data-testid="offline-transaction">
           <CardContent class="grid gap-2 md:grid-cols-[8rem_minmax(0,1fr)_10rem] md:items-center">
             <p class="text-xs font-medium text-muted-foreground">{transaction.occurred_on_label}</p>
             <div class="min-w-0">
@@ -260,6 +265,11 @@
           </CardContent>
         </Card>
       {/each}
+    </div>
+    <div class="mt-4 flex items-center justify-between gap-3">
+      <Button variant="outline" size="sm" disabled={transactionPage === 1} onclick={() => (currentPage = transactionPage - 1)}>Previous</Button>
+      <p class="text-xs text-muted-foreground" role="status">Page {transactionPage} of {totalPages}</p>
+      <Button variant="outline" size="sm" disabled={transactionPage === totalPages} onclick={() => (currentPage = transactionPage + 1)}>Next</Button>
     </div>
   {:else if activeView === "spending"}
     <Card class="mb-4">

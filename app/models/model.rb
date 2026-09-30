@@ -1,6 +1,4 @@
 class Model < ApplicationRecord
-  acts_as_model
-
   APP_CAPABILITIES = %w[function_calling structured_output].freeze
 
   scope :ordered, -> { order(favorite: :desc, provider: :asc, name: :asc) }
@@ -37,6 +35,10 @@ class Model < ApplicationRecord
 
   def supports_app_features?
     supports_text_chat? && APP_CAPABILITIES.all? { |capability| supports_capability?(capability) }
+  end
+
+  def price(kind)
+    RubyLLM::Model.new(pricing: pricing&.deep_symbolize_keys || {}).price(kind)
   end
 
   private

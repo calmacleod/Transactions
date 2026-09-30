@@ -111,8 +111,8 @@ module Ai
 
       model = Model.find_by(model_id:)
       if model.present?
-        input_per_million = model.input_price_per_million
-        output_per_million = model.output_price_per_million
+        input_per_million = model.price(:input)
+        output_per_million = model.price(:output)
       end
 
       pricing = model&.pricing || {}
@@ -127,6 +127,10 @@ module Ai
     end
 
     def self.token_count(response, key)
+      if response&.respond_to?(:tokens)
+        return response.tokens&.public_send(key.to_s.delete_suffix("_tokens"))
+      end
+
       return response.public_send(key) if response&.respond_to?(key)
 
       usage = response&.respond_to?(:usage) ? response.usage : nil

@@ -3,8 +3,8 @@ module Ai
     class SpendingSummaryTool < RubyLLM::Tool
       description "Summarize spending totals for a date range by category and merchant."
 
-      param :start_date, desc: "Start date in YYYY-MM-DD format", required: false
-      param :end_date, desc: "End date in YYYY-MM-DD format", required: false
+      parameter :start_date, description: "Start date in YYYY-MM-DD format", required: false
+      parameter :end_date, description: "End date in YYYY-MM-DD format", required: false
 
       def name
         "spending_summary"

@@ -27,24 +27,30 @@ class DashboardSummary
   end
 
   def category_totals
-    @category_totals ||= expense_records.group_by { |transaction| transaction.category || uncategorized_category }
-                                        .map { |category, records| category_total(category, records) }
-                                        .sort_by { |item| -item[:cents] }
+    @category_totals ||= begin
+      totals = expenses.group(:category_id).pluck(:category_id, Arel.sql("SUM(amount_cents)"), Arel.sql("COUNT(*)"))
+      categories = (user&.categories || Category.all).where(id: totals.map(&:first).compact).index_by(&:id)
+
+      totals.map { |category_id, cents, count| category_total(categories[category_id] || uncategorized_category, cents, count) }
+        .sort_by { |item| -item[:cents] }
+    end
   end
 
   def day_of_week_totals
     @day_of_week_totals ||= begin
-      totals = expense_records.group_by { |transaction| transaction.occurred_on.wday }
+      day_expression = Arel.sql("CAST(strftime('%w', occurred_on) AS integer)")
+      totals = expenses.group(day_expression).pluck(day_expression, Arel.sql("COUNT(*)"), Arel.sql("SUM(amount_cents)"))
+        .to_h { |wday, count, cents| [ wday, { count:, cents: } ] }
 
       Date::DAYNAMES.each_with_index.map do |name, wday|
-        records = totals.fetch(wday, [])
+        total = totals.fetch(wday, { count: 0, cents: 0 })
 
         {
           name: name.first(3),
           full_name: name,
           wday:,
-          count: records.size,
-          cents: records.sum(&:amount_cents),
+          count: total[:count],
+          cents: total[:cents],
           filters: range_filters.merge(day_of_week: wday)
         }
       end
@@ -90,8 +96,8 @@ class DashboardSummary
 
   def top_merchants(limit: 5)
     @top_merchants ||= {}
-    @top_merchants[limit] ||= expense_records.group_by { |transaction| normalized_merchant(transaction.description) }
-                                            .map { |merchant, records| { merchant:, count: records.size, cents: records.sum(&:amount_cents), filters: range_filters.merge(query: merchant) } }
+    @top_merchants[limit] ||= expenses.pluck(:description, :amount_cents).group_by { |description, _cents| normalized_merchant(description) }
+                                            .map { |merchant, records| { merchant:, count: records.size, cents: records.sum(&:last), filters: range_filters.merge(query: merchant) } }
                                             .sort_by { |item| -item[:cents] }
                                             .first(limit)
   end
@@ -108,26 +114,20 @@ class DashboardSummary
   private
 
   def transactions
-    @transactions ||= transaction_scope.includes(:category).between(range.begin, range.end)
+    @transactions ||= transaction_scope.between(range.begin, range.end)
   end
 
   def expenses
     @expenses ||= transactions.expenses
   end
 
-  def expense_records
-    @expense_records ||= expenses.to_a
-  end
-
-  def category_total(category, records)
-    cents = records.sum(&:amount_cents)
-
+  def category_total(category, cents, count)
     {
       category_id: category.persisted? ? category.id : nil,
       name: category.name,
       color: category.color.presence || "#64748b",
       cents:,
-      count: records.size,
+      count:,
       budget_cents: category.monthly_budget_cents,
       percent: percentage(cents, total_spend_cents),
       budget_percent: percentage(cents, category.monthly_budget_cents),

@@ -94,8 +94,8 @@ class ApplicationController < ActionController::Base
   end
 
   def model_price_label(model)
-    input_price = model.input_price_per_million
-    output_price = model.output_price_per_million
+    input_price = model.price(:input)
+    output_price = model.price(:output)
 
     input_price.present? || output_price.present? ? "#{helpers.number_to_currency(input_price || 0, precision: 2)} / #{helpers.number_to_currency(output_price || 0, precision: 2)}" : "Unknown"
   end
@@ -154,7 +154,7 @@ class ApplicationController < ActionController::Base
     transaction.subcategories.sort_by(&:name)
   end
 
-  def insight_props(insight)
+  def insight_props(insight, transactions: [])
     filters = insight.payload.to_h["filters"] || insight.payload.to_h[:filters] || {}
 
     {
@@ -172,15 +172,7 @@ class ApplicationController < ActionController::Base
       starts_on_label: insight.starts_on&.strftime("%b %Y"),
       ends_on: insight.ends_on&.iso8601,
       evidence_path: transactions_path(filters),
-      transactions: insight_transactions_for_props(insight).map { |transaction| transaction_props(transaction) }
+      transactions: transactions.map { |transaction| transaction_props(transaction) }
     }
-  end
-
-  def insight_transactions_for_props(insight)
-    if insight.association(:expense_transactions).loaded?
-      insight.expense_transactions.sort_by { |transaction| [ transaction.occurred_on, transaction.id ] }.reverse.first(25)
-    else
-      insight.expense_transactions.includes(:category, :subcategories).recent.limit(25).to_a
-    end
   end
 end

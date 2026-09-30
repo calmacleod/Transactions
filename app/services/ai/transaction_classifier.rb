@@ -23,7 +23,7 @@ module Ai
 
     def llm_classification(transaction)
       response = Ai::RubyLlmClient.new(feature: :classification, model:).ask(prompt_for(transaction), schema: TransactionClassificationSchema)
-      content = response.content
+      content = response.parsed
 
       {
         category: content.fetch("category"),

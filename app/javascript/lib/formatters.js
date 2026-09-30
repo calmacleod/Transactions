@@ -14,11 +14,10 @@ export function withQuery(path, params = {}) {
   return query ? `${path}?${query}` : path
 }
 
+const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+
 export function moneyFromCents(cents = 0) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(Number(cents || 0) / 100)
+  return currencyFormatter.format(Number(cents || 0) / 100)
 }
 
 export function badgeVariant(severity) {

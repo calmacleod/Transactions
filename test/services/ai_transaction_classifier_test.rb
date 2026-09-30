@@ -92,6 +92,32 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
     old_key.nil? ? ENV.delete("OPENAI_API_KEY") : ENV["OPENAI_API_KEY"] = old_key
   end
 
+  test "classifies structured RubyLLM 2 responses using parsed JSON" do
+    old_key = ENV["OPENAI_API_KEY"]
+    ENV["OPENAI_API_KEY"] = "test-key"
+    Model.create!(provider: "openai", model_id: "parsed-model", name: "Parsed model", capabilities: [ "structured_output" ], modalities: { input: [ "text" ], output: [ "text" ] })
+    AiSetting.set("classification_model", "parsed-model")
+    transaction = users(:one).expense_transactions.create!(occurred_on: Date.new(2026, 5, 22), description: "UNKNOWN MERCHANT", amount_cents: 1000, direction: "debit", external_id: "parsed-classification")
+    response = RubyLLM::Message.new(role: :assistant, content: { category: "Special expenses", confidence: 0.9, reason: "Structured response" }.to_json)
+    client = Object.new
+    client.define_singleton_method(:ask) do |_prompt, schema:|
+      raise "Expected classification schema" unless schema == TransactionClassificationSchema
+
+      response
+    end
+    original = Ai::RubyLlmClient.method(:new)
+    Ai::RubyLlmClient.define_singleton_method(:new) { |**| client }
+
+    Ai::TransactionClassifier.new(user: users(:one), rulebook: TransactionClassification::Rulebook.new(rules: [])).classify(transaction)
+
+    assert_equal "Special expenses", transaction.reload.category.name
+    assert_equal 0.9.to_d, transaction.classification_confidence
+    assert_equal "Structured response", transaction.classification_reason
+  ensure
+    Ai::RubyLlmClient.define_singleton_method(:new, original) if original
+    old_key.nil? ? ENV.delete("OPENAI_API_KEY") : ENV["OPENAI_API_KEY"] = old_key
+  end
+
   private
 
   def without_ai_keys
