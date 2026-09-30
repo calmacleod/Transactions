@@ -36,6 +36,11 @@ case "${1:-help}" in
       printf 'Expected Roundhouse revision %s; preserve this checkout and use a separate compiler.\n' "$revision" >&2
       exit 1
     fi
+    # build.rs embeds its checkout path. A moved Cargo cache can otherwise
+    # reuse that old path and silently build without the native scaffold.
+    # Clean only Roundhouse's artifacts; retain the dependency cache.
+    capture setup-clean cargo_for_experiment clean --release -p roundhouse \
+      --manifest-path "$work/toolchain/Cargo.toml"
     capture setup cargo_for_experiment build --locked --release --bin roundhouse \
       --manifest-path "$work/toolchain/Cargo.toml"
     "$compiler" --version

@@ -42,14 +42,33 @@ assert code == 200 and len(asset_body) > 1000, f'frontend asset: {code}'
 csrf = re.search(r'<meta name="csrf-token" content="([^"]*)"', body)[1]
 code, headers, _ = request('/session', {'email_address': 'spinel@example.test', 'password': 'spinel-local-experiment'},
                           {'Content-Type': 'application/json', 'X-CSRF-Token': csrf})
-assert code == 303 and headers['Location'] == '/', f'login: {code}, {headers.get("Location")}'
+assert code == 303 and headers['Location'] == '/imports', f'login: {code}, {headers.get("Location")}'
+code, _, body = request(headers['Location'], headers={'X-Inertia': 'true'})
+assert code == 200, f'login destination: {code}'
+page = json.loads(body)
+assert page['component'] == 'imports/index'
+assert page['props']['auth']['authenticated'] is True
 code, headers, body = request('/session/new', headers={'X-Inertia': 'true'})
 assert code == 200 and headers['X-Inertia'] == 'true', f'Inertia: {code}'
 page = json.loads(body)
 assert page['props']['auth']['authenticated'] is True
 assert page['props']['auth']['email'] == 'spinel@example.test'
 assert page['props']['auth']['admin'] is True
-print('Native HTTP checks passed: health, HTML login, frontend assets, JSON login, signed session, Inertia JSON')
+print('Native HTTP checks passed: health, HTML login, frontend assets, JSON login, login destination, signed session, Inertia JSON')
+# Dashboard entry should avoid the known 500; other return URLs must survive.
+for entry, destination in (('/', '/imports'), ('/imports?experiment_return=1', '/imports?experiment_return=1')):
+    cookies.clear()
+    code, headers, _ = request(entry)
+    assert code == 302 and headers['Location'] == '/session/new', f'anonymous entry {entry}: {code}'
+    code, _, body = request('/session/new')
+    assert code == 200
+    csrf = re.search(r'<meta name="csrf-token" content="([^"]*)"', body)[1]
+    code, headers, _ = request('/session', {'email_address': 'spinel@example.test', 'password': 'spinel-local-experiment'},
+                              {'Content-Type': 'application/json', 'X-CSRF-Token': csrf})
+    assert code == 303 and headers['Location'] == destination, f'entry login {entry}: {code}, {headers.get("Location")}'
+    code, _, body = request(headers['Location'], headers={'X-Inertia': 'true'})
+    assert code == 200 and json.loads(body)['component'] == 'imports/index', f'entry login destination {entry}: {code}'
+print('Native dashboard-entry sign-in reaches Imports; other stored return URLs are preserved')
 for path in ('/', '/transactions', '/imports', '/budgets'):
     code, _, _ = request(path, headers={'X-Inertia': 'true'})
     print(f'Authenticated route {path}: HTTP {code}')

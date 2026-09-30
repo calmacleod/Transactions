@@ -12,7 +12,7 @@ Verified September 30, 2026:
 | Roundhouse survey emission + prepared Spinel build | Exit 0; native executable produced |
 | Native `/up` | HTTP 200 |
 | Native `/session/new` and frontend assets | HTTP 200; Svelte sign-in form rendered |
-| JSON sign-in, signed session cookie, Inertia JSON response | Passed with the isolated experiment account |
+| JSON sign-in, signed session cookie, Inertia JSON response | Passed with the isolated experiment account; direct and dashboard-entry sign-in now land on Imports |
 | Native `/imports` | HTTP 200; signed in through the browser and rendered Imports |
 | Native dashboard `/`, `/transactions`, `/budgets` | HTTP 500; generated relation/date support remains incomplete |
 | Roundhouse strict emission after the app changes | Exit 1; 36 type errors |
@@ -44,7 +44,10 @@ code easier to resolve statically:
 hints and loads a small native compatibility layer for pagination, view helpers,
 Unicode normalization, authentication helpers, health checks, and Inertia page
 rendering. It also handles JSON request bodies and binds the native server to
-loopback. The existing Vite/Svelte frontend is reused.
+loopback. The generated post-login destination uses Imports for a direct
+sign-in or a stored dashboard URL, avoiding the known dashboard failure.
+Other stored return paths are retained. The Rails sign-in behavior is unchanged.
+The existing Vite/Svelte frontend is reused.
 
 `spinel-compiler.patch` contains four compiler fixes required by this app:
 Time values in closure cells, a truncated hash-merge C expression, volatile
@@ -62,6 +65,12 @@ Toolchains are pinned to:
 - Spinel `438241961cd7e9f0e1dc1cb81f261dd37cb9d756`, with the saved patch.
 - bcrypt `a78ea0bfae6760c3143ea3b96bcd1594c82d6b7d`.
 - jemalloc 5.3.0, downloaded with a SHA-256 check and installed under `tmp/`.
+
+Roundhouse's build script embeds absolute paths to its native runtime.
+Reusing Cargo artifacts after moving the toolchain checkout produced an
+empty embedded file table and `missing runtime/spinel/scaffold/` during
+transpilation. `setup` now cleans Roundhouse's package artifacts before
+rebuilding, while retaining the dependency cache.
 
 This driver targets this Mac's Homebrew layout and uses installed ICU4C
 (`/opt/homebrew/opt/icu4c`, currently 78.3), Ruby/Bundler, npm, Apple Clang,
@@ -86,12 +95,15 @@ In another terminal:
 experiments/roundhouse/verify-native
 ```
 
-The verifier asserts the working health/login/asset/session paths and prints
+The verifier asserts the working health/login/asset/session paths, follows
+the login redirect for both direct and dashboard-entry sign-in, and prints
 the current statuses of the other routes. It does **not** treat those printed
 route probes as successful functional tests.
 
 The disposable login is `spinel@example.test` / `spinel-local-experiment`.
-Visit `/imports` first, then sign in, to return to the working Imports page.
+Sign in directly or visit `/imports` to reach the working Imports page.
+An older generated executable will still redirect a direct sign-in to the
+failing dashboard; generate a fresh output tree to pick up the landing fix.
 The experiment uses its own `storage/development.sqlite3` and generated signing
 secret; it does not use the Rails development database, environment secrets,
 or real account credentials. The server is one process, with two Spinel workers
@@ -130,7 +142,10 @@ app's token format. A successful build does not establish full Rails parity.
 
 Full evidence is saved under `tmp/roundhouse/logs/`, including
 `spinel-native-transpile.log`, `spinel-native-build.log`/`.exit`,
-`native-http.log`, `rails-tests.log`, and the compiler/Unicode smoke build logs.
+`native-http.log`, `native-http-login.log`, `rails-tests.log`, and the
+compiler/Unicode smoke build logs. The login follow-up compiled into
+`spinel-native-login`; its HTTP checks covered direct sign-in, a stored
+dashboard URL, and preservation of an Imports URL with query parameters.
 Earlier failed iterations remain under `tmp/roundhouse/spinel-app-v*/`.
 The original Rust results are recorded in [RUST.md](RUST.md) and have not been
 rerun. The [experiment overview](README.md) is the entry point for this branch.

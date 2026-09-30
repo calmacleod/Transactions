@@ -21,6 +21,16 @@ def replace(path, old, new):
 (project / 'native_compat.rbs').write_text((compat / 'native.rbs').read_text())
 (project / 'native_unicode.rb').write_text((compat / 'unicode.rb').read_text())
 replace('main.rb', 'require_relative "boot"', 'require_relative "boot"\nrequire_relative "native_compat"')
+# The native dashboard still needs relation/date support. Keep direct sign-in
+# and a stored dashboard return path on the working Imports page instead.
+replace('app/controllers/application_controller.rb',
+        '    session.delete(:return_to_after_authenticating) || RouteHelpers.root_path',
+        '    destination = session.delete(:return_to_after_authenticating)\n'
+        '    if destination.nil? || destination == RouteHelpers.root_path\n'
+        '      RouteHelpers.imports_path\n'
+        '    else\n'
+        '      destination\n'
+        '    end')
 # Roundhouse emits the pre-lowering parameter hash signature. The actual
 # lowered params and app body use string keys; tell Spinel the actual type.
 replace('app/controllers/transactions_controller.rbs',

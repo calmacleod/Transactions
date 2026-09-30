@@ -69,6 +69,12 @@ SQLite database and signing secret inside the generated project. Its seeded
 account is separate from Rails accounts. The server binds to loopback and
 runs one process with two Spinel workers; stop it with Ctrl-C.
 
+The native experiment sends direct sign-ins and dashboard return URLs to
+`/imports`, because the dashboard still has the relation-support failure
+listed above. This adjustment applies only to generated Spinel output;
+the Rails app keeps its existing sign-in destination. Older generated
+executables need a fresh build to pick up this change.
+
 In another terminal, verify the server:
 
 ```sh
@@ -77,7 +83,8 @@ experiments/roundhouse/verify-native
 experiments/roundhouse/verify-native http://127.0.0.1:3902
 ```
 
-The verifier asserts the working login/health/asset/session paths and prints
+The verifier asserts the working login/health/asset/session paths, follows
+the post-login redirect for both direct and dashboard-entry sign-in, and prints
 the status of the other routes. Printed HTTP 500 probes are known gaps, not
 passing functional checks.
 
