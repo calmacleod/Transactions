@@ -1,0 +1,2 @@
+# Tests create their own import rows; include this table in fixture resets.
+{}

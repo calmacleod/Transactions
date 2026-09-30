@@ -13,6 +13,7 @@ class ClassifyImportRowsJob < ApplicationJob
         classification_status: "classified",
         classification_confidence: result.confidence,
         classification_reason: result.reason,
+        classification_source: result.source,
         classified_at: Time.current
       )
       ImportBatchChannel.broadcast_row(row.reload)

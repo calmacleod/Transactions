@@ -1,24 +1,25 @@
 require "test_helper"
 
 class ImportPreviewClassifierTest < ActiveSupport::TestCase
-  test "matches import rows to previously classified merchants" do
+  test "matches import rows to manually classified merchants" do
+    expense_transactions(:grocery).update!(description: "LOCAL MERCHANT #041", classification_source: "manual")
     row = ImportRow.new(
       user: users(:one),
-      description: "LOCAL GROCERY MARKET OTTAWA, ON",
+      description: "LOCAL MERCHANT #095 OTTAWA, ON",
       direction: "debit"
     )
 
     result = ImportPreviewClassifier.new(user: users(:one)).call(row)
 
     assert_equal categories(:groceries), result.category
-    assert_equal 0.9, result.confidence
-    assert_match "previously classified", result.reason
+    assert_equal 0.95, result.confidence
+    assert_match "manual category", result.reason
   end
 
   test "falls back to local merchant rules" do
     row = ImportRow.new(
       user: users(:one),
-      description: "TIM HORTONS #6445 ORLEANS, ON",
+      description: "NEIGHBOURHOOD COFFEE HOUSE",
       direction: "debit"
     )
 

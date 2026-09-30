@@ -18,7 +18,18 @@ class ExpenseTransaction < ApplicationRecord
   scope :expenses, -> { where(direction: "debit") }
   scope :credits, -> { where(direction: "credit") }
   scope :unclassified, -> { where(category_id: nil) }
+  scope :automatically_classifiable, -> { where(classification_source: nil).or(where.not(classification_source: "manual")) }
   scope :between, ->(start_date, end_date) { where(occurred_on: start_date..end_date) }
+
+  def self.manual_classification_attributes(category_id)
+    {
+      category_id: category_id.presence,
+      classification_source: category_id.present? ? "manual" : nil,
+      classification_confidence: category_id.present? ? 1.0 : nil,
+      classification_reason: category_id.present? ? "Manually classified." : nil,
+      classified_at: category_id.present? ? Time.current : nil
+    }
+  end
 
   def self.group_by_month
     group("strftime('%Y-%m-01', occurred_on)").sum(:amount_cents).transform_keys { |month| Date.iso8601(month) }

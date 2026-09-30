@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_20_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_30_160000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -169,9 +169,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_150000) do
     t.string "source"
     t.datetime "updated_at", null: false
     t.integer "user_id"
+    t.string "classification_source"
     t.index ["category_id"], name: "index_expense_transactions_on_category_id"
     t.index ["import_batch_id"], name: "index_expense_transactions_on_import_batch_id"
     t.index ["occurred_on"], name: "index_expense_transactions_on_occurred_on"
+    t.index ["user_id", "classification_source"], name: "idx_on_user_id_classification_source_0dcf379df5"
     t.index ["user_id", "external_id"], name: "index_expense_transactions_on_user_and_external_id", unique: true
     t.index ["user_id", "occurred_on", "id"], name: "index_expense_transactions_on_user_date_and_id"
   end
@@ -209,6 +211,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_150000) do
     t.string "source"
     t.datetime "updated_at", null: false
     t.integer "user_id"
+    t.string "classification_source"
     t.index ["category_id"], name: "index_import_rows_on_category_id"
     t.index ["import_batch_id", "row_number"], name: "index_import_rows_on_import_batch_id_and_row_number", unique: true
     t.index ["import_batch_id"], name: "index_import_rows_on_import_batch_id"

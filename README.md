@@ -7,6 +7,7 @@ A Rails 8 + SQLite expense tracker for headerless credit card CSV exports.
 - Headerless CSV import in the format `date, description, debit, credit, card`.
 - Local SQLite storage for transactions, import batches, categories, and generated insights.
 - RubyLLM-backed transaction classification with structured output.
+- Import classification learns from your manual categories and identifies merchants using a bundled, free OpenStreetMap Name Suggestion Index catalog.
 - RubyLLM-backed spending insight generation with a rule-based fallback when no AI provider key is configured.
 - New Relic application performance monitoring, distributed tracing, and log forwarding in production.
 - Inertia Rails + Svelte dashboard and transaction review UI using local shadcn-svelte style components.
@@ -60,7 +61,25 @@ Optional provider environment variables:
 - `GEMINI_API_KEY`
 - `OPENAI_API_BASE`
 
-Without a provider key, the app still imports data and uses transparent local merchant rules for basic classification.
+Import previews and fast classification work without provider keys or network requests. They use your manual category history, the bundled public merchant catalog, and local merchant rules. The separate AI classifier can use a configured provider for remaining unknown transactions.
+
+## Merchant Classification
+
+Manual categories take priority over public merchant types and rules. Merchant matching normalizes punctuation, accents, common processor prefixes (`SQ *`, `TST*`, `PAYPAL*`, `PP*`, `SP*`), and store numbers. Public brand identities and aliases let a manual category apply across branches of the same brand. History stays within the current user's transactions and is loaded once per classifier run, without a recent-row cutoff. Conflicting manual categories or public merchant types fall back to other evidence instead of copying an arbitrary match. If a name identifies multiple brands with the same merchant type, that type can still suggest a category, but it does not establish a shared brand identity. Credits retain their payment/refund treatment.
+
+Category changes on the Transactions page, bulk edits, and import-preview selections are recorded as manual choices. Automatic suggestions keep their confidence, explanation, and source when committed, so they do not become manual training data. An import-preview category selection is protected from later background classification updates.
+
+The migration marks old categorized rows without classification metadata as `legacy`, and rows with automatic metadata as `automatic`. Unambiguous legacy matches remain available at lower confidence, with an explanation that their source is unknown. Old imports discarded provenance, and older manual edits left automatic metadata intact; their true origin cannot be reconstructed reliably. Editing those categories records a confirmed manual choice going forward.
+
+The [Name Suggestion Index](https://github.com/osmlab/name-suggestion-index) provides common brand names, aliases, Wikidata identities, and OpenStreetMap merchant types under BSD-3-Clause. A versioned snapshot and its license are committed in `vendor/merchant_data`, with budgeting categories mapped in `TransactionClassification::CatalogBuilder`. It covers common physical merchants worldwide, not every independent business or online service. Unknown merchants fall back to local rules or remain Uncategorized. No transaction data is sent to the public source.
+
+To refresh the snapshot from a specific published release:
+
+```bash
+bin/rails 'merchants:refresh[8.0.20260918]'
+```
+
+Omitting the version downloads the currently bundled release again. The task validates downloads before replacing the snapshot; a failed download leaves the working catalog intact. Review and commit the generated catalog and license, then restart the application workers. Imports use the bundled snapshot even if the source is unavailable; a missing or malformed local file falls back to history and rules.
 
 ## Email Configuration
 

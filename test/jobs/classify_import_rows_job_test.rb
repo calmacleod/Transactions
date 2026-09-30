@@ -23,6 +23,7 @@ class ClassifyImportRowsJobTest < ActiveJob::TestCase
 
     assert_equal categories(:restaurants), row.reload.category
     assert_equal "classified", row.classification_status
-    assert_match "local merchant rules", row.classification_reason
+    assert_equal "public", row.classification_source
+    assert_match "Name Suggestion Index", row.classification_reason
   end
 end

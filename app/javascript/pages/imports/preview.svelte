@@ -107,6 +107,7 @@
             direction: row.direction,
             card_last4: row.card_last4,
             category_id: row.category_id,
+            manually_classified: row.manually_classified || false,
             notes: row.notes,
             included: row.duplicate ? row.include_duplicate : row.included,
             include_duplicate: row.include_duplicate,
@@ -126,6 +127,14 @@
 
     row.included = value
     if (!value) row.include_duplicate = false
+    draftRows = draftRows
+  }
+
+  function markManualCategory(row) {
+    row.manually_classified = true
+    row.classification_status = "manual"
+    row.classification_reason = "Manually classified."
+    row.classification_confidence = null
     draftRows = draftRows
   }
 
@@ -153,7 +162,7 @@
   function classificationLabel(row) {
     if (row.classification_status === "classified") return row.category_id ? "Auto-classified" : "Reviewed"
     if (row.classification_status === "failed") return "Classification failed"
-    if (row.classification_status === "manual") return "Manual row"
+    if (row.classification_status === "manual") return "Manually classified"
 
     return "Classifying"
   }
@@ -183,7 +192,7 @@
         if (data.type !== "row_classified") return
 
         draftRows = draftRows.map((row) => {
-          if (row.id !== data.row.id) return row
+          if (row.id !== data.row.id || row.manually_classified) return row
 
           return {
             ...row,
@@ -323,7 +332,7 @@
 
           <div class="grid grid-cols-2 gap-2">
             <DatePicker bind:value={row.occurred_on} class="h-8" disabled={readOnly} ariaLabel={`Select date for row ${row.row_number || index + 1}`} onchange={() => (draftRows = draftRows)} />
-            <NativeSelect bind:value={row.category_id} class="w-full" disabled={readOnly} onchange={() => (draftRows = draftRows)}>
+            <NativeSelect bind:value={row.category_id} class="w-full" disabled={readOnly} onchange={() => markManualCategory(row)}>
               <NativeSelectOption value="">Unclassified</NativeSelectOption>
               {#each categories as category}
                 <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>
@@ -450,7 +459,7 @@
                 <Input type="number" min="0" step="0.01" bind:value={row.amount} class="money-value h-7 w-full" disabled={readOnly} onchange={() => (draftRows = draftRows)} />
               </TableCell>
               <TableCell>
-                <NativeSelect bind:value={row.category_id} class="w-full" disabled={readOnly} onchange={() => (draftRows = draftRows)}>
+                <NativeSelect bind:value={row.category_id} class="w-full" disabled={readOnly} onchange={() => markManualCategory(row)}>
                   <NativeSelectOption value="">Unclassified</NativeSelectOption>
                   {#each categories as category}
                     <NativeSelectOption value={category.id}>{category.name}</NativeSelectOption>

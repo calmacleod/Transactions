@@ -294,6 +294,8 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to transactions_path
     assert_equal categories(:restaurants), transaction.reload.category
+    assert_equal "manual", transaction.classification_source
+    assert_equal 1.0, transaction.classification_confidence
   end
 
   test "returns the updated transaction for background JSON updates" do
@@ -403,6 +405,8 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to transactions_path
     assert_equal categories(:groceries), grocery.reload.category
     assert_equal categories(:groceries), restaurant.reload.category
+    assert_equal "manual", grocery.classification_source
+    assert_equal "manual", restaurant.classification_source
   end
 
   test "bulk update adds selected subcategories without replacing existing ones" do
@@ -441,5 +445,7 @@ class TransactionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to transactions_path
     assert_nil grocery.reload.category
     assert_nil restaurant.reload.category
+    assert_nil grocery.classification_source
+    assert_nil grocery.classification_reason
   end
 end

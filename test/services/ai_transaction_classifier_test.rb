@@ -118,6 +118,35 @@ class AiTransactionClassifierTest < ActiveSupport::TestCase
     old_key.nil? ? ENV.delete("OPENAI_API_KEY") : ENV["OPENAI_API_KEY"] = old_key
   end
 
+  test "uses manual merchant preferences and leaves confirmed manual rows alone" do
+    without_ai_keys do
+      manual = expense_transactions(:grocery)
+      manual.update!(description: "BULK BARN #041", category: categories(:restaurants), classification_source: "manual")
+      transaction = users(:one).expense_transactions.create!(occurred_on: Date.new(2026, 5, 22), description: "BULK BARN #095",
+        amount_cents: 1000, direction: "debit", external_id: "ai-classifier-history")
+      classifier = Ai::TransactionClassifier.new(user: users(:one))
+
+      assert_no_changes -> { manual.reload.attributes } do
+        classifier.classify(manual)
+      end
+      classifier.classify(transaction)
+
+      assert_equal categories(:restaurants), transaction.reload.category
+      assert_equal "history", transaction.classification_source
+    end
+  end
+
+  test "does not overwrite a manual choice when given a stale transaction" do
+    transaction = expense_transactions(:grocery)
+    stale_transaction = ExpenseTransaction.find(transaction.id)
+    transaction.update!(ExpenseTransaction.manual_classification_attributes(categories(:restaurants).id))
+
+    without_ai_keys { Ai::TransactionClassifier.new(user: users(:one)).classify(stale_transaction) }
+
+    assert_equal "manual", transaction.reload.classification_source
+    assert_equal categories(:restaurants), transaction.category
+  end
+
   private
 
   def without_ai_keys

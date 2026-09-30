@@ -25,6 +25,10 @@ class ImportRow < ApplicationRecord
       raw_data: raw_data || {},
       external_id:,
       category_id:,
+      classification_source:,
+      classification_confidence:,
+      classification_reason:,
+      classified_at:,
       notes:
     }
   end

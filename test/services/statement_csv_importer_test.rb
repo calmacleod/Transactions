@@ -97,8 +97,51 @@ class StatementCsvImporterTest < ActiveSupport::TestCase
 
     transaction = ExpenseTransaction.find_by!(description: "Edited merchant")
     assert_equal categories(:restaurants), transaction.category
+    assert_equal "manual", transaction.classification_source
     assert_equal 1999, transaction.amount_cents
     assert_equal "complete", batch.reload.status
     assert_equal 1, batch.import_rows.count
+  end
+
+  test "committing automatic suggestions preserves provenance and does not train manual history" do
+    importer = StatementCsvImporter.new(io: StringIO.new("2026-05-22,BULK BARN #041,17.24,,2222\n"), filename: "automatic.csv", user: users(:one))
+    batch = importer.preview
+    ClassifyImportRowsJob.perform_now(batch.id, users(:one).id)
+    row = batch.import_rows.first
+
+    importer.commit(batch:, rows: [ row.transaction_attributes.merge(id: row.id) ])
+
+    transaction = batch.expense_transactions.first
+    assert_equal "public", transaction.classification_source
+    assert_equal row.classification_reason, transaction.classification_reason
+    assert_equal row.classification_confidence, transaction.classification_confidence
+    assert_equal row.classified_at, transaction.classified_at
+    assert_equal "classified", batch.import_rows.first.classification_status
+  end
+
+  test "changing a preview category records a manual choice for future imports" do
+    importer = StatementCsvImporter.new(io: StringIO.new("2026-05-22,BULK BARN #041,17.24,,2222\n"), filename: "manual.csv", user: users(:one))
+    batch = importer.preview
+    ClassifyImportRowsJob.perform_now(batch.id, users(:one).id)
+    row = batch.import_rows.first
+
+    importer.commit(batch:, rows: [ row.transaction_attributes.merge(id: row.id, category_id: categories(:restaurants).id) ])
+
+    assert_equal "manual", batch.expense_transactions.first.classification_source
+    assert_equal "manual", batch.import_rows.first.classification_status
+    result = ImportPreviewClassifier.new(user: users(:one)).call(ImportRow.new(description: "BULK BARN #095", direction: "debit"))
+    assert_equal categories(:restaurants), result.category
+    assert_equal "history", result.source
+  end
+
+  test "explicit manual selection is preserved even if it equals the automatic category" do
+    importer = StatementCsvImporter.new(io: StringIO.new("2026-05-22,BULK BARN #041,17.24,,2222\n"), filename: "manual.csv", user: users(:one))
+    batch = importer.preview
+    ClassifyImportRowsJob.perform_now(batch.id, users(:one).id)
+    row = batch.import_rows.first
+
+    importer.commit(batch:, rows: [ row.transaction_attributes.merge(id: row.id, manually_classified: true) ])
+
+    assert_equal "manual", batch.expense_transactions.first.classification_source
   end
 end

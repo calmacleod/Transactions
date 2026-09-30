@@ -13,7 +13,7 @@ class StatementCsvImporter
 
   def call
     batch = preview
-    commit(batch:, rows: batch.import_rows.ordered.map(&:transaction_attributes))
+    commit(batch:, rows: batch.import_rows.ordered.map { |row| row.transaction_attributes.merge(id: row.id) })
   end
 
   def preview
@@ -26,7 +26,7 @@ class StatementCsvImporter
       next if attributes.nil?
 
       batch.import_rows.create!(
-        attributes.merge(row_number: rows_count, category_id: suggested_category_id(attributes), user:)
+        attributes.merge(row_number: rows_count, user:).merge(suggested_classification_attributes(attributes))
       )
     end
 
@@ -46,6 +46,7 @@ class StatementCsvImporter
 
     ImportBatch.transaction do
       batch.update!(status: "processing", notes: nil)
+      preview_rows = batch.import_rows.index_by(&:id)
       batch.import_rows.destroy_all
 
       Array(rows).each do |row|
@@ -57,7 +58,13 @@ class StatementCsvImporter
         include_row = boolean_from(row_value(row, :included), default: true)
         include_duplicate = boolean_from(row_value(row, :include_duplicate))
         notes = row_value(row, :notes).presence
-        import_row = batch.import_rows.create!(attributes.merge(row_number: rows_count, category_id:, notes:, user:))
+        classification = classification_attributes(row, preview_rows, attributes, category_id)
+        classification_status = if category_id.present?
+          classification[:classification_source] == "manual" ? "manual" : "classified"
+        else
+          "pending"
+        end
+        import_row = batch.import_rows.create!(attributes.merge(row_number: rows_count, notes:, user:, classification_status:).merge(classification))
         next unless include_row
 
         transaction = find_existing_transaction(attributes)
@@ -166,8 +173,20 @@ class StatementCsvImporter
     user.categories.find(category_id).id if category_id.present?
   end
 
-  def suggested_category_id(attributes)
-    find_existing_transaction(attributes)&.category_id
+  def suggested_classification_attributes(attributes)
+    transaction = find_existing_transaction(attributes)
+    return {} unless transaction&.classified?
+
+    transaction.attributes.symbolize_keys.slice(:category_id, :classification_source, :classification_confidence, :classification_reason, :classified_at)
+  end
+
+  def classification_attributes(row, preview_rows, attributes, category_id)
+    original = preview_rows[row_value(row, :id).to_i]
+    if original && original.category_id == category_id && original.description == attributes[:description] && original.direction == attributes[:direction] && !boolean_from(row_value(row, :manually_classified))
+      return original.transaction_attributes.slice(:category_id, :classification_source, :classification_confidence, :classification_reason, :classified_at)
+    end
+
+    ExpenseTransaction.manual_classification_attributes(category_id)
   end
 
   def row_value(row, key)

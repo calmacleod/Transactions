@@ -60,7 +60,7 @@ class TransactionsController < ApplicationController
 
   def bulk_update
     bulk_attributes = {}
-    bulk_attributes[:category_id] = bulk_category_id if bulk_category_update?
+    bulk_attributes.merge!(ExpenseTransaction.manual_classification_attributes(bulk_category_id)) if bulk_category_update?
     subcategory_ids = bulk_subcategory_ids
 
     transactions = current_user.expense_transactions.where(id: bulk_transaction_ids)
@@ -316,6 +316,9 @@ class TransactionsController < ApplicationController
     attributes = transaction_params.to_h
     if attributes.key?("category_id") && attributes["category_id"].present?
       attributes["category_id"] = current_user.categories.find(attributes["category_id"]).id
+    end
+    if attributes.key?("category_id")
+      attributes.merge!(ExpenseTransaction.manual_classification_attributes(attributes.delete("category_id")))
     end
     if attributes.key?("subcategory_ids")
       attributes["subcategory_ids"] = current_user.transaction_subcategories.where(id: attributes["subcategory_ids"]).ids

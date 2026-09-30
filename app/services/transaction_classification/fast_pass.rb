@@ -2,15 +2,14 @@ module TransactionClassification
   class FastPass
     BATCH_SIZE = 500
 
-    Result = Data.define(:category_name, :confidence, :reason)
-
-    def initialize(run:, batch_size: BATCH_SIZE, rulebook: Rulebook.new)
+    def initialize(run:, batch_size: BATCH_SIZE, rulebook: Rulebook.new, catalog: PublicMerchantCatalog.new)
       @run = run
       @batch_size = batch_size
-      @rulebook = rulebook
+      @classifier = MerchantClassifier.new(user: run.user, rulebook:, catalog:)
     end
 
     def call(scope)
+      scope = scope.automatically_classifiable
       run.start!(total: scope.count)
       return run.complete! if run.total_count.zero?
 
@@ -20,8 +19,8 @@ module TransactionClassification
 
         results_by_id = transactions.index_with { |transaction| classify(transaction) }
         categories_by_name = ensure_categories(results_by_id.values.map(&:category_name).uniq)
-        apply_results(results_by_id, categories_by_name)
-        record_progress(results_by_id)
+        classified_count = apply_results(results_by_id, categories_by_name)
+        record_progress(results_by_id, classified_count)
       end
 
       run.reload.cancel_requested? ? run.cancel! : run.complete!
@@ -32,7 +31,7 @@ module TransactionClassification
 
     private
 
-    attr_reader :run, :batch_size, :rulebook
+    attr_reader :run, :batch_size, :classifier
 
     def ensure_categories(names)
       names.each_with_object({}) do |name, categories|
@@ -43,29 +42,29 @@ module TransactionClassification
     end
 
     def classify(transaction)
-      result = rulebook.call(description: transaction.description, direction: transaction.direction)
-      Result.new(category_name: result.category_name, confidence: result.confidence, reason: result.reason)
+      classifier.call(description: transaction.description, direction: transaction.direction)
     end
 
     def apply_results(results_by_id, categories_by_name)
       classified_at = Time.current
 
-      results_by_id.group_by { |_id, result| result }.each do |result, pairs|
-        ExpenseTransaction.where(id: pairs.map(&:first)).update_all(
+      results_by_id.group_by { |_id, result| result }.sum do |result, pairs|
+        ExpenseTransaction.where(id: pairs.map(&:first)).automatically_classifiable.update_all(
           category_id: categories_by_name.fetch(result.category_name).id,
           classification_confidence: result.confidence,
           classification_reason: result.reason,
+          classification_source: result.source,
           classified_at:,
           updated_at: classified_at
         )
       end
     end
 
-    def record_progress(results_by_id)
+    def record_progress(results_by_id, classified_count)
       run.record_batch!(
         processed: results_by_id.size,
-        classified: results_by_id.size,
-        rule_based: results_by_id.size,
+        classified: classified_count,
+        rule_based: classified_count,
         ai: 0,
         failed: 0
       )

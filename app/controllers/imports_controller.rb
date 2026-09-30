@@ -139,7 +139,7 @@ class ImportsController < ApplicationController
 
   def import_rows_params
     params.require(:import).fetch(:rows, []).map do |row|
-      row.permit(:id, :occurred_on, :description, :amount, :amount_cents, :direction, :card_last4, :category_id, :notes, :included, :include_duplicate)
+      row.permit(:id, :occurred_on, :description, :amount, :amount_cents, :direction, :card_last4, :category_id, :manually_classified, :notes, :included, :include_duplicate)
     end
   end
 

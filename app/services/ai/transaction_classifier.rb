@@ -1,9 +1,9 @@
 module Ai
   class TransactionClassifier
-    def initialize(model: nil, user: Current.user, rulebook: TransactionClassification::Rulebook.new)
+    def initialize(model: nil, user: Current.user, rulebook: TransactionClassification::Rulebook.new, catalog: TransactionClassification::PublicMerchantCatalog.new)
       @model = model
       @user = user
-      @rulebook = rulebook
+      @classifier = TransactionClassification::MerchantClassifier.new(user:, rulebook:, catalog:)
     end
 
     def classify_all(scope = ExpenseTransaction.unclassified.recent)
@@ -11,15 +11,17 @@ module Ai
     end
 
     def classify(transaction)
+      return if transaction.classification_source == "manual"
+
       result = rule_based_classification(transaction)
-      result = llm_classification(transaction) if result[:category] == "Uncategorized" && Ai::Controls.enabled?(:classification)
+      result = llm_classification(transaction) if result[:category] == "Uncategorized" && result[:source] == "rules" && Ai::Controls.enabled?(:classification)
       result ||= rule_based_classification(transaction)
       apply_result(transaction, result)
     end
 
     private
 
-    attr_reader :model, :user, :rulebook
+    attr_reader :model, :user, :classifier
 
     def llm_classification(transaction)
       response = Ai::RubyLlmClient.new(feature: :classification, model:).ask(prompt_for(transaction), schema: TransactionClassificationSchema)
@@ -28,7 +30,8 @@ module Ai
       {
         category: content.fetch("category"),
         confidence: content.fetch("confidence").to_d,
-        reason: content.fetch("reason")
+        reason: content.fetch("reason"),
+        source: "ai"
       }
     rescue StandardError => error
       Rails.logger.warn("RubyLLM classification failed for transaction #{transaction.id}: #{error.class}: #{error.message}")
@@ -51,26 +54,32 @@ module Ai
     end
 
     def rule_based_classification(transaction)
-      result = rulebook.call(description: transaction.description, direction: transaction.direction)
+      result = classifier.call(description: transaction.description, direction: transaction.direction)
 
       {
         category: result.category_name,
         confidence: result.confidence,
-        reason: result.reason
+        reason: result.reason,
+        source: result.source
       }
     end
 
     def apply_result(transaction, result)
-      category = category_scope.find_or_create_by!(name: result[:category]) do |record|
-        record.color = CategoryColor.pick(result[:category])
-      end
+      transaction.with_lock do
+        return if transaction.classification_source == "manual"
 
-      transaction.update!(
-        category:,
-        classification_confidence: result[:confidence],
-        classification_reason: result[:reason],
-        classified_at: Time.current
-      )
+        category = category_scope.find_or_create_by!(name: result[:category]) do |record|
+          record.color = CategoryColor.pick(result[:category])
+        end
+
+        transaction.update!(
+          category:,
+          classification_confidence: result[:confidence],
+          classification_reason: result[:reason],
+          classification_source: result[:source],
+          classified_at: Time.current
+        )
+      end
     end
 
     def category_scope
