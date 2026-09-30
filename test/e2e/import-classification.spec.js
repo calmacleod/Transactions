@@ -50,6 +50,8 @@ for (const layout of ["desktop", "mobile"]) {
     await expect(categorySelect).toHaveValue(String(groceries.id))
     await expect(page.getByText("Manually classified.", { exact: true })).toBeVisible()
 
+    // Validate the submitted choice without changing the transaction fixtures used by other browser tests.
+    await page.route("**/imports/*/commit", (route) => route.fulfill({ status: 303, headers: { location: "/" } }))
     const committed = page.waitForRequest((request) => request.method() === "POST" && /\/imports\/\d+\/commit/.test(request.url()))
     await page.getByRole("button", { name: "Import 1", exact: true }).click()
     const request = await committed

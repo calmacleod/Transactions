@@ -85,7 +85,8 @@ class AiRubyLlmClientTest < ActiveSupport::TestCase
   end
 
   test "builds real RubyLLM 2 schemas and tool definitions without a provider request" do
-    chat = RubyLLM.chat(model: "gpt-5-nano", provider: :openai)
+    context = RubyLLM.context { |config| config.openai_api_key = "test-key" }
+    chat = context.chat(model: "gpt-5-nano", provider: :openai)
       .with_schema(TransactionClassificationSchema)
       .with_tools(Ai::Tools::SearchTransactionsTool, Ai::Tools::SpendingSummaryTool, Ai::Tools::BudgetSummaryTool)
 
