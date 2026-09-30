@@ -1,0 +1,89 @@
+diff --git a/src/codegen.c b/src/codegen.c
+index 1248ddf..cdb1b41 100644
+--- a/src/codegen.c
++++ b/src/codegen.c
+@@ -4990,6 +4990,7 @@ const char *cell_value_struct(TyKind t) {
+     case TY_FLOAT_RANGE: return "sp_FloatRange";
+     case TY_RATIONAL:    return "sp_Rational";
+     case TY_COMPLEX:     return "sp_Complex";
++    case TY_TIME:        return "sp_Time";
+     default: break;
+   }
+   return NULL;
+@@ -5004,6 +5005,7 @@ const char *cell_value_struct_empty(TyKind t) {
+     case TY_FLOAT_RANGE: return "((sp_FloatRange){0})";
+     case TY_RATIONAL:    return "((sp_Rational){0})";
+     case TY_COMPLEX:     return "((sp_Complex){0})";
++    case TY_TIME:        return "((sp_Time){0})";
+     default: break;
+   }
+   return NULL;
+diff --git a/src/codegen_call.c b/src/codegen_call.c
+index 10685d5..23a3329 100644
+--- a/src/codegen_call.c
++++ b/src/codegen_call.c
+@@ -10621,10 +10621,9 @@ static int emit_poly_method_dispatch(Compiler *c, int id, Buf *b) {
+         else {
+           emit_kwh_pos_hash(c, &kw, 1, &mb);
+         }
+-        char gen[600];
+-        snprintf(gen, sizeof gen, "sp_box_obj(sp_poly_hash_merge(_t%d, %s), SP_BUILTIN_POLY_POLY_HASH)",
+-                 tv, mb.p ? mb.p : "sp_box_nil()");
+-        if (ret == TY_POLY) buf_printf(b, " default: _t%d = %s; break;", tr, gen);
++        if (ret == TY_POLY)
++          buf_printf(b, " default: _t%d = sp_box_obj(sp_poly_hash_merge(_t%d, %s), SP_BUILTIN_POLY_POLY_HASH); break;",
++                     tr, tv, mb.p ? mb.p : "sp_box_nil()");
+         /* Never leave the switch without a default: with every user arm
+            dropped as incompatible, an armless switch fell through and the
+            call answered the result temp's zero initializer, silently. */
+diff --git a/src/codegen_iter.c b/src/codegen_iter.c
+index 87c630f..5f9a419 100644
+--- a/src/codegen_iter.c
++++ b/src/codegen_iter.c
+@@ -275,7 +275,7 @@ void emit_inline_bind_params(Compiler *c, Scope *m, int args, const int *argv, i
+   for (int i = 0; i < m->nparams; i++) {
+     emit_indent(b, din);
+     int aliased = i < 32 && (alias_mask & (1u << i));
+-    if (aliased) buf_printf(b, "const char **_cell__y%d_%s = &(", tag, m->pnames[i]);
++    if (aliased) buf_printf(b, "const char **_cell__y%d_%s = (const char **)&(", tag, m->pnames[i]);
+     else { char rn[128]; snprintf(rn, sizeof rn, "_y%d_%s", tag, m->pnames[i]);
+       emit_inlined_param_target(c, m, m->pnames[i], rn, b); }
+     /* hide THIS inline's renames only: args are call-site expressions,
+@@ -1628,7 +1628,7 @@ void emit_block_binds(Compiler *c, int blk, const int *yargs, int yc,
+       LocalVar *bl = bsc ? scope_local(bsc, bp) : NULL;
+       if (bl && al && al->n < (int)(sizeof al->lv / sizeof al->lv[0])) {
+         if (!as_expr && !al->open) { buf_puts(b, "{\n"); emit_indent(b, indent); al->open = 1; }
+-        buf_printf(b, "const char **_cell_%s = &(", bpr);
++        buf_printf(b, "const char **_cell_%s = (const char **)&(", bpr);
+         emit_expr(c, yargs[k], b);
+         buf_puts(b, ")");
+         buf_puts(b, as_expr ? "; " : ";\n");
+diff --git a/src/codegen_stmt.c b/src/codegen_stmt.c
+index 2405afa..d745a30 100644
+--- a/src/codegen_stmt.c
++++ b/src/codegen_stmt.c
+@@ -6666,16 +6666,18 @@ static void emit_tail_value(Compiler *c, int node, Buf *b) {
+      writes widened its variant -- and the conversion is the one the assignment
+      side already makes (#4089), through the boxed form the converting entries
+      take. */
+-  if (ty_is_hash(g_ret_type) && ty_is_hash(comp_ntype(c, node)) &&
+-      g_ret_type != comp_ntype(c, node) &&
+-      (g_ret_type == TY_POLY_POLY_HASH || g_ret_type == TY_SYM_POLY_HASH ||
+-       g_ret_type == TY_STR_POLY_HASH)) {
+-    const char *hconv = g_ret_type == TY_POLY_POLY_HASH ? "sp_poly_as_poly_poly_hash"
+-                      : g_ret_type == TY_SYM_POLY_HASH  ? "sp_poly_as_sym_poly_hash"
++  { TyKind hslot = (g_result_var && g_result_ty != TY_UNKNOWN) ? g_result_ty : g_ret_type;
++  if (ty_is_hash(hslot) && ty_is_hash(comp_ntype(c, node)) &&
++      hslot != comp_ntype(c, node) &&
++      (hslot == TY_POLY_POLY_HASH || hslot == TY_SYM_POLY_HASH ||
++       hslot == TY_STR_POLY_HASH)) {
++    const char *hconv = hslot == TY_POLY_POLY_HASH ? "sp_poly_as_poly_poly_hash"
++                      : hslot == TY_SYM_POLY_HASH  ? "sp_poly_as_sym_poly_hash"
+                       : "sp_poly_as_str_poly_hash";
+     buf_printf(b, "%s(", hconv); emit_boxed(c, node, b); buf_puts(b, ")");
+     return;
+   }
++  }
+   /* A bare `nil` returned through an int or float slot. emit_expr renders
+      NilNode as the numeric default 0, which in those two slots is a real
+      value -- the caller reads 0 / 0.0 where the method said nil. Both have a

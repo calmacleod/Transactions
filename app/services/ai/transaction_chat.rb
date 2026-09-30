@@ -92,10 +92,10 @@ module Ai
                                  .transform_values { |items| money(items.sum(&:amount_cents)) },
         subcategory_totals: subcategory_totals(expenses),
         merchants: expenses.group_by { |transaction| normalized_merchant(transaction.description) }
-                          .transform_values { |items| { count: items.size, dollars: money(items.sum(&:amount_cents)) } }
-                          .sort_by { |_merchant, item| -item[:dollars].to_d }
+                          .sort_by { |_merchant, items| -items.sum(&:amount_cents) }
                           .first(25)
-                          .to_h,
+                          .to_h
+                          .transform_values { |items| { count: items.size, dollars: money(items.sum(&:amount_cents)) } },
         sample_transactions: records.first(50).map do |transaction|
           Ai::TransactionPayload.record(transaction)
         end

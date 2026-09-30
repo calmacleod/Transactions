@@ -5,10 +5,12 @@ class Model < ApplicationRecord
   scope :user_selectable, -> { where(user_selectable: true) }
   scope :by_provider, ->(provider) { provider.present? ? where(provider:) : all }
   scope :matching, ->(query) {
-    next all if query.blank?
-
-    pattern = "%#{sanitize_sql_like(query)}%"
-    where("model_id LIKE :query OR name LIKE :query OR family LIKE :query", query: pattern)
+    if query.blank?
+      all
+    else
+      pattern = "%#{ActiveRecord::Base.sanitize_sql_like(query)}%"
+      where("model_id LIKE :query OR name LIKE :query OR family LIKE :query", query: pattern)
+    end
   }
 
   validate :user_selectable_requires_app_capabilities

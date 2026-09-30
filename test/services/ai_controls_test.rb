@@ -41,6 +41,22 @@ class AiControlsTest < ActiveSupport::TestCase
     assert_equal 1_250, Ai::Controls.estimated_cost_microdollars("any-model", response)
   end
 
+  test "reads legacy token readers and usage hashes without dynamic dispatch" do
+    readers = Struct.new(:input_tokens, :output_tokens).new(17, 9)
+    assert_equal 17, Ai::Controls.token_count(readers, :input_tokens)
+    assert_equal 9, Ai::Controls.token_count(readers, :output_tokens)
+
+    usage_reader = Struct.new(:usage)
+    [ { "input_tokens" => 17, "output_tokens" => 9 }, { input_tokens: 17, output_tokens: 9 }, readers ].each do |usage|
+      response = usage_reader.new(usage)
+      assert_equal 17, Ai::Controls.token_count(response, :input_tokens)
+      assert_equal 9, Ai::Controls.token_count(response, :output_tokens)
+    end
+
+    assert_nil Ai::Controls.token_count(nil, :input_tokens)
+    assert_nil Ai::Controls.token_count(usage_reader.new(nil), :output_tokens)
+  end
+
   test "resolves feature specific models with default fallback" do
     create_chat_model("default-model")
     create_chat_model("chat-model")

@@ -3,7 +3,8 @@ module TransactionClassification
     PATH = Rails.root.join("vendor/merchant_data/merchants.json")
     GENERIC_NAMES = %w[bank cafe coffee food fuel gas hotel market pharmacy restaurant shop store supermarket].freeze
 
-    Match = Data.define(:identity, :name, :category_name)
+    MerchantMatch = Data.define(:identity, :name, :category_name)
+    Match = MerchantMatch
 
     def initialize(path: PATH)
       @path = path
@@ -24,7 +25,7 @@ module TransactionClassification
       # A shared/rebranded name can establish a merchant type without establishing a brand identity.
       unless matches.map(&:identity).uniq.one?
         canonical = matches.find { |match| MerchantName.normalize(match.name) == best_candidates.first.first } || matches.first
-        return Match.new(identity: nil, name: canonical.name, category_name: canonical.category_name)
+        return TransactionClassification::PublicMerchantCatalog::MerchantMatch.new(identity: nil, name: canonical.name, category_name: canonical.category_name)
       end
 
       matches.first
@@ -42,7 +43,7 @@ module TransactionClassification
       raise TypeError, "Expected merchant entries" unless merchants.is_a?(Array) && merchants.all? { |merchant| valid_entry?(merchant) }
 
       @index = merchants.each_with_object({}) do |merchant, result|
-        match = Match.new(identity: merchant.fetch("id"), name: merchant.fetch("name"), category_name: merchant.fetch("category"))
+        match = TransactionClassification::PublicMerchantCatalog::MerchantMatch.new(identity: merchant.fetch("id"), name: merchant.fetch("name"), category_name: merchant.fetch("category"))
         merchant.fetch("aliases").each do |name|
           key = MerchantName.normalize(name)
           next if key.length < 2 || GENERIC_NAMES.include?(key)

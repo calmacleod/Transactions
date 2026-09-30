@@ -6,7 +6,8 @@ module TransactionClassification
       end
     end
 
-    Result = Data.define(:category_name, :confidence, :reason, :rule)
+    RuleClassificationResult = Data.define(:category_name, :confidence, :reason, :rule)
+    Result = RuleClassificationResult
 
     RULES = [
       Rule.new(category_name: "Subscriptions", pattern: /ai service|openai|chatgpt|anthropic|claude|cursor|perplexity|github copilot|netflix|spotify|crunchyroll|disney\+|prime video|youtube premium|google \*cloud|google \*google one|google one|dropbox|icloud|adobe|canva|figma|namecheap|godaddy|hover\.com|porkbun|cloudflare/i, confidence: 0.65),
@@ -32,9 +33,9 @@ module TransactionClassification
       return credit_result(description) unless direction.to_s == "debit"
 
       rule = rules.find { |candidate| candidate.matches?(description) }
-      return Result.new(category_name: rule.category_name, confidence: rule.confidence, reason: "Matched local merchant rules.", rule:) if rule
+      return TransactionClassification::Rulebook::RuleClassificationResult.new(category_name: rule.category_name, confidence: rule.confidence, reason: "Matched local merchant rules.", rule:) if rule
 
-      Result.new(category_name: "Uncategorized", confidence: 0.25, reason: "No local merchant rule matched.", rule: nil)
+      TransactionClassification::Rulebook::RuleClassificationResult.new(category_name: "Uncategorized", confidence: 0.25, reason: "No local merchant rule matched.", rule: nil)
     end
 
     private
@@ -43,9 +44,9 @@ module TransactionClassification
 
     def credit_result(description)
       if PAYMENT_PATTERN.match?(description)
-        Result.new(category_name: "Payments", confidence: 1.0, reason: "Credit card payment; excluded from expense totals.", rule: nil)
+        TransactionClassification::Rulebook::RuleClassificationResult.new(category_name: "Payments", confidence: 1.0, reason: "Credit card payment; excluded from expense totals.", rule: nil)
       else
-        Result.new(category_name: "Refunds & Credits", confidence: 0.8, reason: "Credit or refund; excluded from expense totals.", rule: nil)
+        TransactionClassification::Rulebook::RuleClassificationResult.new(category_name: "Refunds & Credits", confidence: 0.8, reason: "Credit or refund; excluded from expense totals.", rule: nil)
       end
     end
   end

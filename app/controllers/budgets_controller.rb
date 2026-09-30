@@ -22,7 +22,7 @@ class BudgetsController < ApplicationController
     category = current_user.categories.find(params[:id])
     category.update!(monthly_budget_cents: dollars_to_cents(params.dig(:category, :monthly_budget)))
 
-    redirect_back fallback_location: budgets_path, notice: "#{category.name} budget updated."
+    redirect_back_or_to budgets_path, notice: "#{category.name} budget updated."
   end
 
   private

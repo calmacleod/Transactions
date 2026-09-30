@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+# Only seed the isolated experiment database; never use Rails' database.
+require "sqlite3"
+require "bcrypt"
+require "time"
+require "fileutils"
+
+root = File.expand_path("../..", __dir__)
+project = File.expand_path(ARGV.fetch(0, "#{root}/tmp/roundhouse/spinel-native"))
+expected = File.join(root, "tmp/roundhouse") + "/"
+abort "Expected a generated project under #{expected}" unless project.start_with?(expected)
+load File.join(project, "config/schema.rb")
+FileUtils.mkdir_p(File.join(project, "storage"))
+database = SQLite3::Database.new(File.join(project, "storage/development.sqlite3"))
+Schema.statements.each { |sql| database.execute(sql) }
+email = "spinel@example.test"
+unless database.get_first_value("SELECT id FROM users WHERE email_address = ?", email)
+  now = Time.now.utc.iso8601
+  values = {}
+  database.execute("PRAGMA table_info(users)").each do |_cid, name, type, required, _default, _key|
+    next if name == "id" || required.zero?
+    values[name] = type == "INTEGER" ? 0 : ""
+  end
+  values.merge!(
+    "email_address" => email,
+    "password_digest" => BCrypt::Password.create("spinel-local-experiment").to_s,
+    "role" => "admin", "created_at" => now, "updated_at" => now,
+    "onboarding_dismissed_at" => now
+  )
+  names = values.keys.map { |name| %Q("#{name}") }.join(", ")
+  placeholders = Array.new(values.size, "?").join(", ")
+  database.execute("INSERT INTO users (#{names}) VALUES (#{placeholders})", values.values)
+end
+puts "Seeded local experiment login: #{email} / spinel-local-experiment"

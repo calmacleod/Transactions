@@ -48,8 +48,9 @@ module TransactionClassification
     def apply_results(results_by_id, categories_by_name)
       classified_at = Time.current
 
-      results_by_id.group_by { |_id, result| result }.sum do |result, pairs|
-        ExpenseTransaction.where(id: pairs.map(&:first)).automatically_classifiable.update_all(
+      classified_count = 0
+      results_by_id.group_by { |_id, result| result }.each do |result, pairs|
+        classified_count += ExpenseTransaction.where(id: pairs.map(&:first)).automatically_classifiable.update_all(
           category_id: categories_by_name.fetch(result.category_name).id,
           classification_confidence: result.confidence,
           classification_reason: result.reason,
@@ -58,6 +59,7 @@ module TransactionClassification
           updated_at: classified_at
         )
       end
+      classified_count
     end
 
     def record_progress(results_by_id, classified_count)

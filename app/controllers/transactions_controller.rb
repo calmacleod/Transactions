@@ -50,7 +50,7 @@ class TransactionsController < ApplicationController
     transaction.update!(normalized_transaction_params)
 
     respond_to do |format|
-      format.html { redirect_back fallback_location: transactions_path, notice: "Transaction updated." }
+      format.html { redirect_back_or_to transactions_path, notice: "Transaction updated." }
       format.json do
         updated_transaction = current_user.expense_transactions.includes(:category, :subcategories).find(transaction.id)
         render json: { transaction: transaction_props(updated_transaction) }
@@ -71,7 +71,7 @@ class TransactionsController < ApplicationController
       transaction.update!(attributes) if attributes.any?
     end
 
-    redirect_back fallback_location: transactions_path, notice: "Updated #{helpers.pluralize(transactions.size, "transaction")}."
+    redirect_back_or_to transactions_path, notice: "Updated #{helpers.pluralize(transactions.size, "transaction")}."
   end
 
   private
@@ -270,10 +270,12 @@ class TransactionsController < ApplicationController
     visible_pages += [ pagy.pages - 3, pagy.pages - 2, pagy.pages - 1 ] if pagy.page >= pagy.pages - 3
     visible_pages = visible_pages.select { |page| page.between?(1, pagy.pages) }.uniq.sort
 
-    visible_pages.each_with_object([]) do |page, series|
+    series = []
+    visible_pages.each do |page|
       series << :gap if series.any? && page > series.last.to_i + 1
       series << page
     end
+    series
   end
 
   def filtered_chat_transactions(filter)
@@ -318,7 +320,7 @@ class TransactionsController < ApplicationController
       attributes["category_id"] = current_user.categories.find(attributes["category_id"]).id
     end
     if attributes.key?("category_id")
-      attributes.merge!(ExpenseTransaction.manual_classification_attributes(attributes.delete("category_id")))
+      attributes.merge!(ExpenseTransaction.manual_classification_attributes(attributes.delete("category_id")).stringify_keys)
     end
     if attributes.key?("subcategory_ids")
       attributes["subcategory_ids"] = current_user.transaction_subcategories.where(id: attributes["subcategory_ids"]).ids

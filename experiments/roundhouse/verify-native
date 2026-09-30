@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Exercise the compiled app over HTTP using the isolated experiment account."""
+import http.cookiejar
+import json
+from pathlib import Path
+import re
+import sys
+import urllib.error
+import urllib.request
+
+base = sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:3901'
+if not base.startswith('http://127.0.0.1:'):
+    raise SystemExit('This check only targets the local experiment server')
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+cookies = http.cookiejar.CookieJar()
+client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies), NoRedirect())
+
+def request(path, payload=None, headers=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(base + path, data=data, headers=headers or {})
+    try:
+        response = client.open(req, timeout=10)
+    except urllib.error.HTTPError as error:
+        response = error
+    return response.code, response.headers, response.read().decode()
+
+code, _, _ = request('/up')
+assert code == 200, f'health: {code}'
+code, _, body = request('/session/new')
+assert code == 200, f'login page: {code}'
+page_match = re.search(r'<script data-page="app" type="application/json">(.*?)</script>', body)
+page = json.loads(page_match[1])
+assert page['component'] == 'sessions/new'
+assert page['props']['auth']['authenticated'] is False
+asset = re.search(r'<script type="module" src="([^"]+)"', body)[1]
+code, _, asset_body = request(asset)
+assert code == 200 and len(asset_body) > 1000, f'frontend asset: {code}'
+csrf = re.search(r'<meta name="csrf-token" content="([^"]*)"', body)[1]
+code, headers, _ = request('/session', {'email_address': 'spinel@example.test', 'password': 'spinel-local-experiment'},
+                          {'Content-Type': 'application/json', 'X-CSRF-Token': csrf})
+assert code == 303 and headers['Location'] == '/', f'login: {code}, {headers.get("Location")}'
+code, headers, body = request('/session/new', headers={'X-Inertia': 'true'})
+assert code == 200 and headers['X-Inertia'] == 'true', f'Inertia: {code}'
+page = json.loads(body)
+assert page['props']['auth']['authenticated'] is True
+assert page['props']['auth']['email'] == 'spinel@example.test'
+assert page['props']['auth']['admin'] is True
+print('Native HTTP checks passed: health, HTML login, frontend assets, JSON login, signed session, Inertia JSON')
+for path in ('/', '/transactions', '/imports', '/budgets'):
+    code, _, _ = request(path, headers={'X-Inertia': 'true'})
+    print(f'Authenticated route {path}: HTTP {code}')

@@ -155,7 +155,7 @@ class ApplicationController < ActionController::Base
   end
 
   def insight_props(insight, transactions: [])
-    filters = insight.payload.to_h["filters"] || insight.payload.to_h[:filters] || {}
+    filters = (insight.payload.to_h["filters"] || insight.payload.to_h[:filters] || {}).symbolize_keys
 
     {
       id: insight.id,

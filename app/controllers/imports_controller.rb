@@ -19,7 +19,7 @@ class ImportsController < ApplicationController
     attach_uploaded_file(batch, uploaded_file)
     ClassifyImportRowsJob.perform_later(batch.id, current_user.id)
 
-    redirect_to preview_import_path(batch), notice: "Review #{helpers.pluralize(batch.import_rows.count, "transaction")} from #{batch.filename}."
+    redirect_to preview_import_path(batch.id), notice: "Review #{helpers.pluralize(batch.import_rows.count, "transaction")} from #{batch.filename}."
   rescue ActionController::ParameterMissing
     redirect_to root_path, alert: "Choose a CSV file to import."
   rescue StandardError => error
@@ -50,9 +50,9 @@ class ImportsController < ApplicationController
 
   def commit
     batch = current_user.import_batches.find(params[:id])
-    return redirect_to preview_import_path(batch), alert: "#{batch.filename} is already finished." unless batch.unfinished?
+    return redirect_to preview_import_path(batch.id), alert: "#{batch.filename} is already finished." unless batch.unfinished?
 
-    StatementCsvImporter.new(io: StringIO.new, filename: batch.filename, user: current_user).commit(batch:, rows: import_rows_params)
+    StatementCsvImporter.new(io: StringIO.new, filename: batch.filename, user: current_user).commit(batch:, rows: permitted_import_rows)
 
     redirect_to root_path, notice: "Imported #{helpers.pluralize(batch.transactions_count, "new transaction")} from #{batch.filename}."
   rescue ActionController::ParameterMissing
@@ -63,7 +63,7 @@ class ImportsController < ApplicationController
 
   def download
     batch = current_user.import_batches.find(params[:id])
-    return redirect_to preview_import_path(batch), alert: "The original CSV is not retained for this import." unless batch.source_file_retained?
+    return redirect_to preview_import_path(batch.id), alert: "The original CSV is not retained for this import." unless batch.source_file_retained?
 
     send_data batch.source_file.download,
       filename: batch.source_file.filename.to_s,
@@ -105,7 +105,7 @@ class ImportsController < ApplicationController
       retained_file: batch.source_file_retained?,
       source_file_label: batch.source_file_retained? ? batch.source_file.filename.to_s : nil,
       notes: batch.notes,
-      preview_path: preview_import_path(batch),
+      preview_path: preview_import_path(batch.id),
       download_path: batch.source_file_retained? ? download_import_path(batch) : nil,
       complete: batch.complete?,
       unfinished: batch.unfinished?
@@ -137,7 +137,7 @@ class ImportsController < ApplicationController
     }
   end
 
-  def import_rows_params
+  def permitted_import_rows
     params.require(:import).fetch(:rows, []).map do |row|
       row.permit(:id, :occurred_on, :description, :amount, :amount_cents, :direction, :card_last4, :category_id, :manually_classified, :notes, :included, :include_duplicate)
     end
@@ -167,7 +167,8 @@ class ImportsController < ApplicationController
     end
 
     seen_upload_keys = {}
-    rows.each_with_object({}) do |row, duplicates|
+    duplicates = {}
+    rows.each do |row|
       existing_match = existing_by_external_id[row.external_id] ||
         existing_by_full_key[transaction_key(row, include_source: true)] ||
         existing_by_natural_key[transaction_key(row, include_source: false)]
@@ -190,6 +191,7 @@ class ImportsController < ApplicationController
         }
       end
     end
+    duplicates
   end
 
   def matched_transaction_props(transaction)

@@ -127,16 +127,23 @@ module Ai
     end
 
     def self.token_count(response, key)
+      return unless response
+
       if response&.respond_to?(:tokens)
-        return response.tokens&.public_send(key.to_s.delete_suffix("_tokens"))
+        return response.tokens&.input if key == :input_tokens
+        return response.tokens&.output if key == :output_tokens
       end
 
-      return response.public_send(key) if response&.respond_to?(key)
+      return response.input_tokens if key == :input_tokens && response.respond_to?(:input_tokens)
+      return response.output_tokens if key == :output_tokens && response.respond_to?(:output_tokens)
 
       usage = response&.respond_to?(:usage) ? response.usage : nil
       return if usage.blank?
 
-      usage.respond_to?(key) ? usage.public_send(key) : usage[key.to_s] || usage[key]
+      return usage.input_tokens if key == :input_tokens && usage.respond_to?(:input_tokens)
+      return usage.output_tokens if key == :output_tokens && usage.respond_to?(:output_tokens)
+
+      usage[key.to_s] || usage[key]
     end
 
     def self.response_cost_microdollars(response)

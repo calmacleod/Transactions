@@ -9,6 +9,7 @@ class CsvUploadReminderJob < ApplicationJob
         self.class.perform_later(user.id)
       end
     end
+    nil
   end
 
   private
@@ -18,5 +19,6 @@ class CsvUploadReminderJob < ApplicationJob
 
     UserMailer.csv_upload_reminder(user).deliver_later
     user.update!(csv_reminder_last_sent_at: Time.current)
+    nil
   end
 end

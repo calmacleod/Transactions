@@ -11,12 +11,15 @@ Rails.application.routes.draw do
   namespace :admin do
     root "dashboard#index"
     resources :invitations, only: :create
-    resource :ai_controls, only: %i[show update], controller: "/ai_controls"
-    resources :models, only: %i[index create update], controller: "/models"
 
     if Rails.env.development?
       get "first_time_flow_preview", to: "/development/previews#first_time_flow", as: :first_time_flow_preview
     end
+  end
+
+  scope path: "admin", as: "admin" do
+    resource :ai_controls, only: %i[show update]
+    resources :models, only: %i[index create update]
   end
 
   mount MissionControl::Jobs::Engine, at: "/admin/jobs"

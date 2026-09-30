@@ -15,7 +15,7 @@ class SessionsController < ApplicationController
   end
 
   def create
-    if user = User.authenticate_by(params.permit(:email_address, :password))
+    if user = User.authenticate_by(email_address: params[:email_address], password: params[:password])
       start_new_session_for user
       redirect_to after_authentication_url, status: :see_other
     else
@@ -25,12 +25,12 @@ class SessionsController < ApplicationController
 
   def destroy
     terminate_session
-    redirect_to sign_out_redirect_path, status: :see_other
+    redirect_to sign_out_redirect_location, status: :see_other
   end
 
   private
 
-  def sign_out_redirect_path
+  def sign_out_redirect_location
     return_to = params[:return_to].to_s
     return return_to if return_to.start_with?("/") && !return_to.start_with?("//")
 

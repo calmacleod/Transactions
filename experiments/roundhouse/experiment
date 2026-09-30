@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+work="$root/tmp/roundhouse"
+revision="3f5753ad4d35cffbfe6b619257d728d06ea80deb"
+spinel_revision="438241961cd7e9f0e1dc1cb81f261dd37cb9d756"
+bcrypt_revision="a78ea0bfae6760c3143ea3b96bcd1594c82d6b7d"
+compiler="${ROUNDHOUSE_BIN:-$work/toolchain/target/release/roundhouse}"
+toolchain="${RUST_TOOLCHAIN:-1.97.1}"
+export CARGO_HOME="${CARGO_HOME:-$work/cargo-home}"
+mkdir -p "$work/logs"
+cd "$root"
+
+cargo_for_experiment() {
+  cargo "+$toolchain" "$@"
+}
+
+capture() {
+  local name="$1" result=0
+  shift
+  "$@" > "$work/logs/$name.log" 2>&1 || result=$?
+  printf '%s\n' "$result" > "$work/logs/$name.exit"
+  tail -n 8 "$work/logs/$name.log"
+  printf 'Full log: %s\n' "$work/logs/$name.log"
+  return "$result"
+}
+
+case "${1:-help}" in
+  setup)
+    if [[ ! -d "$work/toolchain/.git" ]]; then
+      git clone --no-checkout https://github.com/rubys/roundhouse.git "$work/toolchain"
+      git -C "$work/toolchain" checkout --detach "$revision"
+    fi
+    if [[ "$(git -C "$work/toolchain" rev-parse HEAD)" != "$revision" ]]; then
+      printf 'Expected Roundhouse revision %s; preserve this checkout and use a separate compiler.\n' "$revision" >&2
+      exit 1
+    fi
+    capture setup cargo_for_experiment build --locked --release --bin roundhouse \
+      --manifest-path "$work/toolchain/Cargo.toml"
+    "$compiler" --version
+    ;;
+  check)
+    capture check "$compiler" check --continue .
+    ;;
+  strict)
+    capture strict "$compiler" --target rust -o "$work/strict" .
+    ;;
+  survey)
+    # A new directory avoids stale files from an earlier transpilation.
+    # Refuse to delete prior output automatically: it may contain your edits.
+    if [[ -e "$work/rust" ]]; then
+      printf 'Move tmp/roundhouse/rust aside before regenerating it.\n' >&2
+      exit 1
+    fi
+    capture survey "$compiler" --target rust --survey --allow-unsupported -o "$work/rust" .
+    ;;
+  build)
+    capture build cargo_for_experiment build --release --manifest-path "$work/rust/Cargo.toml"
+    ;;
+  setup-spinel)
+    if [[ ! -d "$work/spinel-toolchain/.git" ]]; then
+      git clone --no-checkout https://github.com/matz/spinel.git "$work/spinel-toolchain"
+      git -C "$work/spinel-toolchain" checkout --detach "$spinel_revision"
+    fi
+    if [[ "$(git -C "$work/spinel-toolchain" rev-parse HEAD)" != "$spinel_revision" ]]; then
+      printf 'Expected Spinel revision %s; preserve this checkout and use a separate compiler.\n' "$spinel_revision" >&2
+      exit 1
+    fi
+    if git -C "$work/spinel-toolchain" apply --reverse --check "$root/experiments/roundhouse/spinel-compiler.patch" 2>/dev/null; then
+      : # Already applied.
+    elif git -C "$work/spinel-toolchain" apply --check "$root/experiments/roundhouse/spinel-compiler.patch"; then
+      git -C "$work/spinel-toolchain" apply "$root/experiments/roundhouse/spinel-compiler.patch"
+    else
+      printf 'Compiler patch conflicts with local toolchain edits.\n' >&2
+      exit 1
+    fi
+    cd "$work/spinel-toolchain"
+    capture spinel-toolchain-deps make deps
+    capture spinel-toolchain-build make -j8 all
+    bin/spinel --version
+    bin/spin --version
+    ;;
+  setup-native-deps)
+    if [[ ! -f /opt/homebrew/opt/icu4c/include/unicode/unorm2.h ]]; then
+      printf 'Install ICU with Homebrew (brew install icu4c) before building this macOS experiment.\n' >&2
+      exit 1
+    fi
+    if [[ ! -f "$work/jemalloc-install/lib/libjemalloc.a" ]]; then
+      curl --fail --location https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 \
+        -o "$work/jemalloc-5.3.0.tar.bz2"
+      printf '2db82d1e7119df3e71b7640219b6dfe84789bc0537983c3b7ac4f7189aecfeaa  %s\n' \
+        "$work/jemalloc-5.3.0.tar.bz2" | shasum -a 256 -c -
+      tar -xjf "$work/jemalloc-5.3.0.tar.bz2" -C "$work"
+      cd "$work/jemalloc-5.3.0"
+      capture jemalloc-configure ./configure --prefix="$work/jemalloc-install" --disable-shared --disable-doc
+      capture jemalloc-build make -j8
+      capture jemalloc-install make install
+    fi
+    bcrypt="$work/spin-cache/spin/packages/bcrypt-0.1.0"
+    if [[ -f "$bcrypt/.spin-sha" && "$(cat "$bcrypt/.spin-sha")" == "$bcrypt_revision" ]]; then
+      printf 'Pinned bcrypt is already cached.\n'
+    else
+      if [[ ! -d "$work/bcrypt-toolchain/.git" ]]; then
+        git clone --no-checkout https://github.com/rubys/spinel-bcrypt "$work/bcrypt-toolchain"
+      fi
+      git -C "$work/bcrypt-toolchain" checkout --detach "$bcrypt_revision"
+      printf '%s\n' "$bcrypt_revision" > "$work/bcrypt-toolchain/.spin-sha"
+    fi
+    ;;
+  spinel-native)
+    name="${2:-spinel-native}"
+    if [[ ! "$name" =~ ^spinel-native(-[a-z0-9-]+)?$ ]]; then
+      printf 'Use spinel-native or spinel-native-<name> as the output name.\n' >&2
+      exit 1
+    fi
+    project="$work/$name"
+    if [[ -e "$project" ]]; then
+      printf '%s exists; choose a new name to preserve earlier output.\n' "$project" >&2
+      exit 1
+    fi
+    capture "$name-frontend" npm run build
+    capture "$name-transpile" "$compiler" --target spinel --survey --allow-unsupported -o "$project" .
+    "$root/experiments/roundhouse/prepare-spinel" "$project"
+    bcrypt="$work/spin-cache/spin/packages/bcrypt-0.1.0"
+    if [[ ! -f "$bcrypt/.spin-sha" || "$(cat "$bcrypt/.spin-sha")" != "$bcrypt_revision" ]]; then
+      bcrypt="$work/bcrypt-toolchain"
+    fi
+    if [[ ! -f "$bcrypt/.spin-sha" || "$(cat "$bcrypt/.spin-sha")" != "$bcrypt_revision" ]]; then
+      printf 'Run setup-native-deps to fetch the pinned bcrypt source.\n' >&2
+      exit 1
+    fi
+    mkdir -p "$project/vendor/packages"
+    cp -R "$bcrypt" "$project/vendor/packages/bcrypt-0.1.0"
+    "$root/experiments/roundhouse/compile-spinel" "$project"
+    ;;
+  native-smoke)
+    capture compiler-smoke-build "$work/spinel-toolchain/bin/spinel" -O 0 --no-inline-hot \
+      --cc='clang -Wno-nullability-completeness' "$root/experiments/roundhouse/compiler-smoke.rb" -o "$work/compiler-smoke"
+    "$work/compiler-smoke"
+    capture unicode-smoke-build env LIBRARY_PATH=/opt/homebrew/opt/icu4c/lib \
+      "$work/spinel-toolchain/bin/spinel" -O 0 --cc='clang -Wno-nullability-completeness' \
+      "$root/experiments/roundhouse/unicode-smoke.rb" -o "$work/unicode-smoke"
+    "$work/unicode-smoke"
+    ;;
+  spinel-strict)
+    capture spinel-strict "$compiler" --target spinel -o "$work/spinel-strict" .
+    ;;
+  spinel-survey)
+    if [[ -e "$work/spinel" ]]; then
+      printf 'Move tmp/roundhouse/spinel aside before regenerating it.\n' >&2
+      exit 1
+    fi
+    capture spinel-survey "$compiler" --target spinel --survey --allow-unsupported -o "$work/spinel" .
+    ;;
+  spinel-build)
+    cd "$work/spinel"
+    capture spinel-build env PATH="$work/spinel-toolchain/bin:$PATH" \
+      XDG_CACHE_HOME="$work/spin-cache" XDG_CONFIG_HOME="$work/spin-config" \
+      CC=clang "$work/spinel-toolchain/bin/spin" build
+    ;;
+  spinel-run)
+    project="$work/${2:-spinel-native}"
+    if [[ ! -x "$project/build/bin/blog" ]]; then
+      printf 'No executable: the emitted Spinel project must build successfully first.\n' >&2
+      exit 1
+    fi
+    cd "$project"
+    mkdir -p storage
+    export BLOG_DB="$project/storage/development.sqlite3"
+    export PORT="${PORT:-3901}"
+    export WORKERS=1
+    export SPINEL_WORKERS="${SPINEL_WORKERS:-2}"
+    exec ./build/bin/blog
+    ;;
+  run)
+    if [[ ! -x "$work/rust/target/release/app" ]]; then
+      printf 'No executable: the emitted Rust project must build successfully first.\n' >&2
+      exit 1
+    fi
+    cd "$work/rust"
+    mkdir -p storage
+    # Roundhouse binds to loopback. This database is separate from Rails storage.
+    export DATABASE_PATH="$work/rust/storage/development.sqlite3"
+    export PORT="${PORT:-3900}"
+    exec ./target/release/app
+    ;;
+  *)
+    printf 'Usage: experiments/roundhouse/experiment {setup|check|strict|survey|build|run}\n'
+    printf 'Spinel: experiments/roundhouse/experiment {setup-spinel|spinel-strict|spinel-survey|spinel-build|spinel-run}\n'
+    printf 'Native compatibility build: {setup-native-deps|spinel-native [name]|native-smoke|spinel-run [name]}\n'
+    ;;
+esac

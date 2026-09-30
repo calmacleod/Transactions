@@ -21,7 +21,7 @@ class AiSetting < ApplicationRecord
   end
 
   def self.set(key, value)
-    find_or_initialize_by(key:).tap do |setting|
+    (AiSetting.find_by(key:) || AiSetting.new(key:)).tap do |setting|
       setting.value = value
       setting.save!
     end

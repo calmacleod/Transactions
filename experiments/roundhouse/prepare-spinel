@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Add the experiment's native framework support to a Roundhouse output tree."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('project', type=Path)
+project = parser.parse_args().project.resolve()
+compat = Path(__file__).resolve().parent / 'compat'
+
+def replace(path, old, new):
+    file = project / path
+    source = file.read_text()
+    if source.count(old) != 1:
+        raise SystemExit(f'{path}: expected exactly one compatibility patch anchor')
+    file.write_text(source.replace(old, new))
+
+(project / 'native_compat.rb').write_text('require_relative "native_unicode"\n' + (compat / 'native.rb').read_text())
+(project / 'native_compat.rbs').write_text((compat / 'native.rbs').read_text())
+(project / 'native_unicode.rb').write_text((compat / 'unicode.rb').read_text())
+replace('main.rb', 'require_relative "boot"', 'require_relative "boot"\nrequire_relative "native_compat"')
+# Roundhouse emits the pre-lowering parameter hash signature. The actual
+# lowered params and app body use string keys; tell Spinel the actual type.
+replace('app/controllers/transactions_controller.rbs',
+        'def normalized_transaction_params: () -> Hash[Symbol, untyped]',
+        'def normalized_transaction_params: () -> Hash[String, untyped]')
+replace('app/controllers/transactions_controller.rbs',
+        'def paginated_transaction_result: () -> untyped',
+        'def paginated_transaction_result: () -> [NativePagination, Array[untyped]]')
+replace('app/controllers/transactions_controller.rbs',
+        'def transaction_pagy: () -> untyped',
+        'def transaction_pagy: () -> NativePagination')
+replace('app/controllers/transactions_controller.rbs',
+        'def pagination_props: (untyped pagy,',
+        'def pagination_props: (NativePagination pagy,')
+replace('app/controllers/transactions_controller.rbs',
+        'def pagination_series: (untyped pagy)',
+        'def pagination_series: (NativePagination pagy)')
+replace('app/models/transaction_classification/merchant_name.rb',
+        'merchant.unicode_normalize(:nfkd)', 'NativeUnicode.nfkd(merchant)')
+
+manifest_path = Path(__file__).resolve().parents[2] / 'public/vite/.vite/manifest.json'
+manifest = json.loads(manifest_path.read_text())
+entry = manifest['entrypoints/inertia.js']
+tags = '<script type="module" src="/vite/' + entry['file'] + '"></script>'
+for css in entry.get('css', []):
+    tags += '<link rel="stylesheet" href="/vite/' + css + '">'
+version = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+constants = 'module NativeInertia\n  VERSION = ' + json.dumps(version) + '\n  ASSET_TAGS = ' + json.dumps(tags) + '\nend\n'
+(project / 'native_inertia.rb').write_text(constants + (compat / 'inertia.rb').read_text())
+(project / 'native_inertia.rbs').write_text((compat / 'inertia.rbs').read_text())
+replace('native_compat.rb', 'require_relative "native_unicode"',
+        'require_relative "native_unicode"\nrequire_relative "native_inertia"')
+for file in sorted((project / 'app/controllers').rglob('*.rb')):
+    source = file.read_text().replace("Date::DAYNAMES", "NativeCalendar::DAYNAMES")
+    file.write_text(source)
+    old = '  def process_action(action_name)\n'
+    if old in source:
+        component = str(file.relative_to(project / 'app/controllers')).removesuffix('_controller.rb')
+        file.write_text(source.replace(old, old + '    @native_inertia_component = ' + json.dumps(component + '/') + ' + action_name.to_s\n    self.resume_session\n', 1))
+replace('main.rb', 'request_obj.env["HTTP_USER_AGENT"] = user_agent',
+        'request_obj.env["HTTP_USER_AGENT"] = user_agent\n    request_obj.env["HTTP_X_INERTIA"] = req.req_headers.fetch("x-inertia", "")')
+replace('main.rb', '    elsif req.multipart?\n',
+        '    elsif req.req_headers.fetch("content-type", "").start_with?("application/json")\n'
+        '      begin\n'
+        '        parsed = JSON.parse(req.raw_body)\n'
+        '        return nil unless parsed.is_a?(Hash)\n'
+        '        body = parsed\n'
+        '      rescue JSON::ParserError\n'
+        '        return nil\n'
+        '      end\n'
+        '    elsif req.multipart?\n')
+for file in (project / 'runtime/tep').glob('server*.rb'):
+    file.write_text(file.read_text().replace('http://0.0.0.0:', 'http://127.0.0.1:'))
+
+# These values remain boxed at Spinel's heterogeneous hash boundary.
+for name in ('current_expenses', 'previous_expenses', 'findings', 'unusual_transactions'):
+    previous = 'Array[Hash[Symbol, untyped]]' if name == 'unusual_transactions' else 'Array[untyped]'
+    replace('app/models/insights/analysis.rbs',
+            'def ' + name + ': () -> ' + previous,
+            'def ' + name + ': () -> untyped')
+replace('app/models/ai/controls.rbs',
+        'def self.unambiguous_models: (ActiveRecord::Relation models)',
+        'def self.unambiguous_models: (Array[Model] models)')
+
+for file in sorted((project / "app/models").rglob("*.rb")):
+    source = file.read_text()
+    file.write_text(source.replace("Date::DAYNAMES", "NativeCalendar::DAYNAMES"))
+
+print(f'Native compatibility prepared in {project}')

@@ -1,0 +1,12 @@
+module NativeInertia
+  VERSION: String
+  ASSET_TAGS: String
+  def self.resolve: (untyped value) -> untyped
+end
+module ActionController
+  class Base
+    @native_inertia_component: untyped
+    attr_accessor native_inertia_component: untyped
+    def render: (?String body, ?inertia: Hash[Symbol, untyped]?, ?status: Symbol, ?content_type: String?, ?location: String?) -> void
+  end
+end

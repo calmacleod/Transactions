@@ -51,9 +51,9 @@ class ModelsController < ApplicationController
     model = Model.find(params[:id])
     model.update!(model_params)
 
-    redirect_back fallback_location: admin_models_path, notice: "#{model.name} updated."
+    redirect_back_or_to admin_models_path, notice: "#{model.name} updated."
   rescue ActiveRecord::RecordInvalid => error
-    redirect_back fallback_location: admin_models_path, alert: error.record.errors.full_messages.to_sentence
+    redirect_back_or_to admin_models_path, alert: error.record.errors.full_messages.to_sentence
   end
 
   private

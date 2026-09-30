@@ -1,6 +1,7 @@
 module TransactionClassification
   class MerchantClassifier
-    Result = Data.define(:category_name, :confidence, :reason, :source)
+    MerchantClassificationResult = Data.define(:category_name, :confidence, :reason, :source)
+    Result = MerchantClassificationResult
 
     def initialize(user:, rulebook: Rulebook.new, catalog: PublicMerchantCatalog.new)
       @user = user
@@ -18,7 +19,7 @@ module TransactionClassification
       if history&.one?
         category_name = history.first
         manual = manual_history[key].present?
-        return Result.new(
+        return TransactionClassification::MerchantClassifier::MerchantClassificationResult.new(
           category_name:, confidence: manual ? 0.95 : 0.8,
           reason: manual ? "Matched your manual category for this merchant." : "Matched a previously saved category; original classification source is unknown.",
           source: "history"
@@ -26,7 +27,7 @@ module TransactionClassification
       end
 
       if public_match
-        return Result.new(category_name: public_match.category_name, confidence: 0.8,
+        return TransactionClassification::MerchantClassifier::MerchantClassificationResult.new(category_name: public_match.category_name, confidence: 0.8,
           reason: "Matched #{public_match.name} to a merchant type using the OpenStreetMap Name Suggestion Index.", source: "public")
       end
 
@@ -69,7 +70,7 @@ module TransactionClassification
 
     def rules_result(description, direction)
       result = rulebook.call(description:, direction:)
-      Result.new(category_name: result.category_name, confidence: result.confidence, reason: result.reason, source: "rules")
+      TransactionClassification::MerchantClassifier::MerchantClassificationResult.new(category_name: result.category_name, confidence: result.confidence, reason: result.reason, source: "rules")
     end
   end
 end
