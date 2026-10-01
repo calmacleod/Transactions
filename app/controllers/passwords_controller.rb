@@ -31,7 +31,7 @@ class PasswordsController < ApplicationController
   end
 
   def update
-    if @user.update(params.permit(:password, :password_confirmation))
+    if @user.update(user_params)
       @user.sessions.destroy_all
       redirect_to new_session_path, notice: "Password has been reset."
     else
@@ -40,6 +40,10 @@ class PasswordsController < ApplicationController
   end
 
   private
+    def user_params
+      params.permit(:password, :password_confirmation).to_h.symbolize_keys
+    end
+
     def set_user_by_token
       @user = User.find_by_password_reset_token!(params[:token])
     rescue ActiveSupport::MessageVerifier::InvalidSignature

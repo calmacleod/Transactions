@@ -57,7 +57,7 @@ class OfflineSnapshot
       day_totals: dashboard.day_of_week_totals.map { |item| dashboard_item_props(item) },
       month_trend: dashboard.month_trend.map { |item| dashboard_item_props(item) },
       month_delta: month_delta.merge(label: money_from_cents(month_delta[:cents])),
-      top_merchants: dashboard.top_merchants.map { |item| dashboard_item_props(item).merge(merchant_label: item[:merchant].titleize) },
+      top_merchants: dashboard.top_merchants.map { |item| dashboard_item_props(item).merge(merchant_label: item[:merchant].to_s.titleize) },
       recommendations: dashboard.recommendations.map { |item| dashboard_item_props(item) },
       transactions: user.expense_transactions.includes(:category, :subcategories).recent.limit(8).map { |transaction| transaction_props(transaction) },
       insights: insight_collection_props(user.insights.where(starts_on: 4.months.ago.to_date.beginning_of_month..).recent.limit(6), transaction_limit: 10)
@@ -113,7 +113,7 @@ class OfflineSnapshot
   def budgets_props
     month = Date.current.beginning_of_month
     range = month..month.end_of_month
-    totals = user.expense_transactions.expenses.includes(:category).between(range.begin, range.end).group(:category_id).sum(:amount_cents)
+    totals = user.expense_transactions.expenses.includes(:category).between(range.begin, range.end).group(:category_id).pluck(:category_id, Arel.sql("SUM(amount_cents)")).to_h
 
     {
       month: {
@@ -188,7 +188,7 @@ class OfflineSnapshot
       body: insight.body,
       action: insight.action,
       kind: insight.kind,
-      kind_label: insight.kind.humanize,
+      kind_label: insight.kind.to_s.humanize,
       metric: insight.metric,
       severity: insight.severity,
       generation_source: insight.generation_source,
@@ -309,11 +309,12 @@ class OfflineSnapshot
   end
 
   def category_month_rows(months)
-    grouped_totals = user.expense_transactions.expenses
+    grouped_totals = Hash.new { |categories, category_id| categories[category_id] = {} }
+    user.expense_transactions.expenses
       .group(:category_id, "strftime('%Y-%m-01', occurred_on)")
-      .sum(:amount_cents)
-      .each_with_object(Hash.new { |categories, category_id| categories[category_id] = {} }) do |((category_id, month), cents), categories|
-        categories[category_id][Date.iso8601(month)] = cents
+      .pluck(:category_id, Arel.sql("strftime('%Y-%m-01', occurred_on)"), Arel.sql("SUM(amount_cents)"))
+      .each do |category_id, month, cents|
+        grouped_totals[category_id][Date.iso8601(month)] = cents
       end
     categories_by_id = user.categories.where(id: grouped_totals.keys.compact).index_by(&:id)
 

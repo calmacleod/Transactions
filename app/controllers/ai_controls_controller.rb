@@ -6,7 +6,7 @@ class AiControlsController < ApplicationController
   end
 
   def update
-    settings_params.each do |key, value|
+    settings_params.to_h.each do |key, value|
       AiSetting.set(key, value)
     end
 

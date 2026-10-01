@@ -3,13 +3,14 @@ class ClassifyImportRowsJob < ApplicationJob
 
   def perform(import_batch_id, user_id = nil)
     user = User.find_by(id: user_id)
-    batch = (user&.import_batches || ImportBatch.all).find(import_batch_id)
-    classifier = ImportPreviewClassifier.new(user: batch.user)
+    scope = user ? ImportBatch.where(user_id: user.id) : ImportBatch.all
+    import_batch = scope.find(import_batch_id)
+    classifier = ImportPreviewClassifier.new(user: import_batch.user)
 
-    batch.import_rows.includes(:category).ordered.find_each do |row|
+    import_batch.import_rows.includes(:category).ordered.find_each do |row|
       result = classifier.call(row)
       row.update!(
-        category: result.category,
+        category_id: result.category&.id,
         classification_status: "classified",
         classification_confidence: result.confidence,
         classification_reason: result.reason,

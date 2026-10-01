@@ -1,151 +1,132 @@
-# Roundhouse → native Spinel experiment
+# Roundhouse → native Spinel compatibility notes
 
-The modified app **compiles to a native macOS ARM executable** using the
-pinned toolchains and compatibility patches in this directory. It starts on
-`http://127.0.0.1:3901` with a separate SQLite database. This is a successful
-native build, but the generated application still has runtime gaps.
+## Scope and evidence
 
-Verified September 30, 2026:
+This experiment compiles the Rails source into a native macOS ARM executable,
+reuses the built Vite/Svelte frontend, and stores data in a separate SQLite file.
+Normal sign-in reaches the dashboard and preserves requested return URLs.
+Invitations and password resets use the app's ordinary credential checks;
+there are no seeded-user authentication shortcuts.
 
-| Check | Result |
+This is an incomplete experiment. Subsequent browser testing exposed repeated
+`/transactions` 500s (`no implicit conversion of Date into Integer`) alongside
+successful requests; that input/date bug is unresolved. [STATUS.md](STATUS.md)
+separates the passed fixture checks from observed failures and untested behavior.
+
+The October 1 follow-up verifies authenticated page props and writes against
+seeded, isolated data rather than treating a successful build as app parity.
+`verify-native`, `verify-actions`, `verify-account`, `verify-browser.mjs`,
+`verify-ai` and `verify-memory`
+are executable assertions. Logs are under `tmp/roundhouse/logs`.
+
+The Rails suite passed 209 tests and 1,080 assertions. Focused Roundhouse tests
+cover form coercion, parameter presence, attribute binding, contextual keyword
+defaults, nested row permissions and collection-route order. Native smoke programs
+cover C code generation, Unicode, Gregorian dates, decimal rounding and scoped
+relation creation. Real provider requests have not been tested; provider protocol
+checks use local responses and fake keys.
+
+The final browser check covers normal form sign-in, Inertia navigation and all
+13 Svelte navigation pages. Local provider checks cover all nine combinations
+of budget/spending/search tools and OpenAI/Anthropic/Gemini protocols, three
+structured insight-editing responses, token accounting and authenticated live
+WebSocket delivery. These checks do not contact paid providers.
+
+## Fixes recorded
+
+| Area | Failure found | Recorded change |
+| --- | --- | --- |
+| Relations | Owner associations emitted as Arrays, losing `where`, `includes`, ordering and aggregate behavior | Explicit scoped model queries in affected app paths; shared relation/scope lowering and RBS corrections |
+| Creation | Scoped `find_or_create_by!` lost ownership and did not yield the setup block before validation | Preserve scalar equality scope attributes and run the block before saving; do not yield an existing record |
+| Forms | Text/JSON form values reached numeric and Boolean setters with the wrong native representation | Cast typed DTO values at assignment; preserve omitted fields and array-valued permissions |
+| Nested CSV rows | `permit` remained on plain emitted hashes | Filter residual scalar permissions after flat DTO synthesis, retaining strong-parameter filtering |
+| Keyword arguments | Optional keywords became positional values; later keywords bound to earlier slots, sometimes as Hashes | Preserve contextual defaults and instance keyword binding; normalize literal class/helper keywords consistently |
+| Routes | `/transactions/bulk_update` matched the standard `/:id` update route | Emit collection/custom routes before dynamic resource members |
+| Dates | Missing Date values, hydration, month arithmetic, hashing and range handling | Gregorian date adapter and DateRange; preserve dates in SQLite/JSON and distinguish boxed Date/Time values |
+| Money | Decimal conversion, fixed formatting and rounding were incomplete | Shared decimal lowering and Spinel BigDecimal fixes; verify half-up cents and negative/decimal cases |
+| Imports | Uploaded-file/IO modeling, attachment download and filename headers were incomplete | Native multipart IO support, retained-file download and `Content-Disposition` |
+| Data classes | Bodies of `Data.define` declarations and colliding result names were mishandled | Preserve declaration methods and use distinct result class names |
+| Hashes | Mixed String/Symbol pagination keys caused rapid request-memory growth | Normalize filter keys before merging; maintain consistent key types at API boundaries |
+| Insight candidates | An implicit empty branch retained a nested result in compiled code | Explicitly skip a category that yields no meaningful finding |
+| Analysis shape | `summary.merge` retained the original Hash-only inferred value type, passing a findings Array using the wrong native representation | Return explicit analysis fields and make the LLM findings array boundary explicit; verify structured insight editing |
+| Authentication | Generated session state lost Boolean values; browser XSRF header was not copied to the request verifier | Signed JSON session envelope and standard Inertia XSRF-header mapping; keep password checks, CSRF and authentication filters |
+| Browser cookies | Unsigned cookie jar serialized the options Hash instead of its value | Set the XSRF cookie to the actual token using the native jar's value API |
+| Live updates | Action Cable's native payload encoder only supported integer values | Encode nested chat/import messages as JSON; verify an authenticated subscription and live completed chat response |
+| AI integration | RubyLLM runtime/schema/tool declaration APIs were absent | Export declaration metadata using the installed gems; native transport for app-used text/schema/tool flows, finite timeouts and tool rounds |
+| Jobs/mail | In-memory placeholders lost work or retained deliveries; the persistent job thread retained its broadcast log | SQLite job state/arguments/errors, disk mail spool and per-job log cleanup; interrupted jobs requeue on restart |
+| Spinel C | Hash merge expression truncation, rescue String lending, Time boxing, result-type coercion and String iteration casts | Saved `spinel-compiler.patch` and native compiler/Unicode/decimal checks |
+
+The source changes favor explicit scopes, IDs, accumulators and scalar conversions.
+They preserve the Rails behavior exercised by its suite. Framework-specific
+adapters remain in the experiment and generated output.
+
+## Memory findings
+
+The original unbounded run could grow rapidly while assembling transaction
+pagination URLs. Mixed key types were one reproduced trigger. The repaired
+runtime also encountered an invalid generational remembered/pinned-cell scan,
+so the driver uses full marking (`SPINEL_GC_MINOR=0`) while retaining GC.
+This is a stability setting, not a claim that the upstream GC defect is fixed.
+
+`guard` counts the child process tree, including children that change process
+groups. It samples every 200 ms, enforces a memory ceiling and optional deadline,
+reports peak RSS, and terminates owned descendants. Ctrl-C has a two-second
+shutdown grace period. Intentional allocation beyond a 64 MiB test ceiling
+was terminated without leaving the allocator running. Sampling can overshoot
+the threshold during a rapid allocation burst.
+
+| Operation | Default ceiling / configuration |
 | --- | --- |
-| Roundhouse survey emission + prepared Spinel build | Exit 0; native executable produced |
-| Native `/up` | HTTP 200 |
-| Native `/session/new` and frontend assets | HTTP 200; Svelte sign-in form rendered |
-| JSON sign-in, signed session cookie, Inertia JSON response | Passed with the isolated experiment account; direct and dashboard-entry sign-in now land on Imports |
-| Native `/imports` | HTTP 200; signed in through the browser and rendered Imports |
-| Native dashboard `/`, `/transactions`, `/budgets` | HTTP 500; generated relation/date support remains incomplete |
-| Roundhouse strict emission after the app changes | Exit 1; 36 type errors |
-| Rails tests | 209 runs, 1,080 assertions, zero failures/errors/skips |
-| RuboCop on 22 changed/new app and test files | No offenses |
-| Native compiler and ICU normalization smoke checks | Passed |
+| Native server | 512 MiB; one process, two OS workers |
+| Native compilation | 1,024 MiB; `-O 0 --no-inline-hot`, one C worker, no debug symbols |
+| Toolchain build | 2,048 MiB; Cargo/make serial; Cargo release optimization level 1 |
+| Long memory check | Two stages on one server: 3,140 authenticated navigation/snapshot reads and 680 completed no-key background chat jobs, plus polling requests |
 
-The executable currently lives at `tmp/roundhouse/spinel-native/build/bin/blog`.
-It is approximately 10 MB, built at `-O 0 --no-inline-hot` with one C compiler
-job. This experiment measures compatibility, not performance.
+The first final soak rose from 174.4 to 189.7 MiB and failed the unchanged
+final-half growth assertion (+13.1 MiB). Extending the same server with another
+2,100 reads and 420 jobs passed that assertion: RSS settled near 163 MiB, with
+final-half growth of 0.6 MiB. The full guarded run peaked at 192.2 MiB. The
+request-logging addition was compiled and checked over HTTP afterward, but the
+long soak was not repeated on that executable. Successful compilation peaks
+remained below 1 GiB. A finite soak cannot cover every input,
+provider response, upload size or combination of actions. Keep the guard enabled.
 
-## Changes needed for compilation
+## Remaining compatibility boundaries
 
-The Rails source changes retain the tested Rails behavior while making the
-code easier to resolve statically:
+- **Strict inference:** strict emission still fails. The current ledger includes
+  32 type errors, including Inertia deferred props, relation IDs/`to_sql`, nullable numeric/date behavior,
+  RubyLLM metadata, sanitizer resolution and mailer view state. The executable
+  uses survey output and the recorded adapters; strict diagnostics are not hidden.
+- **Inertia:** native rendering resolves lazy/deferred props eagerly and supplies
+  normal pages, assets, cookies and JSON. Full partial/deferred/version negotiation
+  and history behavior do not have complete Rails conformance coverage.
+- **Jobs:** native SQLite queueing covers the app's six job classes and job errors,
+  retries/deletion and restart recovery. The jobs page is a native monitor rather
+  than Mission Control. Solid Queue scheduling/concurrency/recurring-task semantics
+  are not reproduced, so scheduled CSV reminders need an explicit scheduler.
+- **Mail:** invitations, reset links and reminder messages are written to JSON
+  files locally. SMTP, HTML layout/inline attachments and production delivery are
+  not implemented. Reset tokens use the isolated app's signing secret and are
+  invalidated when the password changes; Rails and native tokens are separate.
+- **AI:** the native facade covers the app-used OpenAI Responses, Anthropic
+  Messages and Gemini content protocols, tool results, JSON Schema and token
+  accounting. Live provider behavior, provider-specific error/retry/caching and
+  streaming parity remain unverified. Model refresh uses RubyLLM's published
+  catalog rather than its complete provider discovery pipeline.
+- **Uploads/frameworks:** this is the app's local SQLite/retained-CSV storage path,
+  not a complete Active Storage service matrix or arbitrary Rails engine support.
+- **Portability:** scripts assume this Mac's ICU/Homebrew layout. Linux/Windows
+  builds and production deployment are outside the recorded checks.
 
-- Keep string keys consistent when merging permitted transaction attributes.
-- Name result data classes uniquely and retain their existing aliases.
-- Use explicit token readers instead of a runtime `public_send` method name.
-- Use explicit accumulators in the affected generic enumeration blocks.
-- Pass IDs to the affected route helpers; avoid a private helper name that
-  Roundhouse mistook for a route helper or a parameter hash.
-- Express top-level admin controllers using an admin path/helper scope.
-- Use `redirect_back_or_to` and explicit authentication keyword arguments.
-- Rank merchant groups by their integer cents before formatting dollars.
-- Give the reminder job an explicit nil return after its side effects.
+## Reproduction and version policy
 
-`prepare-spinel` patches only generated output. It corrects contradictory RBS
-hints and loads a small native compatibility layer for pagination, view helpers,
-Unicode normalization, authentication helpers, health checks, and Inertia page
-rendering. It also handles JSON request bodies and binds the native server to
-loopback. The generated post-login destination uses Imports for a direct
-sign-in or a stored dashboard URL, avoiding the known dashboard failure.
-Other stored return paths are retained. The Rails sign-in behavior is unchanged.
-The existing Vite/Svelte frontend is reused.
+[README.md](README.md) contains the complete compile, seed, run and verification
+commands. Toolchains were refreshed from upstream on October 1 and then pinned:
+Roundhouse `3219450199e45b23bb716acdb63edbea01fd2714`, Spinel
+`65121d29b14d7095d5172f50f232ee839332aab6`. Patches apply to those revisions.
+The commit IDs identify the tested snapshot; upstream can advance afterward.
 
-`spinel-compiler.patch` contains four compiler fixes required by this app:
-Time values in closure cells, a truncated hash-merge C expression, volatile
-String slot lending across rescue, and hash coercion using an inlined result's
-type instead of the enclosing method's type. `compiler-smoke.rb` exercises
-Time capture, String mutation through a rescued slot, and string-keyed grouping
-inside a symbol-keyed return. `unicode-smoke.rb` checks canonical/compatibility
-normalization and independence of returned String storage.
-
-## Reproduce
-
-Toolchains are pinned to:
-
-- Roundhouse `3f5753ad4d35cffbfe6b619257d728d06ea80deb`.
-- Spinel `438241961cd7e9f0e1dc1cb81f261dd37cb9d756`, with the saved patch.
-- bcrypt `a78ea0bfae6760c3143ea3b96bcd1594c82d6b7d`.
-- jemalloc 5.3.0, downloaded with a SHA-256 check and installed under `tmp/`.
-
-Roundhouse's build script embeds absolute paths to its native runtime.
-Reusing Cargo artifacts after moving the toolchain checkout produced an
-empty embedded file table and `missing runtime/spinel/scaffold/` during
-transpilation. `setup` now cleans Roundhouse's package artifacts before
-rebuilding, while retaining the dependency cache.
-
-This driver targets this Mac's Homebrew layout and uses installed ICU4C
-(`/opt/homebrew/opt/icu4c`, currently 78.3), Ruby/Bundler, npm, Apple Clang,
-and Rust 1.97.1 for building Roundhouse. Setup needs network access when
-sources are not already cached.
-
-```sh
-experiments/roundhouse/experiment setup
-experiments/roundhouse/experiment setup-spinel
-experiments/roundhouse/experiment setup-native-deps
-experiments/roundhouse/experiment native-smoke
-
-# A fresh output name preserves every earlier generated tree.
-experiments/roundhouse/experiment spinel-native spinel-native-rebuild
-bundle exec ruby experiments/roundhouse/seed-native tmp/roundhouse/spinel-native-rebuild
-PORT=3901 experiments/roundhouse/experiment spinel-run spinel-native-rebuild
-```
-
-In another terminal:
-
-```sh
-experiments/roundhouse/verify-native
-```
-
-The verifier asserts the working health/login/asset/session paths, follows
-the login redirect for both direct and dashboard-entry sign-in, and prints
-the current statuses of the other routes. It does **not** treat those printed
-route probes as successful functional tests.
-
-The disposable login is `spinel@example.test` / `spinel-local-experiment`.
-Sign in directly or visit `/imports` to reach the working Imports page.
-An older generated executable will still redirect a direct sign-in to the
-failing dashboard; generate a fresh output tree to pick up the landing fix.
-The experiment uses its own `storage/development.sqlite3` and generated signing
-secret; it does not use the Rails development database, environment secrets,
-or real account credentials. The server is one process, with two Spinel workers
-by default. Stop it with Ctrl-C.
-
-## Remaining runtime limitations
-
-The dashboard tries to call `includes` on an emitted Array; transactions calls
-`ordered` on an emitted Array; budgets reaches an undefined `Date` constant.
-These are observed HTTP failures in the generated runtime. Roundhouse's strict
-analysis still rejects this stack, so the build deliberately uses survey output
-and explicit compatibility adjustments.
-
-The remaining strict diagnostics include these coverage and inference gaps:
-
-| Area | Examples reported by Roundhouse |
-| --- | --- |
-| Relations and aggregates | Missing relation `to_a`/`to_sql`, `expense_transaction_ids`, and seed `minimum`/`maximum`; inconsistent relation/Array inference. |
-| Dates and ranges | Missing `Date::DAYNAMES` enumeration/fetch and integer range `map`; date values inferred as integers; nullable Time comparison. |
-| Imports and uploads | Uploaded files modeled as hashes, missing Active Storage `download`, and month-group tuple destructuring inferred incorrectly. |
-| JSON and model metadata | Incorrect `fetch` result types, missing `deep_symbolize_keys`, sanitizer resolution, `index_with`, nullable numeric `to_d`, and RubyLLM model pricing. |
-| Framework integration | Missing `InertiaRails.defer` and an unresolved mailer layout instance variable. |
-
-These are diagnostics from the pinned compiler against the modified app;
-they describe the generated/static model, not failures in the Rails test run.
-The native `/service-worker.js` route also returned HTTP 500 because
-`PwaController` was missing from its generated runtime.
-
-Other unverified gaps include RubyLLM/provider execution, date ranges and
-aggregates, classification, background-job persistence, and Mission Control.
-In particular, methods declared in `Data.define` blocks were not preserved
-in the emitted classification result classes. The native Inertia adapter eagerly evaluates lazy
-props and does not implement the complete deferred/partial/version protocol.
-Its password-reset tokens belong to the isolated native app, not the Rails
-app's token format. A successful build does not establish full Rails parity.
-
-Full evidence is saved under `tmp/roundhouse/logs/`, including
-`spinel-native-transpile.log`, `spinel-native-build.log`/`.exit`,
-`native-http.log`, `native-http-login.log`, `rails-tests.log`, and the
-compiler/Unicode smoke build logs. The login follow-up compiled into
-`spinel-native-login`; its HTTP checks covered direct sign-in, a stored
-dashboard URL, and preservation of an Imports URL with query parameters.
-Earlier failed iterations remain under `tmp/roundhouse/spinel-app-v*/`.
-The original Rust results are recorded in [RUST.md](RUST.md) and have not been
-rerun. The [experiment overview](README.md) is the entry point for this branch.
+Updating a toolchain means fetching its current default branch, preserving and
+rebasing the saved patch, rebuilding under the guard, rerunning the native checks
+and recording a new pin. Do not silently pull moving dependencies during startup.
+The initial Rust survey failures remain in [RUST.md](RUST.md).

@@ -28,6 +28,6 @@ class ImportPreviewClassifier
   end
 
   def category_scope
-    Category.where(user:)
+    Category.where(user_id: user.id)
   end
 end

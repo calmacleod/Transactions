@@ -25,10 +25,10 @@ class TransactionFilter
   def self.clean(params)
     hash = params.respond_to?(:to_unsafe_h) ? params.to_unsafe_h : params.to_h
 
-    hash.slice(*FILTER_KEYS).compact_blank
+    hash.slice(*FILTER_KEYS).reject { |_key, value| value.blank? }
   end
 
-  def call(scope = Current.user&.expense_transactions || ExpenseTransaction.all)
+  def call(scope = Current.user ? ExpenseTransaction.where(user_id: Current.user.id) : ExpenseTransaction.all)
     relation = scope.includes(:category)
     relation = apply_dates(relation)
     relation = relation.where(id: params["transaction_id"]) if params["transaction_id"].present?

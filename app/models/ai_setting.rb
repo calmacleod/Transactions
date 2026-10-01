@@ -28,12 +28,13 @@ class AiSetting < ApplicationRecord
   end
 
   def self.values
-    DEFAULTS.keys.index_with do |key|
-      if key.end_with?("_model")
+    DEFAULTS.keys.to_h do |key|
+      value = if key.end_with?("_model")
         find_by(key:)&.value.presence || ENV["RUBYLLM_#{key.delete_suffix('_model').upcase}_MODEL"].presence || get("model")
       else
         get(key)
       end
+      [ key, value ]
     end
   end
 end

@@ -13,7 +13,7 @@ module Ai
       def execute(start_date: nil, end_date: nil)
         start_on = parse_date(start_date) || Date.current.beginning_of_month
         end_on = parse_date(end_date) || Date.current
-        transaction_scope = Current.user&.expense_transactions || ExpenseTransaction.all
+        transaction_scope = Current.user ? ExpenseTransaction.where(user_id: Current.user.id) : ExpenseTransaction.all
         transactions = transaction_scope.expenses.includes(:category).between(start_on, end_on).to_a
 
         {
@@ -22,7 +22,7 @@ module Ai
           transaction_count: transactions.size,
           total_dollars: Ai::TransactionPayload.dollars(transactions.sum(&:amount_cents)),
           category_totals: totals(transactions.group_by { |transaction| transaction.category&.name || "Uncategorized" }),
-          merchant_totals: totals(transactions.group_by { |transaction| transaction.merchant_name.downcase }).sort_by { |_merchant, dollars| -dollars.to_d }.first(25).to_h
+          merchant_totals: totals(transactions.group_by { |transaction| transaction.merchant_name.to_s.downcase }).sort_by { |_merchant, dollars| -dollars.to_d }.first(25).to_h
         }
       end
 

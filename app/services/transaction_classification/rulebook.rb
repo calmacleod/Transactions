@@ -1,6 +1,15 @@
 module TransactionClassification
   class Rulebook
-    Rule = Data.define(:category_name, :pattern, :confidence) do
+    class Rule
+      attr_reader :category_name, :pattern, :confidence
+
+      def initialize(category_name:, pattern:, confidence:)
+        @category_name = category_name
+        @pattern = pattern
+        @confidence = confidence
+        freeze
+      end
+
       def matches?(description)
         pattern.respond_to?(:call) ? pattern.call(description) : pattern.match?(description)
       end

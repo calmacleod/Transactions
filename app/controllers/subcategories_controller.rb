@@ -1,7 +1,7 @@
 class SubcategoriesController < ApplicationController
   def index
     render inertia: {
-      subcategories: current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory).merge(destroy_path: subcategory_path(subcategory)) },
+      subcategories: current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory).merge(destroy_path: subcategory_path(subcategory.id)) },
       actions: {
         create: subcategories_path
       }
@@ -9,7 +9,7 @@ class SubcategoriesController < ApplicationController
   end
 
   def create
-    current_user.transaction_subcategories.create!(subcategory_params)
+    current_user.transaction_subcategories.create!(subcategory_params.to_h.symbolize_keys)
 
     redirect_to subcategories_path, notice: "Subcategory added."
   end

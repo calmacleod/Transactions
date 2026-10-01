@@ -1,6 +1,6 @@
 module Ai
   class RubyLlmClient
-    SYSTEM_PROMPT = <<~PROMPT.squish
+    SYSTEM_PROMPT = <<~PROMPT
       You are a careful personal finance assistant for this expense tracker.
       Return all monetary amounts in dollars using a $ prefix, never in cents.
       Base conclusions on the supplied records and tool results. Say when the available data does not support an answer.
@@ -15,10 +15,10 @@ module Ai
     end
 
     def ask(prompt, schema: nil, on_event: nil, &)
-      chat = RubyLLM.chat(model:, provider:).with_instructions(SYSTEM_PROMPT)
+      chat = RubyLLM.chat(model:, provider:).with_instructions(Ai::RubyLlmClient::SYSTEM_PROMPT)
       chat.with_tools(*tools) if tools.any?
-      chat.with_schema(schema) if schema.present?
-      wire_callbacks(chat, on_event) if on_event.present?
+      chat.with_schema(schema) if schema
+      wire_callbacks(chat, on_event) if on_event
 
       response = chat.ask(prompt, &)
       Ai::Controls.record(feature:, model:, response:)

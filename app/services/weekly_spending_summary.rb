@@ -48,7 +48,7 @@ class WeeklySpendingSummary
   private
 
   def transaction_scope
-    user&.expense_transactions || ExpenseTransaction.all
+    user ? ExpenseTransaction.where(user_id: user.id) : ExpenseTransaction.all
   end
 
   def percentage(numerator, denominator)

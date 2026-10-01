@@ -82,7 +82,7 @@ class User < ApplicationRecord
   def csv_reminder_label
     return "Off" unless csv_reminder_enabled?
 
-    "#{Date::DAYNAMES.fetch(csv_reminder_wday)} at #{Time.zone.local(2000, 1, 1, csv_reminder_hour).strftime('%-l:00 %p')}"
+    "#{Date::DAYNAMES.fetch(csv_reminder_wday)} at #{Time.utc(2000, 1, 1, csv_reminder_hour).strftime('%-l:00 %p')}"
   end
 
   def effective_ai_model
@@ -93,14 +93,14 @@ class User < ApplicationRecord
 
   def seed_default_taxonomies
     DEFAULT_CATEGORIES.each do |name, color, monthly_budget_cents|
-      categories.find_or_create_by!(name:) do |category|
+      Category.where(user_id: id).find_or_create_by!(name:) do |category|
         category.color = color
         category.monthly_budget_cents = monthly_budget_cents
       end
     end
 
     DEFAULT_SUBCATEGORIES.each do |name, color|
-      transaction_subcategories.find_or_create_by!(name:) do |subcategory|
+      TransactionSubcategory.where(user_id: id).find_or_create_by!(name:) do |subcategory|
         subcategory.color = color
       end
     end

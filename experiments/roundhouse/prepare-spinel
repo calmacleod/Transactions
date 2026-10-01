@@ -3,6 +3,8 @@
 import argparse
 import hashlib
 import json
+import subprocess
+import re
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -20,22 +22,115 @@ def replace(path, old, new):
 (project / 'native_compat.rb').write_text('require_relative "native_unicode"\n' + (compat / 'native.rb').read_text())
 (project / 'native_compat.rbs').write_text((compat / 'native.rbs').read_text())
 (project / 'native_unicode.rb').write_text((compat / 'unicode.rb').read_text())
-replace('main.rb', 'require_relative "boot"', 'require_relative "boot"\nrequire_relative "native_compat"')
-# The native dashboard still needs relation/date support. Keep direct sign-in
-# and a stored dashboard return path on the working Imports page instead.
-replace('app/controllers/application_controller.rb',
-        '    session.delete(:return_to_after_authenticating) || RouteHelpers.root_path',
-        '    destination = session.delete(:return_to_after_authenticating)\n'
-        '    if destination.nil? || destination == RouteHelpers.root_path\n'
-        '      RouteHelpers.imports_path\n'
-        '    else\n'
-        '      destination\n'
-        '    end')
-# Roundhouse emits the pre-lowering parameter hash signature. The actual
-# lowered params and app body use string keys; tell Spinel the actual type.
-replace('app/controllers/transactions_controller.rbs',
-        'def normalized_transaction_params: () -> Hash[Symbol, untyped]',
-        'def normalized_transaction_params: () -> Hash[String, untyped]')
+(project / 'native_ruby_llm.rb').write_text((compat / 'ruby_llm.rb').read_text())
+(project / 'native_date.rb').write_text((compat / 'date.rb').read_text())
+(project / 'native_date.rbs').write_text((compat / 'date.rbs').read_text())
+replace('main.rb', 'require_relative "boot"', 'require_relative "native_date"\nrequire_relative "native_ruby_llm"\nrequire_relative "boot"\nrequire_relative "native_compat"')
+
+# Evaluate the application's declaration-only schemas with its actual gem.
+# Export their JSON Schema, avoiding runtime class_eval in the native app.
+root = Path(__file__).resolve().parents[2]
+gem_path = subprocess.check_output(['bundle', 'show', 'ruby_llm'], cwd=root, text=True).strip()
+(project / 'config/ruby_llm_models.json').write_bytes((Path(gem_path) / 'lib/ruby_llm/models.json').read_bytes())
+script = 'require "json"; require "ruby_llm"; ARGV.each { |path| load path }; tools = [Ai::Tools::SearchTransactionsTool.new, Ai::Tools::BudgetSummaryTool.new, Ai::Tools::SpendingSummaryTool.new]; puts JSON.generate(tools.to_h { |tool| [tool.name, {name: tool.name, description: tool.description, parameters: tool.parameters_schema}] })'
+tool_paths = sorted((root / 'app/services/ai/tools').glob('*.rb'))
+metadata = subprocess.check_output(['bundle', 'exec', 'ruby', '-e', script, *map(str, tool_paths)], cwd=root, text=True)
+(project / 'config/native_tools.json').write_text(metadata)
+
+(project / 'public/service-worker.js').write_bytes((root / 'app/views/pwa/service-worker.js').read_bytes())
+(project / 'vendor/merchant_data').mkdir(parents=True, exist_ok=True)
+(project / 'vendor/merchant_data/merchants.json').write_bytes((root / 'vendor/merchant_data/merchants.json').read_bytes())
+replace('app/controllers/imports_controller.rbs',
+        'def transaction_key: (ImportRow record,',
+        'def transaction_key: ((ImportRow | ExpenseTransaction) record,')
+replace('app/controllers/ai_chats_controller.rb', '(last_message && last_message.content).to_s.truncate(160)', 'ActiveSupport.truncate((last_message && last_message.content).to_s, 160)')
+table = None
+types = {}
+for line in (root / 'db/schema.rb').read_text().splitlines():
+    match = re.search(r'create_table "([^"]+)"', line)
+    if match:
+        table = match[1]
+        types[table + '.id'] = 'integer'
+    match = re.search(r't\.(\w+) "([^"]+)"', line)
+    if table and match and match[1] not in ('index', 'foreign_key'):
+        types[table + '.' + match[2]] = match[1]
+schema_source = 'module NativeSchema\n  TYPES = ' + repr(types).replace(': ', ' => ') + '\n'
+schema_source += '''  def self.cast(table, column, value)
+    return nil if value.nil?
+    type = TYPES.fetch(table + '.' + column, '')
+    return ActiveSupport.parse_db_date(value.to_s) if type == 'date'
+    return ActiveSupport.parse_db_time(value.to_s) if type == 'datetime'
+    return value == 1 if type == 'boolean'
+    return JsonColumn.load(value.to_s) if type == 'json'
+    value
+  end
+end
+'''
+(project / 'native_schema.rb').write_text(schema_source)
+replace('main.rb', 'require_relative "native_date"', 'require_relative "native_date"\nrequire_relative "native_schema"')
+for schema in sorted((root / 'app/schemas').glob('*.rb')):
+    name = ''.join(word.capitalize() for word in schema.stem.split('_'))
+    script = 'require "json"; require "schematist"; load ARGV[0]; puts Object.const_get(ARGV[1]).new.to_json'
+    definition = subprocess.check_output(['bundle', 'exec', 'ruby', '-e', script, str(schema), name], cwd=root, text=True)
+    document = json.loads(definition)
+    destination = project / 'app/models' / schema.name
+    destination.write_text('class ' + name + '\n  def self.json_schema\n    JSON.parse(' + repr(json.dumps(document)) + ')\n  end\nend\n')
+
+(project / 'native_mail.rb').write_text((compat / 'mail.rb').read_text())
+replace('main.rb', 'require_relative "native_compat"', 'require_relative "native_compat"\nrequire_relative "native_mail"')
+
+(project / 'native_jobs.rb').write_text((compat / 'jobs.rb').read_text())
+replace('main.rb', 'require_relative "native_compat"', 'require_relative "native_compat"\nrequire_relative "native_jobs"')
+replace('main.rb', '    when :sessions then SessionsController.new',
+        '    when :native_jobs then NativeJobsController.new\n    when :native_preview then Development::PreviewsController.new\n    when :sessions then SessionsController.new')
+replace('main.rb', 'Main.configure_default_adapter!\n', 'Main.configure_default_adapter!\nNativeJobs.setup\n')
+replace('config/routes.rb', ']\n  end\n\n  def self.root', '] + NativeRoutes.table\n  end\n\n  def self.root')
+for job in (root / 'app/jobs').glob('*_job.rb'):
+    if job.name == 'application_job.rb':
+        continue
+    destination = project / 'app/models' / job.name
+    source = destination.read_text()
+    pattern = r'  def self.perform_later\((.*?)\)\n.*?\n  end\n'
+    match = re.search(pattern, source, re.S)
+    if not match:
+        # A no-argument wrapper is emitted without parentheses.
+        pattern = r'  def self.perform_later\n.*?\n  end\n'
+        match = re.search(pattern, source, re.S)
+        if not match:
+            raise SystemExit(f'{destination}: missing generated job wrapper')
+        params = ''
+    else:
+        params = match[1]
+    arguments = [param.strip().split(' = ')[0] for param in params.split(',') if param.strip()]
+    name = ''.join(part.capitalize() for part in job.stem.split('_')).replace('RubyLlm', 'RubyLlm')
+    replacement = '  def self.perform_later' + ('(' + params + ')' if params else '') + '\n    NativeJobs.enqueue(' + json.dumps(name) + ', [' + ', '.join(arguments) + '])\n  end\n'
+    destination.write_text(source[:match.start()] + replacement + source[match.end():])
+    rbs = destination.with_suffix('.rbs')
+    signatures = rbs.read_text().splitlines()
+    rbs.write_text('\n'.join(line.rsplit(' -> ', 1)[0] + ' -> NativeJobHandle' if 'def self.perform_later' in line else line for line in signatures) + '\n')
+
+for file in project.rglob('*.rbs'):
+    if 'vendor' not in file.parts:
+        file.write_text(file.read_text().replace('Range[Date]', 'DateRange'))
+
+replace('runtime/active_support_time_parsing.rb', '    if value.is_a?(Time)\n',
+        '    return value.iso8601 if value.is_a?(Date)\n    if value.is_a?(Time)\n')
+replace('runtime/active_record/relation.rb', '      elsif val.nil?\n',
+        '      elsif val.is_a?(DateRange)\n'
+        '        parts = []\n'
+        '        parts << "#{qcol} >= #{ActiveRecord.adapter.escape_value(val.begin)}" if val.begin\n'
+        '        if val.end\n'
+        '          operator = val.exclude_end? ? "<" : "<="\n'
+        '          parts << "#{qcol} #{operator} #{ActiveRecord.adapter.escape_value(val.end)}"\n'
+        '        end\n'
+        '        parts.empty? ? "1=1" : parts.join(" AND ")\n'
+        '      elsif val.nil?\n')
+replace('runtime/active_record/relation.rb', '        value\n      ensure\n        @select_sql = prior',
+        '        NativeSchema.cast(@table, col.to_s, value)\n      ensure\n        @select_sql = prior')
+replace('app/controllers/imports_controller.rb', 'uploaded_file = Params.require_key(@params, "csv_file")',
+        'uploaded_file = ActionDispatch::Http::UploadedFile.from_params(@params, "csv_file")\n    raise ActionController::ParameterMissing, "csv_file" if uploaded_file.nil?')
+replace('app/controllers/imports_controller.rbs', 'Hash[String, untyped] uploaded_file',
+        'ActionDispatch::Http::UploadedFile uploaded_file')
 replace('app/controllers/transactions_controller.rbs',
         'def paginated_transaction_result: () -> untyped',
         'def paginated_transaction_result: () -> [NativePagination, Array[untyped]]')
@@ -72,8 +167,12 @@ for file in sorted((project / 'app/controllers').rglob('*.rb')):
         file.write_text(source.replace(old, old + '    @native_inertia_component = ' + json.dumps(component + '/') + ' + action_name.to_s\n    self.resume_session\n', 1))
 replace('main.rb', 'request_obj.env["HTTP_USER_AGENT"] = user_agent',
         'request_obj.env["HTTP_USER_AGENT"] = user_agent\n    request_obj.env["HTTP_X_INERTIA"] = req.req_headers.fetch("x-inertia", "")')
+replace('main.rb', 'request_obj.env["HTTP_X_CSRF_TOKEN"] = req.req_headers.fetch("x-csrf-token", "")',
+        'request_obj.env["HTTP_X_CSRF_TOKEN"] = req.req_headers.fetch("x-csrf-token", req.req_headers.fetch("x-xsrf-token", ""))')
+replace('main.rb', '      controller.process_action(matched.action)',
+        '      controller.verify_authenticity_token\n      controller.process_action(matched.action) unless controller.performed?')
 replace('main.rb', '    elsif req.multipart?\n',
-        '    elsif req.req_headers.fetch("content-type", "").start_with?("application/json")\n'
+        '    elsif req.req_headers.fetch("content-type", "").start_with?("application/json") && !req.raw_body.empty?\n'
         '      begin\n'
         '        parsed = JSON.parse(req.raw_body)\n'
         '        return nil unless parsed.is_a?(Hash)\n'
@@ -84,6 +183,33 @@ replace('main.rb', '    elsif req.multipart?\n',
         '    elsif req.multipart?\n')
 for file in (project / 'runtime/tep').glob('server*.rb'):
     file.write_text(file.read_text().replace('http://0.0.0.0:', 'http://127.0.0.1:'))
+
+# Log response durations using the native monotonic clock. Start after the
+# headers arrive, so idle keep-alive time is excluded. HTTP timings include
+# body consumption, dispatch and response writes; WebSockets log the upgrade
+# dispatch separately rather than the lifetime of the connection.
+replace('runtime/tep/server.rb', '  def self.log_dispatch_error(verb, path, e)\n',
+        '  def self.log_request_timing(verb, path, status, started, phase)\n'
+        '    elapsed_ms = (Sock.sphttp_now_us - started) / 1000.0\n'
+        '    $stderr.puts("[" + Tep.display_name + "] " + status.to_s + " " + verb + " " + path + " " + elapsed_ms.to_s + "ms" + phase)\n'
+        '  end\n\n'
+        '  def self.log_dispatch_error(verb, path, e)\n')
+replace('runtime/tep/server_threaded.rb', '        req.consume_body_via_io(io, client)\n',
+        '        request_started = Sock.sphttp_now_us\n'
+        '        req.consume_body_via_io(io, client)\n')
+replace('runtime/tep/server_threaded.rb',
+        '          Tep::Server::Threaded.send_simple(client, 500, "internal server error")\n',
+        '          Tep::Server::Threaded.send_simple(client, 500, "internal server error")\n'
+        '          Tep.log_request_timing(req.verb, req.path, 500, request_started, "")\n')
+replace('runtime/tep/server_threaded.rb',
+        '        Tep::Server::Threaded.write_response(client, io, req, res, keep_alive)\n',
+        '        if res.upgrading_ws\n'
+        '          Tep.log_request_timing(req.verb, req.path, 101, request_started, " (upgrade dispatch)")\n'
+        '        end\n'
+        '        Tep::Server::Threaded.write_response(client, io, req, res, keep_alive)\n'
+        '        unless res.upgrading_ws\n'
+        '          Tep.log_request_timing(req.verb, req.path, res.status, request_started, "")\n'
+        '        end\n')
 
 # These values remain boxed at Spinel's heterogeneous hash boundary.
 for name in ('current_expenses', 'previous_expenses', 'findings', 'unusual_transactions'):

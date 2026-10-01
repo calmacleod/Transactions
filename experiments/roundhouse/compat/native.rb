@@ -1,3 +1,9 @@
+module NativeTime
+  def self.iso8601(time)
+    time.iso8601(3)
+  end
+end
+
 # Supplemental framework methods omitted by Roundhouse's Spinel runtime.
 # This file is loaded only in the generated native project.
 module Sock
@@ -45,9 +51,19 @@ module NativeViewHelpers
     label = count == 1 ? singular : (plural || singular + 's')
     "#{count} #{label}"
   end
+
+  def self.time_ago_in_words(time)
+    ActionView::ViewHelpers.time_ago_in_words(time)
+  end
 end
 
 module ActionController
+  module JsonRender
+    def self.encode(value)
+      JSON.generate(NativeInertia.resolve(value))
+    end
+  end
+
   class Base
     def helpers
       NativeViewHelpers
@@ -74,10 +90,57 @@ class OfflineSnapshot
 end
 
 module ActiveRecord
+  class Connection
+    def data_source_exists?(name)
+      ActiveRecord.adapter.select_rows("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = #{Db.escape_string(name)}").any?
+    end
+  end
+
   class Base
     def self.sanitize_sql_like(value, escape_character = '\\')
       value.to_s.gsub(escape_character, escape_character * 2)
         .gsub('%', escape_character + '%').gsub('_', escape_character + '_')
+    end
+  end
+end
+
+module ActiveSupport
+  def self.truncate(text, length)
+    text.length <= length ? text : text[0, length - 3] + '...'
+  end
+end
+
+module Params
+  # Inertia sends JSON scalars, while generated params DTOs store text.
+  # Keep scalar values provided and convert them at that typed boundary.
+  def self.str(sub, key, fallback)
+    value = sub.fetch(key, nil)
+    return fallback if value.nil? || value.is_a?(Hash) || value.is_a?(Array)
+    value.to_s
+  end
+
+  def self.provided(sub, key)
+    return false unless sub.key?(key)
+    value = sub[key]
+    !value.nil? && !value.is_a?(Hash) && !value.is_a?(Array)
+  end
+end
+
+class Model
+  def price(kind)
+    RubyLLM::Model.new(pricing: pricing || {}).price(kind)
+  end
+end
+
+class RubyLlmModelImporter
+  def self.save_models!
+    RubyLLM.models.map do |model|
+      record = Model.find_by(model_id: model.id, provider: model.provider) || Model.new
+      record.update!(model_id: model.id, provider: model.provider, name: model.name,
+        family: model.family, model_created_at: model.created_at,
+        context_window: model.context_window, max_output_tokens: model.max_output_tokens,
+        knowledge_cutoff: model.knowledge_cutoff, modalities: model.modalities,
+        capabilities: model.capabilities, pricing: model.pricing, metadata: model.metadata)
     end
   end
 end
@@ -129,6 +192,14 @@ module NativeCalendar
   DAYNAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 end
 
+module ActionCable
+  # The scaffold encoder only handles integer-valued payloads. App channel
+  # messages contain strings and nested objects, so encode the full JSON tree.
+  def self.payload_json(payload)
+    JSON.generate(NativeInertia.resolve(payload))
+  end
+end
+
 class AiChatChannel
   def self.broadcast_to(record, message)
     ActionCable.server.broadcast(AiChatChannel.broadcasting_for(record), message)
@@ -142,9 +213,43 @@ class ImportBatchChannel
 end
 
 module Rails
+  class PwaController < ActionController::Base
+    def process_action(action_name)
+      if action_name == :manifest
+        render(Views::Pwa.manifest_json, content_type: 'application/manifest+json')
+      elsif action_name == :service_worker
+        render(File.read('public/service-worker.js'), content_type: 'text/javascript')
+      end
+    end
+  end
+
   class HealthController < ActionController::Base
     def process_action(action_name)
       render('<!DOCTYPE html><html><body style="background-color:green"></body></html>')
+    end
+  end
+end
+
+module ActionDispatch
+  class Session
+    # The shared runtime's string-only cookie codec loses booleans and
+    # integers. Keep the native app's session metadata typed and signed.
+    def to_cookie
+      ActionController::MessageVerifier.data_envelope(
+        Rails.application.secret_key_base, 'transactions/session', JSON.generate(to_h),
+        'session', 'null', false
+      )
+    end
+    def self.from_cookie(raw)
+      return Session.new if raw.nil? || raw.empty?
+      json = ActionController::MessageVerifier.verified_data_json(
+        Rails.application.secret_key_base, 'transactions/session', raw, 'session', false
+      )
+      return Session.new if json.empty?
+      data = JSON.parse(json)
+      data.is_a?(Hash) ? Session.new(data) : Session.new
+    rescue JSON::ParserError
+      Session.new
     end
   end
 end

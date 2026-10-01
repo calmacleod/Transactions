@@ -2,7 +2,7 @@ class BudgetsController < ApplicationController
   def index
     month = budget_month
     range = month..month.end_of_month
-    totals = current_user.expense_transactions.expenses.includes(:category).between(range.begin, range.end).group(:category_id).sum(:amount_cents)
+    totals = current_user.expense_transactions.expenses.includes(:category).between(range.begin, range.end).group(:category_id).pluck(:category_id, Arel.sql("SUM(amount_cents)")).to_h
 
     render inertia: {
       month: {

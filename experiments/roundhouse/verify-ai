@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Exercise native AI chat with local provider responses; no paid API calls."""
+import argparse
+from decimal import Decimal
+import http.cookiejar
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+import os
+from pathlib import Path
+import re
+import sqlite3
+import subprocess
+import threading
+import time
+import urllib.request
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('project', type=Path)
+parser.add_argument('--port', type=int, default=3911)
+parser.add_argument('--provider-port', type=int, default=3912)
+args = parser.parse_args()
+root = Path(__file__).resolve().parents[2]
+project = args.project.resolve()
+assert project.is_relative_to(root / 'tmp/roundhouse')
+fixture = json.loads((project / 'storage/native-fixtures.json').read_text())
+database = sqlite3.connect(project / 'storage/development.sqlite3')
+database.row_factory = sqlite3.Row
+requests = []
+answer = 'Local provider answer with $17.00 and [[transaction:' + str(fixture['transaction_ids'][0]) + ']]'
+
+class Provider(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+    def do_POST(self):
+        payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        requests.append((self.path, payload))
+        prompt = (payload['input'][0]['content'] if 'input' in payload else payload['messages'][0]['content'] if 'messages' in payload else payload['contents'][0]['parts'][0]['text'])
+        match = re.search(r'Use tool: ([a-z_]+)', prompt)
+        tool_name = match[1] if match else 'budget_summary'
+        arguments = {'budget_summary': {'month': fixture['month']}, 'spending_summary': {'start_date':fixture['month']+'-01','end_date':fixture['month']+'-01'}, 'search_transactions': {'query':'Native market','direction':'debit'}}[tool_name]
+        schema = payload.get('text', {}).get('format', {}).get('schema') or payload.get('output_config', {}).get('format', {}).get('schema') or payload.get('generationConfig', {}).get('responseJsonSchema')
+        if schema:
+            assert schema['type'] == 'object' and 'insights' in schema['properties'], schema
+            candidates = json.loads(prompt.split('Candidate findings: ', 1)[1])
+            assert candidates, prompt
+            edited = json.dumps({'insights':[{'finding_key':candidates[0]['key'],'title':'Local schema insight','body':candidates[0]['body'],'action':'Review the supplied transactions.'}]})
+            if self.path.endswith('/responses'):
+                result = {'output':[{'type':'message','content':[{'type':'output_text','text':edited}]}],'usage':{'input_tokens':10,'output_tokens':4}}
+            elif self.path.endswith('/messages'):
+                result = {'content':[{'type':'text','text':edited}],'usage':{'input_tokens':10,'output_tokens':4}}
+            else:
+                result = {'candidates':[{'content':{'parts':[{'text':edited}]}}],'usageMetadata':{'promptTokenCount':10,'candidatesTokenCount':4}}
+        elif self.path.endswith('/responses'):
+            completed = any(m.get('type') == 'function_call_output' for m in payload['input'])
+            output = [{'type':'message','content':[{'type':'output_text','text':answer}]}] if completed else [{'type':'function_call','call_id':'local-call','name':tool_name,'arguments':json.dumps(arguments)}]
+            result = {'output':output,'usage':{'input_tokens':10,'output_tokens':4}}
+        elif self.path.endswith('/messages'):
+            completed = len(payload['messages']) > 1
+            content = [{'type':'text','text':answer}] if completed else [{'type':'tool_use','id':'local-call','name':tool_name,'input':arguments}]
+            result = {'content':content,'usage':{'input_tokens':10,'output_tokens':4}}
+        else:
+            assert ':generateContent' in self.path
+            completed = len(payload['contents']) > 1
+            parts = [{'text':answer}] if completed else [{'functionCall':{'id':'local-call','name':tool_name,'args':arguments}}]
+            result = {'candidates':[{'content':{'role':'model','parts':parts}}],'usageMetadata':{'promptTokenCount':10,'candidatesTokenCount':4}}
+        data = json.dumps(result).encode()
+        self.send_response(200)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+stub = HTTPServer(('127.0.0.1', args.provider_port), Provider)
+thread = threading.Thread(target=stub.serve_forever, daemon=True)
+thread.start()
+environment = os.environ.copy()
+for key in ('OPENAI','ANTHROPIC','GEMINI'):
+    environment[key + '_API_KEY'] = 'local-test-key'
+    environment[key + '_API_BASE'] = f'http://127.0.0.1:{args.provider_port}/v1'
+environment.update(PORT=str(args.port), NATIVE_MAX_RSS_MB='384', NATIVE_MAX_SECONDS='120')
+base = f'http://127.0.0.1:{args.port}'
+log_path = root / 'tmp/roundhouse/logs' / (project.name + '-ai-server.log')
+browser = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+with log_path.open('w') as log:
+    process = subprocess.Popen([str(root / 'experiments/roundhouse/experiment'), 'spinel-run', project.name], env=environment, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                with browser.open(base + '/session/new', timeout=1) as page:
+                    csrf = re.search(r'<meta name="csrf-token" content="([^"]*)"', page.read().decode())[1]
+                break
+            except OSError:
+                assert process.poll() is None and time.monotonic() < deadline, log_path
+                time.sleep(.1)
+
+        def post(path, payload):
+            data = json.dumps(payload).encode()
+            request = urllib.request.Request(base + path, data, headers={'Content-Type':'application/json','X-CSRF-Token':csrf,'X-Inertia':'true'})
+            with browser.open(request, timeout=15) as response:
+                return json.loads(response.read())
+
+        post('/session', {'email_address':'spinel@example.test','password':'spinel-local-experiment'})
+        with browser.open(base + '/admin/models', timeout=15) as response:
+            assert response.status == 200
+        for provider in ('openai','anthropic','gemini'):
+            models = database.execute('SELECT id, model_id, capabilities FROM models WHERE provider = ?', [provider]).fetchall()
+            model = next(m for m in models if {'function_calling','structured_output'} <= set(json.loads(m['capabilities'])))
+            database.execute('UPDATE models SET user_selectable = 1 WHERE id = ?', [model['id']])
+            database.execute('UPDATE users SET preferred_ai_model = ? WHERE id = ?', [model['model_id'], fixture['user_id']])
+            database.execute("INSERT INTO ai_settings(key,value,created_at,updated_at) VALUES('chat_enabled','true',datetime('now'),datetime('now')) ON CONFLICT(key) DO UPDATE SET value='true'")
+            database.commit()
+            for tool_name in ('budget_summary','spending_summary','search_transactions'):
+                response = post('/transactions/chat', {'question':'Use tool: ' + tool_name,'filters':{}})
+                assert response['source'] == 'queued', response
+                chat_id = response['chat_id']
+                deadline = time.monotonic() + 15
+                while True:
+                    message = database.execute("SELECT status, content, input_tokens, output_tokens, metadata FROM ai_chat_messages WHERE ai_chat_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1", [chat_id]).fetchone()
+                    if message and message['status'] in ('complete','failed'):
+                        break
+                    assert time.monotonic() < deadline, dict(message) if message else response
+                    time.sleep(.1)
+                assert message['status'] == 'complete' and message['content'] == answer, dict(message)
+                assert (message['input_tokens'], message['output_tokens']) == (20,8), dict(message)
+                tools = database.execute("SELECT status, metadata FROM ai_chat_messages WHERE ai_chat_id = ? AND role = 'tool'", [chat_id]).fetchall()
+                assert len(tools) == 1 and tools[0]['status'] == 'complete', tools
+                result = json.loads(tools[0]['metadata'])['result']
+                if tool_name == 'budget_summary':
+                    assert result['month'] == fixture['month'], result
+                    category = next(c for c in result['categories'] if c['id'] == fixture['category_id'])
+                    cents = database.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM expense_transactions WHERE user_id = ? AND category_id = ? AND direction = 'debit' AND strftime('%Y-%m', occurred_on) = ?", [fixture['user_id'], fixture['category_id'], fixture['month']]).fetchone()[0]
+                    assert Decimal(str(category['spent_dollars'])) == Decimal(cents) / 100, category
+                elif tool_name == 'spending_summary':
+                    cents = database.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM expense_transactions WHERE user_id = ? AND direction = 'debit' AND occurred_on = ?", [fixture['user_id'], fixture['month']+'-01']).fetchone()[0]
+                    assert result['start_date'] == fixture['month']+'-01' and result['end_date'] == result['start_date'], result
+                    assert Decimal(str(result['total_dollars'])) == Decimal(cents) / 100, result
+                else:
+                    assert result['count'] == 1 and result['transactions'][0]['id'] == fixture['transaction_ids'][0], result
+                with browser.open(base + '/ai_chats/' + str(chat_id), timeout=10) as page:
+                    chat = json.loads(page.read())
+                assert any(m['role'] == 'assistant' and m['status'] == 'complete' and m['content'] == answer for m in chat['messages']), chat
+                print(provider + ' / ' + tool_name + ': native chat, tool callback/result, persistence and token accounting passed (local stub)', flush=True)
+            database.execute("INSERT INTO ai_settings(key,value,created_at,updated_at) VALUES('insights_enabled','true',datetime('now'),datetime('now')) ON CONFLICT(key) DO UPDATE SET value='true'")
+            database.commit()
+            post('/insights', {})
+            deadline = time.monotonic() + 15
+            while True:
+                job = database.execute("SELECT status, error FROM native_jobs WHERE name = 'GenerateInsightsJob' ORDER BY rowid DESC LIMIT 1").fetchone()
+                if job and job['status'] in ('completed','failed'):
+                    break
+                assert process.poll() is None, f'native server exited during insight generation: {process.returncode}; {log_path}'
+                assert time.monotonic() < deadline, dict(job) if job else 'no insight job'
+                time.sleep(.1)
+            assert job['status'] == 'completed', dict(job)
+            insight = database.execute("SELECT generation_source, title FROM insights WHERE user_id = ? AND title = 'Local schema insight'", [fixture['user_id']]).fetchone()
+            assert insight and insight['generation_source'] == 'ai', 'structured response fell back or was not persisted'
+            print(provider + ': native JSON Schema request, insight editing and persistence passed (local stub)', flush=True)
+        assert len(requests) == 21, len(requests)
+        subprocess.run([str(root / 'experiments/roundhouse/guard'), '--max-rss-mb', '1024', '--seconds', '60', '--',
+                        'node', str(root / 'experiments/roundhouse/verify-browser.mjs'), base, '--chat'], cwd=root, check=True)
+        assert len(requests) == 25, len(requests)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        stub.shutdown()
+        stub.server_close()
+print('No real provider requests were made; server log: ' + str(log_path))

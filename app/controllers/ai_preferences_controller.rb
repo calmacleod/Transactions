@@ -22,7 +22,7 @@ class AiPreferencesController < ApplicationController
   end
 
   def update
-    current_user.update!(ai_preferences_params)
+    Current.user.update!(ai_preferences_params)
 
     redirect_to ai_preferences_path, notice: "AI settings updated."
   rescue ActiveRecord::RecordInvalid => error

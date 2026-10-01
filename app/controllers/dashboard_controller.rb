@@ -32,7 +32,7 @@ class DashboardController < ApplicationController
       day_totals: day_totals.map { |item| dashboard_item_props(item) },
       month_trend: month_trend.map { |item| dashboard_item_props(item) },
       month_delta: month_delta.merge(label: money_from_cents(month_delta[:cents])),
-      top_merchants: dashboard.top_merchants.map { |item| dashboard_item_props(item).merge(merchant_label: item[:merchant].titleize) },
+      top_merchants: dashboard.top_merchants.map { |item| dashboard_item_props(item).merge(merchant_label: item[:merchant].to_s.titleize) },
       recommendations: dashboard.recommendations.map { |item| dashboard_item_props(item) },
       transactions: transactions.map { |transaction| transaction_props(transaction) },
       insights: insights.map { |insight| insight_props(insight) },
@@ -42,7 +42,7 @@ class DashboardController < ApplicationController
         import: imports_path,
         imports: imports_path,
         insights: insights_path,
-        month_transactions: transactions_path(start_date: month_range.begin, end_date: month_range.end, direction: "debit"),
+        month_transactions: transactions_path(start_date: month_range.begin.iso8601, end_date: month_range.end.iso8601, direction: "debit"),
         unclassified_transactions: transactions_path(classified: "unclassified")
       }
     }

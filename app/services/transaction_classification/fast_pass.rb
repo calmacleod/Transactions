@@ -73,7 +73,7 @@ module TransactionClassification
     end
 
     def category_scope
-      run.user&.categories || Category.all
+      run.user ? Category.where(user_id: run.user.id) : Category.all
     end
   end
 end

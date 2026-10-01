@@ -32,13 +32,13 @@ class ExpenseTransaction < ApplicationRecord
   end
 
   def self.group_by_month
-    group("strftime('%Y-%m-01', occurred_on)").sum(:amount_cents).transform_keys { |month| Date.iso8601(month) }
+    group("strftime('%Y-%m-01', occurred_on)").pluck(Arel.sql("strftime('%Y-%m-01', occurred_on)"), Arel.sql("SUM(amount_cents)")).to_h { |month, cents| [ Date.iso8601(month), cents ] }
   end
 
   def self.group_by_week
     week_start_sql = "date(occurred_on, '-' || ((CAST(strftime('%w', occurred_on) AS integer) + 6) % 7) || ' days')"
 
-    group(week_start_sql).sum(:amount_cents).transform_keys { |week| Date.iso8601(week) }
+    group(week_start_sql).pluck(Arel.sql(week_start_sql), Arel.sql("SUM(amount_cents)")).to_h { |week, cents| [ Date.iso8601(week), cents ] }
   end
 
   def amount

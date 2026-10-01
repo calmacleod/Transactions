@@ -1,3 +1,6 @@
+module NativeTime
+  def self.iso8601: (Time time) -> String
+end
 class NativePagination
   attr_reader count: Integer
   attr_reader page: Integer

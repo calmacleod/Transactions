@@ -17,7 +17,7 @@ module Ai
       end
 
       def execute(**filters)
-        transactions = TransactionFilter.new(filters.stringify_keys).call.includes(:category, :subcategories).limit(50).to_a
+        transactions = TransactionFilter.new(filters.transform_keys(&:to_s)).call.includes(:category, :subcategories).limit(50).to_a
 
         {
           count: transactions.size,

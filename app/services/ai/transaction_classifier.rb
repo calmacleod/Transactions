@@ -83,7 +83,7 @@ module Ai
     end
 
     def category_scope
-      user&.categories || Current.user&.categories || Category.all
+      (user || Current.user) ? Category.where(user_id: (user || Current.user).id) : Category.all
     end
   end
 end

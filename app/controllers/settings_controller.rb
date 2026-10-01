@@ -6,7 +6,7 @@ class SettingsController < ApplicationController
         retain_uploaded_csv: Current.user.retain_uploaded_csv?
       },
       days: Date::DAYNAMES.each_with_index.map { |name, index| { label: name, value: index } },
-      hours: (0..23).map { |hour| { label: Time.zone.local(2000, 1, 1, hour).strftime("%-l:00 %p"), value: hour } },
+      hours: (0..23).map { |hour| { label: Time.utc(2000, 1, 1, hour).strftime("%-l:00 %p"), value: hour } },
       actions: {
         update: settings_path
       }

@@ -47,7 +47,7 @@ class TransactionsController < ApplicationController
 
   def update
     transaction = current_user.expense_transactions.find(params[:id])
-    transaction.update!(normalized_transaction_params)
+    transaction.update!(normalized_transaction_params.symbolize_keys)
 
     respond_to do |format|
       format.html { redirect_back_or_to transactions_path, notice: "Transaction updated." }
@@ -60,10 +60,10 @@ class TransactionsController < ApplicationController
 
   def bulk_update
     bulk_attributes = {}
-    bulk_attributes.merge!(ExpenseTransaction.manual_classification_attributes(bulk_category_id)) if bulk_category_update?
+    bulk_attributes = bulk_attributes.merge(ExpenseTransaction.manual_classification_attributes(bulk_category_id)) if bulk_category_update?
     subcategory_ids = bulk_subcategory_ids
 
-    transactions = current_user.expense_transactions.where(id: bulk_transaction_ids)
+    transactions = ExpenseTransaction.where(user_id: current_user.id, id: bulk_transaction_ids)
     transactions = transactions.includes(:subcategories) if subcategory_ids.any?
     transactions.find_each do |transaction|
       attributes = bulk_attributes.dup
@@ -107,11 +107,11 @@ class TransactionsController < ApplicationController
   end
 
   def saved_queries
-    @saved_queries ||= Current.session.user.saved_transaction_queries.ordered
+    @saved_queries ||= Current.user.saved_transaction_queries.ordered
   end
 
   def selected_saved_query
-    return @selected_saved_query if defined?(@selected_saved_query)
+    return @selected_saved_query if @selected_saved_query
     return @selected_saved_query = nil if params[:saved_query_id].blank?
 
     @selected_saved_query = saved_queries.find_by(id: params[:saved_query_id])
@@ -135,7 +135,7 @@ class TransactionsController < ApplicationController
   def paginated_transaction_result
     @paginated_transaction_result ||= begin
       filtered_transactions = transaction_filter
-        .call(current_user.expense_transactions)
+        .call(ExpenseTransaction.where(user_id: current_user.id))
         .select(*INDEX_COLUMNS)
         .includes(:category, :subcategories)
       limit = transactions_page_limit(filtered_transactions, transactions_per_page)
@@ -157,24 +157,24 @@ class TransactionsController < ApplicationController
   end
 
   def bulk_transaction_params
-    params.fetch(:bulk_transaction, {}).permit(:category_id, subcategory_ids: [], transaction_ids: [])
+    params.require(:bulk_transaction).permit(:category_id, subcategory_ids: [], transaction_ids: [])
   end
 
   def bulk_transaction_ids
-    bulk_transaction_params.fetch(:transaction_ids, []).compact_blank
+    bulk_transaction_params.to_h.fetch("transaction_ids", []).reject(&:blank?)
   end
 
   def bulk_category_update?
-    bulk_transaction_params.key?(:category_id)
+    bulk_transaction_params.to_h.key?("category_id")
   end
 
   def bulk_category_id
     category_id = bulk_transaction_params[:category_id].presence
-    current_user.categories.find(category_id).id if category_id.present?
+    Category.where(user_id: current_user.id).find(category_id).id if category_id.present?
   end
 
   def bulk_subcategory_ids
-    current_user.transaction_subcategories.where(id: bulk_transaction_params.fetch(:subcategory_ids, []).compact_blank).ids
+    TransactionSubcategory.where(user_id: current_user.id, id: bulk_transaction_params.to_h.fetch("subcategory_ids", []).reject(&:blank?)).ids
   end
 
   def transaction_per_page_options
@@ -182,7 +182,7 @@ class TransactionsController < ApplicationController
   end
 
   def transactions_per_page
-    return @transactions_per_page if defined?(@transactions_per_page)
+    return @transactions_per_page if @transactions_per_page
 
     requested_limit = params[:limit]
     requested_limit_value = Integer(requested_limit, exception: false) if requested_limit.present?
@@ -218,7 +218,7 @@ class TransactionsController < ApplicationController
       id: saved_query.id,
       name: saved_query.name,
       path: transactions_path(saved_query_id: saved_query.id),
-      destroy_path: saved_transaction_query_path(saved_query)
+      destroy_path: saved_transaction_query_path(saved_query.id)
     }
   end
 
@@ -235,7 +235,7 @@ class TransactionsController < ApplicationController
   end
 
   def pagination_props(pagy, filter_params, selected_saved_query)
-    base_params = filter_params.dup
+    base_params = filter_params.to_h.transform_keys(&:to_sym)
     base_params[:saved_query_id] = selected_saved_query.id if selected_saved_query.present?
     base_params[:limit] = params[:limit] if params[:limit].present?
 
@@ -279,19 +279,19 @@ class TransactionsController < ApplicationController
   end
 
   def filtered_chat_transactions(filter)
-    scope = filter.call(current_user.expense_transactions).includes(:category, :subcategories)
-    transaction_ids = Array(params[:transaction_ids]).compact_blank
+    scope = filter.call(ExpenseTransaction.where(user_id: current_user.id)).includes(:category, :subcategories)
+    transaction_ids = Array(params[:transaction_ids]).reject(&:blank?)
 
     transaction_ids.present? ? scope.where(id: transaction_ids) : scope
   end
 
   def current_chat(filter_params, transactions)
     if params[:chat_id].present?
-      return Current.session.user.ai_chats.find(params[:chat_id])
+      return Current.user.ai_chats.find(params[:chat_id])
     end
 
     records = transactions.limit(500).to_a
-    chat = Current.session.user.ai_chats.create!(
+    chat = Current.user.ai_chats.create!(
       title: chat_title(records, filter_params),
       model: Ai::Controls.model_for(:chat),
       context_filters: filter_params
@@ -323,7 +323,7 @@ class TransactionsController < ApplicationController
       attributes.merge!(ExpenseTransaction.manual_classification_attributes(attributes.delete("category_id")).stringify_keys)
     end
     if attributes.key?("subcategory_ids")
-      attributes["subcategory_ids"] = current_user.transaction_subcategories.where(id: attributes["subcategory_ids"]).ids
+      attributes["subcategory_ids"] = TransactionSubcategory.where(user_id: current_user.id, id: attributes["subcategory_ids"]).ids
     end
     attributes
   end

@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""Exercise normal auth and writes against the isolated native fixture database."""
+import http.cookiejar
+import json
+from pathlib import Path
+import re
+import sqlite3
+import sys
+import traceback
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+base, project = sys.argv[1], Path(sys.argv[2]).resolve()
+root = Path(__file__).resolve().parents[2]
+assert base.startswith('http://127.0.0.1:')
+assert project.is_relative_to(root / 'tmp/roundhouse')
+fixture = json.loads((project / 'storage/native-fixtures.json').read_text())
+database = sqlite3.connect(project / 'storage/development.sqlite3')
+database.row_factory = sqlite3.Row
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args):
+        return None
+
+def client():
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), NoRedirect())
+
+browser = client()
+csrf = ''
+
+def request(path, payload=None, method=None, headers=None, agent=None):
+    options = {key: value for key, value in {'X-CSRF-Token': csrf, **(headers or {})}.items() if value is not None}
+    if isinstance(payload, dict):
+        data = json.dumps(payload).encode()
+        options['Content-Type'] = 'application/json'
+    else:
+        data = payload
+    req = urllib.request.Request(base + path, data=data, method=method, headers=options)
+    try:
+        response = (agent or browser).open(req, timeout=30)
+    except urllib.error.HTTPError as error:
+        response = error
+    return response.code, response.headers, response.read().decode()
+
+def redirect(result):
+    code, headers, body = result
+    assert code in (302, 303), (code, body[:200])
+    return headers['Location']
+
+def props(path):
+    code, _, body = request(path, headers={'X-Inertia': 'true'})
+    assert code == 200, (path, code, body[:200])
+    return json.loads(body)['props']
+
+def wait_for(sql, values, predicate):
+    deadline = time.monotonic() + 20
+    while True:
+        rows = database.execute(sql, values).fetchall()
+        if predicate(rows):
+            return rows
+        if time.monotonic() >= deadline:
+            raise AssertionError([dict(row) for row in rows])
+        time.sleep(.2)
+
+failures = []
+def check(name, function):
+    try:
+        function()
+        print(name + ': passed', flush=True)
+    except Exception as error:
+        traceback.print_exc()
+        failures.append(name + ': ' + str(error))
+        print(f'{name}: FAILED: {error}', flush=True)
+
+code, _, body = request('/session/new')
+assert code == 200
+csrf = re.search(r'<meta name="csrf-token" content="([^"]*)"', body)[1]
+credentials = {'email_address': 'spinel@example.test', 'password': 'spinel-local-experiment'}
+
+def auth():
+    assert request('/transactions', agent=client())[0] in (302, 303)
+    assert request('/session', credentials, headers={'X-CSRF-Token': ''})[0] == 422
+    assert request('/session', credentials, headers={'X-CSRF-Token': 'invalid'})[0] == 422
+    assert request('/session', credentials, headers={'X-CSRF-Token': None, 'X-XSRF-Token': 'invalid'})[0] == 422
+    assert request('/session', credentials, headers={'Origin': 'http://attacker.test'})[0] == 422
+    redirect(request('/session', {**credentials, 'password': 'incorrect'}))
+    assert request('/transactions')[0] in (302, 303)
+    assert redirect(request('/session', credentials, headers={'X-CSRF-Token': None, 'X-XSRF-Token': csrf, 'Origin': base})) == '/transactions'
+    assert props('/')['auth']['authenticated'] is True
+check('normal login, signed session, wrong password and CSRF', auth)
+
+def filters():
+    rows = props('/transactions?direction=credit&per_page=all')['transactions']
+    assert len(rows) == 1 and rows[0]['direction'] == 'credit', rows
+    rows = props('/transactions?query=Native%20market')['transactions']
+    assert len(rows) == 1 and rows[0]['id'] == fixture['transaction_ids'][0], rows
+    assert ':id' in props('/transactions')['actions']['chat_template']
+    assert ':id' in props('/budgets')['actions']['update_template']
+check('transaction search, filters and action URLs', filters)
+
+def budgets():
+    identifier = fixture['category_id']
+    redirect(request(f'/budgets/{identifier}', {'category': {'monthly_budget': '123.45'}}, 'PATCH'))
+    row = next(r for r in props('/budgets')['categories'] if r['id'] == identifier)
+    assert row['monthly_budget_cents'] == 12345, row
+    redirect(request(f'/budgets/{identifier}', {'category': {'monthly_budget': '100.00'}}, 'PATCH'))
+check('budget update and exact cents', budgets)
+
+def subcategories():
+    name = 'Native test ' + uuid.uuid4().hex[:8]
+    redirect(request('/subcategories', {'transaction_subcategory': {'name': name, 'color': '#22c55e'}}))
+    row = next(r for r in props('/subcategories')['subcategories'] if r['name'] == name)
+    redirect(request(row['destroy_path'], method='DELETE'))
+    assert all(r['id'] != row['id'] for r in props('/subcategories')['subcategories'])
+check('subcategory create and delete', subcategories)
+
+def transaction_edit():
+    identifier = fixture['transaction_ids'][1]
+    redirect(request(f'/transactions/{identifier}', {'expense_transaction': {'notes': 'Native edited note', 'category_id': fixture['category_id'], 'subcategory_ids': [fixture['subcategory_id']]}}, 'PATCH'))
+    row = next(r for r in props('/transactions')['transactions'] if r['id'] == identifier)
+    assert row['notes'] == 'Native edited note', row
+    assert row['category_id'] == fixture['category_id'], row
+    assert any(r['id'] == fixture['subcategory_id'] for r in row['subcategories']), row
+check('transaction notes, category and tags', transaction_edit)
+
+def saved_query():
+    name = 'Native saved ' + uuid.uuid4().hex[:8]
+    path = redirect(request('/saved_transaction_queries', {'name': name, 'filters': {'direction': 'credit'}}))
+    page = props(path)
+    assert len(page['transactions']) == 1 and page['transactions'][0]['direction'] == 'credit', page
+    query = next(q for q in page['saved_queries'] if q['name'] == name)
+    redirect(request(query['destroy_path'], method='DELETE'))
+check('save, apply and delete transaction filters', saved_query)
+
+def settings():
+    redirect(request('/settings', {'user': {'csv_reminder_enabled': True, 'csv_reminder_wday': 2, 'csv_reminder_hour': 9, 'retain_uploaded_csv': True}}, 'PATCH'))
+    page = props('/settings')
+    assert page['reminder']['enabled'] is True and page['reminder']['hour'] == 9 and page['reminder']['wday'] == 2, page
+    assert page['import_retention']['retain_uploaded_csv'] is True, page
+    redirect(request('/settings', {'user': {'csv_reminder_enabled': False, 'retain_uploaded_csv': False}}, 'PATCH'))
+    page = props('/settings')
+    assert page['reminder']['enabled'] is False and page['reminder']['hour'] == 9 and page['reminder']['wday'] == 2, page
+    assert page['import_retention']['retain_uploaded_csv'] is False, page
+    redirect(request('/settings', {'user': {'retain_uploaded_csv': True}}, 'PATCH'))
+    redirect(request('/admin/first_time_flow_preview'))
+    assert props('/')['auth']['onboarding_required'] is True
+    redirect(request('/onboarding', {}, 'PATCH'))
+    assert props('/')['auth']['onboarding_required'] is False
+check('settings and onboarding preview/dismiss', settings)
+
+def bulk():
+    identifiers = fixture['transaction_ids'][:2]
+    redirect(request('/transactions/bulk_update', {'bulk_transaction': {'transaction_ids': identifiers, 'category_id': fixture['category_id'], 'subcategory_ids': [fixture['subcategory_id']]}}, 'PATCH'))
+    rows = [row for row in props('/transactions')['transactions'] if row['id'] in identifiers]
+    assert len(rows) == 2 and all(row['category_id'] == fixture['category_id'] for row in rows), rows
+    assert all(any(tag['id'] == fixture['subcategory_id'] for tag in row['subcategories']) for row in rows), rows
+check('bulk category and tag update', bulk)
+
+def admin_controls():
+    redirect(request('/admin/ai_controls', {'ai_settings': {'monthly_request_limit': '250'}}, 'PATCH'))
+    page = props('/admin/ai_controls')
+    assert page['settings']['monthly_request_limit'] == '250', page
+    redirect(request('/admin/ai_controls', {'ai_settings': {'monthly_request_limit': '100'}}, 'PATCH'))
+    model = props('/admin/models')['models'][0]
+    redirect(request(model['update_path'], {'model': {'favorite': True, 'user_selectable': True}}, 'PATCH'))
+    actual = database.execute('SELECT favorite, user_selectable FROM models WHERE id = ?', [model['id']]).fetchone()
+    assert tuple(actual) == (1, 1), tuple(actual)
+    redirect(request(model['update_path'], {'model': {'favorite': False, 'user_selectable': False}}, 'PATCH'))
+    actual = database.execute('SELECT favorite, user_selectable FROM models WHERE id = ?', [model['id']]).fetchone()
+    assert tuple(actual) == (0, 0), tuple(actual)
+    redirect(request('/ai_preferences', {'user': {'preferred_ai_model': ''}}, 'PATCH'))
+check('admin limits, model favorites/access and AI preferences', admin_controls)
+
+def classification():
+    redirect(request('/classifications', {}))
+    wait_for('SELECT status FROM classification_runs WHERE user_id = ? ORDER BY id DESC LIMIT 1', [fixture['user_id']], lambda rows: len(rows) == 1 and rows[0]['status'] in ('complete', 'failed'))
+    row = database.execute('SELECT status FROM classification_runs WHERE user_id = ? ORDER BY id DESC LIMIT 1', [fixture['user_id']]).fetchone()
+    assert row['status'] == 'complete', dict(row)
+check('classification run enqueue, persistence and completion', classification)
+
+def upload():
+    marker = uuid.uuid4().hex[:8]
+    date = fixture['month'] + '-01'
+    csv = f'{date},Native upload {marker},12.345,,1234\n{date},Native refund {marker},,1.01,1234\n'
+    boundary = 'native-' + marker
+    body = f'--{boundary}\r\nContent-Disposition: form-data; name="csv_file"; filename="native-{marker}.csv"\r\nContent-Type: text/csv\r\n\r\n{csv}\r\n--{boundary}--\r\n'.encode()
+    path = redirect(request('/imports', body, headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}))
+    assert '/preview' in path, path
+    page = props(path)
+    batch_id = page['import_batch']['id']
+    assert sorted(r['amount_cents'] for r in page['rows']) == [101, 1235], page['rows']
+    wait_for('SELECT classification_status, classification_reason FROM import_rows WHERE import_batch_id = ?', [batch_id], lambda rows: len(rows) == 2 and all(r['classification_status'] == 'classified' for r in rows))
+    page = props(path)
+    code, _, retained = request(page['actions']['download'])
+    assert code == 200 and retained == csv, (code, retained)
+    rows = [{**row, 'included': True} for row in page['rows']]
+    redirect(request(page['actions']['commit'], {'import': {'rows': rows}}))
+    page = props(path)
+    assert page['import_batch']['complete'] is True and page['import_batch']['transactions_count'] == 2, {'batch':page['import_batch'],'flash':page.get('flash')}
+    actual = database.execute('SELECT amount_cents FROM expense_transactions WHERE import_batch_id = ? ORDER BY amount_cents', [batch_id]).fetchall()
+    assert [r[0] for r in actual] == [101, 1235], actual
+check('CSV upload, background classification, retained download and commit', upload)
+
+def chat():
+    code, _, body = request('/transactions/chat', {'question': 'Summarize these expenses', 'filters': {'direction': 'credit'}})
+    assert code == 202, (code, body)
+    answer = json.loads(body)
+    assert answer['source'] == 'automatic' and 'disabled' in answer['answer'], answer
+    code, _, body = request('/ai_chats/' + str(answer['chat_id']))
+    assert code == 200 and len(json.loads(body)['messages']) == 2, (code, body)
+check('chat persistence and no-key fallback', chat)
+
+def insights():
+    redirect(request('/insights', {}))
+    wait_for('SELECT status, error FROM native_jobs WHERE name = ? ORDER BY created_at DESC LIMIT 1', ['GenerateInsightsJob'], lambda rows: len(rows) == 1 and rows[0]['status'] in ('completed', 'failed'))
+    row = database.execute('SELECT status, error FROM native_jobs WHERE name = ? ORDER BY created_at DESC LIMIT 1', ['GenerateInsightsJob']).fetchone()
+    assert row['status'] == 'completed', dict(row)
+    assert len(props('/insights')['insights']) > 0
+    code, _, body = request('/offline/snapshot.json')
+    assert code == 200 and json.loads(body)['pages']['dashboard']['metrics']['transaction_count'] >= 3, (code, body[:200])
+check('insight generation, evidence and offline snapshot', insights)
+
+def logout():
+    redirect(request('/session', method='DELETE'))
+    assert request('/transactions')[0] in (302, 303)
+check('logout revokes authentication', logout)
+if failures:
+    raise SystemExit('Native action failures:\n' + '\n'.join(failures))
+print('All native action checks passed')

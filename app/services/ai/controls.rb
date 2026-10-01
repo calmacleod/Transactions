@@ -166,7 +166,7 @@ module Ai
         model,
         ENV["RUBYLLM_MODEL"].presence,
         RubyLLM.config.default_model
-      ].compact_blank.uniq
+      ].reject(&:blank?).uniq
     end
     private_class_method :configured_model_ids
 

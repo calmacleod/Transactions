@@ -1,0 +1,51 @@
+class Date
+  attr_reader days: Integer
+  def initialize: (Integer year, ?Integer month, ?Integer day) -> void
+  def self.current: () -> Date
+  def self.today: () -> Date
+  def self.from_time: (Time time) -> Date
+  def self.from_days: (Integer days) -> Date
+  def self.iso8601: (String value) -> Date
+  def self.strptime: (String value, String pattern) -> Date
+  def to_time: () -> Time
+  def year: () -> Integer
+  def month: () -> Integer
+  def mon: () -> Integer
+  def day: () -> Integer
+  def mday: () -> Integer
+  def wday: () -> Integer
+  def strftime: (String pattern) -> String
+  def iso8601: () -> String
+  def to_s: () -> String
+  def to_date: () -> Date
+  def beginning_of_month: () -> Date
+  def end_of_month: () -> Date
+  def beginning_of_week: () -> Date
+  def end_of_week: () -> Date
+  def advance: (?years: Integer, ?months: Integer, ?weeks: Integer, ?days: Integer) -> Date
+  def next_month: (?Integer amount) -> Date
+  def prev_month: (?Integer amount) -> Date
+  def +: (Integer amount) -> Date
+  def -: (untyped other) -> untyped
+  def <=>: (Date other) -> Integer
+  def ==: (untyped other) -> bool
+  def eql?: (untyped other) -> bool
+  def hash: () -> Integer
+  def <: (Date other) -> bool
+  def <=: (Date other) -> bool
+  def >: (Date other) -> bool
+  def >=: (Date other) -> bool
+end
+class DateRange
+  @first: Date?
+  @last: Date?
+  def initialize: (Date? first, Date? last, ?bool exclusive) -> void
+  def begin: () -> Date?
+  def end: () -> Date?
+  def exclude_end?: () -> bool
+  def cover?: (Date date) -> bool
+end
+module ActiveSupport
+  def self.to_date: (Time time) -> Date
+  def self.parse_db_date: (String? value) -> Date?
+end

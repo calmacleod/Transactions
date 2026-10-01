@@ -1,7 +1,13 @@
 module NativeInertia
   # Evaluate Inertia's lazy props before encoding the page's JSON tree.
   def self.resolve(value)
-    if value.is_a?(Proc)
+    if value.is_a?(Date)
+      value.iso8601
+    elsif value.is_a?(Time)
+      NativeTime.iso8601(value)
+    elsif value.is_a?(BigDecimal)
+      value.to_s('F')
+    elsif value.is_a?(Proc)
       resolve(value.call)
     elsif value.is_a?(Hash)
       resolved = {}
@@ -27,7 +33,7 @@ module ActionController
             email: ::Current.user && ::Current.user.email_address,
             role: ::Current.user && ::Current.user.role,
             admin: ::Current.user && ::Current.user.admin? || false,
-            onboarding_required: ::Current.user && ::Current.user.onboarding_required? || false
+            onboarding_required: onboarding_required?
           },
           flash: { notice: flash[:notice], alert: flash[:alert] },
           errors: {},
@@ -48,7 +54,9 @@ module ActionController
         })
         @headers['Vary'] = 'X-Inertia'
         token = ActionView::ViewHelpers.form_authenticity_token
-        cookies['XSRF-TOKEN'] = { value: token, same_site: :lax, httponly: false }
+        # The native unsigned jar accepts the cookie value directly.
+        # An options Hash is serialized verbatim and cannot be used as a token.
+        cookies['XSRF-TOKEN'] = token
         if request.env['HTTP_X_INERTIA'].to_s == 'true'
           body = payload
           content_type = 'application/json'

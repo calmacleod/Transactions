@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Bounded authenticated request soak; reports server RSS by equal-size batches."""
+import argparse
+import http.cookiejar
+import json
+import re
+import subprocess
+import time
+import urllib.request
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('base')
+parser.add_argument('pid', type=int)
+parser.add_argument('--batches', type=int, default=12)
+parser.add_argument('--requests', type=int, default=80)
+parser.add_argument('--jobs', type=int, default=0, help='no-key chat jobs per batch; refuses configured providers')
+args = parser.parse_args()
+assert args.base.startswith('http://127.0.0.1:')
+assert 1 <= args.batches <= 20 and 1 <= args.requests <= 100
+assert 0 <= args.jobs <= 20
+browser = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+with browser.open(args.base + '/session/new', timeout=10) as response:
+    token = re.search(r'<meta name="csrf-token" content="([^"]*)"', response.read().decode())[1]
+credentials = json.dumps({'email_address': 'spinel@example.test', 'password': 'spinel-local-experiment'}).encode()
+with browser.open(urllib.request.Request(args.base + '/session', credentials, headers={'Content-Type':'application/json', 'X-CSRF-Token':token}), timeout=10) as response:
+    assert response.status == 200
+if args.jobs:
+    with browser.open(urllib.request.Request(args.base + '/admin/ai_controls', headers={'X-Inertia':'true'}), timeout=10) as response:
+        controls = json.loads(response.read())['props']
+    assert controls['provider_status']['configured'] is False, 'Job soak requires a server without provider keys'
+routes = ['/', '/transactions?direction=credit', '/imports', '/spending', '/budgets', '/insights', '/settings', '/ai_preferences', '/admin/ai_controls', '/admin/models', '/offline/snapshot.json']
+def batch(count):
+    for index in range(count):
+        path = routes[index % len(routes)]
+        with browser.open(urllib.request.Request(args.base + path, headers={'X-Inertia':'true'}), timeout=10) as response:
+            assert response.status == 200, (path, response.status)
+            payload = json.loads(response.read())
+            assert isinstance(payload, dict), path
+    for _ in range(args.jobs):
+        payload = json.dumps({'question':'Memory soak fallback', 'filters':{}}).encode()
+        request = urllib.request.Request(args.base + '/transactions/chat', payload, headers={'Content-Type':'application/json', 'X-CSRF-Token':token})
+        with browser.open(request, timeout=10) as response:
+            assert response.status == 202
+            chat_id = json.loads(response.read())['chat_id']
+        deadline = time.monotonic() + 10
+        while True:
+            with browser.open(args.base + '/ai_chats/' + str(chat_id), timeout=10) as response:
+                messages = json.loads(response.read())['messages']
+            if any(message['role'] == 'assistant' and message['status'] in ('complete','failed') for message in messages):
+                break
+            assert time.monotonic() < deadline, 'background chat did not finish'
+            time.sleep(.05)
+
+def rss():
+    output = subprocess.check_output(['ps','-o','rss=','-p',str(args.pid)], text=True).strip()
+    assert output, 'server exited'
+    return round(int(output) / 1024, 1)
+
+batch(args.requests)
+samples = [rss()]
+print(f'warmup: {samples[-1]} MiB', flush=True)
+for number in range(args.batches):
+    batch(args.requests)
+    samples.append(rss())
+    print(f'batch {number + 1} ({(number + 2) * args.requests} total requests): {samples[-1]} MiB', flush=True)
+# A limited soak cannot prove absence of every leak. Reject continuing
+# rapid growth after warmup; retain the raw measurements for comparison.
+growth = samples[-1] - samples[len(samples)//2]
+assert growth < 8, f'RSS grew {growth:.1f} MiB in the last half of the soak: {samples}'
+print(f'Bounded memory soak passed; samples {samples}; final-half growth {growth:.1f} MiB; '
+      f'{(args.batches + 1) * args.jobs} completed background chats')

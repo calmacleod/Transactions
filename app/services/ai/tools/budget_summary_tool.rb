@@ -12,9 +12,9 @@ module Ai
       def execute(month: nil)
         start_date = parse_month(month)
         range = start_date..start_date.end_of_month
-        transaction_scope = Current.user&.expense_transactions || ExpenseTransaction.all
-        category_scope = Current.user&.categories || Category.all
-        spent_by_category = transaction_scope.expenses.between(range.begin, range.end).group(:category_id).sum(:amount_cents)
+        transaction_scope = Current.user ? ExpenseTransaction.where(user_id: Current.user.id) : ExpenseTransaction.all
+        category_scope = Current.user ? Category.where(user_id: Current.user.id) : Category.all
+        spent_by_category = transaction_scope.expenses.between(range.begin, range.end).group(:category_id).pluck(:category_id, Arel.sql("SUM(amount_cents)")).to_h
 
         {
           month: start_date.strftime("%Y-%m"),

@@ -1,6 +1,6 @@
 class AiChatsController < ApplicationController
   def index
-    chats = Current.session.user.ai_chats.recent.includes(:messages, :expense_transactions).limit(50)
+    chats = Current.user.ai_chats.recent.includes(:messages, :expense_transactions).limit(50)
 
     render json: {
       chats: chats.map { |chat| chat_summary_props(chat) }
@@ -8,7 +8,7 @@ class AiChatsController < ApplicationController
   end
 
   def show
-    chat = Current.session.user.ai_chats.find(params[:id])
+    chat = Current.user.ai_chats.find(params[:id])
 
     render json: chat_props(chat)
   end

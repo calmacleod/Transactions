@@ -1,28 +1,90 @@
-diff --git a/src/codegen.c b/src/codegen.c
-index 1248ddf..cdb1b41 100644
---- a/src/codegen.c
-+++ b/src/codegen.c
-@@ -4990,6 +4990,7 @@ const char *cell_value_struct(TyKind t) {
-     case TY_FLOAT_RANGE: return "sp_FloatRange";
-     case TY_RATIONAL:    return "sp_Rational";
-     case TY_COMPLEX:     return "sp_Complex";
-+    case TY_TIME:        return "sp_Time";
-     default: break;
-   }
-   return NULL;
-@@ -5004,6 +5005,7 @@ const char *cell_value_struct_empty(TyKind t) {
-     case TY_FLOAT_RANGE: return "((sp_FloatRange){0})";
-     case TY_RATIONAL:    return "((sp_Rational){0})";
-     case TY_COMPLEX:     return "((sp_Complex){0})";
-+    case TY_TIME:        return "((sp_Time){0})";
-     default: break;
-   }
-   return NULL;
+diff --git a/packages/bigdecimal/bigdecimal.rb b/packages/bigdecimal/bigdecimal.rb
+index a23e639f..577a0a75 100644
+--- a/packages/bigdecimal/bigdecimal.rb
++++ b/packages/bigdecimal/bigdecimal.rb
+@@ -259,7 +259,45 @@ class BigDecimal < Numeric
+     @sign < 0 ? -n : n
+   end
+ 
+-  def to_s
++  def round(places = 0)
++    target = -places
++    digits = @digits.dup
++    if @exp < target
++      cut = target - @exp
++      up = cut <= digits.length && digits[cut - 1] >= 5
++      digits = cut >= digits.length ? [] : digits[cut, digits.length - cut]
++      if up
++        i = 0
++        carry = 1
++        while carry > 0
++          digits << 0 if i >= digits.length
++          value = digits[i] + carry
++          digits[i] = value % 10
++          carry = value / 10
++          i += 1
++        end
++      end
++      result = BigDecimal.new(@sign, digits, target)
++    else
++      result = self
++    end
++    places <= 0 ? result.to_i : result
++  end
++
++  def to_s(style = nil)
++    if style == 'F'
++      return '0.0' if @sign == 0
++      digits = __mantissa_s
++      point = digits.length + @exp
++      value = if point <= 0
++        '0.' + '0' * (-point) + digits
++      elsif point >= digits.length
++        digits + '0' * (point - digits.length) + '.0'
++      else
++        digits[0, point] + '.' + digits[point, digits.length - point]
++      end
++      return (@sign < 0 ? '-' : '') + value
++    end
+     return "0.0" if @sign == 0
+     m = __mantissa_s
+     "#{@sign < 0 ? "-" : ""}0.#{m}e#{m.length + @exp}"
+diff --git a/packages/csv/csv.rb b/packages/csv/csv.rb
+index 1e70c341..d917e121 100644
+--- a/packages/csv/csv.rb
++++ b/packages/csv/csv.rb
+@@ -457,7 +457,7 @@ class CSV
+   def initialize(data = "", col_sep: ",", quote_char: "\"", row_sep: "\n",
+                  force_quotes: false, headers: false, skip_blanks: false,
+                  converters: nil)
+-    @string = String.new(data)
++    @string = data.is_a?(String) ? String.new(data) : data.read
+     @col_sep = col_sep
+     @quote_char = quote_char
+     @row_sep = row_sep
 diff --git a/src/codegen_call.c b/src/codegen_call.c
-index 10685d5..23a3329 100644
+index 11c1f77a..41d53a69 100644
 --- a/src/codegen_call.c
 +++ b/src/codegen_call.c
-@@ -10621,10 +10621,9 @@ static int emit_poly_method_dispatch(Compiler *c, int id, Buf *b) {
+@@ -362,7 +362,7 @@ int emit_ctor_yield_inline(Compiler *c, int id, int ci, Buf *b) {
+       RenPark park = ren_park(saved_nren);
+       const char *svs = g_self, *svd = g_self_deref;
+       g_self = saved_self; g_self_deref = saved_self_deref;
+-      buf_printf(b, "const char **_cell__y%d_%s = &(", tag, m->pnames[i]);
++      buf_printf(b, "const char **_cell__y%d_%s = (const char **)&(", tag, m->pnames[i]);
+       emit_inline_alias_arg(c, argv2[L.arg[i]], b);
+       buf_puts(b, ";\n");
+       g_self = svs; g_self_deref = svd;
+@@ -9789,7 +9789,7 @@ static int emit_poly_method_dispatch(Compiler *c, int id, Buf *b) {
+        formats and nil/anything-else raises NoMethodError, matching CRuby
+        (issue #2457, the family2 nilable value-method dispatch gap). Only when
+        no user class defines strftime, so the default-raise arm is unambiguous. */
+-    int is_strftime = ncand == 0 && sp_streq(name, "strftime") && argc == 1 &&
++    int is_strftime = sp_streq(name, "strftime") && argc == 1 &&
+                       infer_type(c, argv[0]) == TY_STRING;
+     /* cover? on a container-read Range; gcdlcm on a container-read int
+        receiver (#3234): builtin pre-arms, no user candidates required */
+@@ -11573,10 +11573,9 @@ static int emit_poly_method_dispatch(Compiler *c, int id, Buf *b) {
          else {
            emit_kwh_pos_hash(c, &kw, 1, &mb);
          }
@@ -36,11 +98,28 @@ index 10685d5..23a3329 100644
          /* Never leave the switch without a default: with every user arm
             dropped as incompatible, an armless switch fell through and the
             call answered the result temp's zero initializer, silently. */
+diff --git a/src/codegen_fold.c b/src/codegen_fold.c
+index 4895ae42..d24082ca 100644
+--- a/src/codegen_fold.c
++++ b/src/codegen_fold.c
+@@ -6359,6 +6359,12 @@ static void emit_arg_or_default_fill(Compiler *c, Scope *m, int idx, int provide
+            run time -- an element of a mixed array, a Hash miss, an untyped call
+            (#3465). bool keeps the plain conversion: it has no sentinel. */
+         else if (at == TY_POLY && pt == TY_INT) { buf_puts(out, "sp_poly_to_i_or_nil("); emit_expr(c, provided, out); buf_puts(out, ")"); }
++        else if (at == TY_POLY && pt == TY_TIME) {
++          Buf tv; memset(&tv, 0, sizeof tv);
++          emit_expr(c, provided, &tv);
++          emit_unbox_text(c, TY_TIME, tv.p ? tv.p : "sp_box_nil()", out);
++          free(tv.p);
++        }
+         else if (at == TY_POLY && pt == TY_BOOL) { buf_puts(out, "sp_poly_to_i("); emit_expr(c, provided, out); buf_puts(out, ")"); }
+         /* poly arg into an object or other pointer-backed param (array, proc,
+            ...): unbox the pointer via emit_unbox_text (a nil box has v.p ==
 diff --git a/src/codegen_iter.c b/src/codegen_iter.c
-index 87c630f..5f9a419 100644
+index 3fb0f1eb..63e03f49 100644
 --- a/src/codegen_iter.c
 +++ b/src/codegen_iter.c
-@@ -275,7 +275,7 @@ void emit_inline_bind_params(Compiler *c, Scope *m, int args, const int *argv, i
+@@ -620,7 +620,7 @@ void emit_inline_bind_params(Compiler *c, Scope *m, int args, const int *argv, i
    for (int i = 0; i < m->nparams; i++) {
      emit_indent(b, din);
      int aliased = i < 32 && (alias_mask & (1u << i));
@@ -49,8 +128,17 @@ index 87c630f..5f9a419 100644
      else { char rn[128]; snprintf(rn, sizeof rn, "_y%d_%s", tag, m->pnames[i]);
        emit_inlined_param_target(c, m, m->pnames[i], rn, b); }
      /* hide THIS inline's renames only: args are call-site expressions,
-@@ -1628,7 +1628,7 @@ void emit_block_binds(Compiler *c, int blk, const int *yargs, int yc,
-       LocalVar *bl = bsc ? scope_local(bsc, bp) : NULL;
+@@ -1715,7 +1715,7 @@ void emit_block_kw_binds(Compiler *c, int blk, int ykw, Scope *bsc, Buf *b, int
+     if (kw_alias && al->n < (int)(sizeof al->lv / sizeof al->lv[0])) {
+       if (!as_expr) emit_indent(b, indent);
+       if (!as_expr && !al->open) { buf_puts(b, "{\n"); emit_indent(b, indent); al->open = 1; }
+-      buf_printf(b, "const char **_cell_%s = &(", kpr);
++      buf_printf(b, "const char **_cell_%s = (const char **)&(", kpr);
+       emit_expr(c, vn, b);
+       buf_puts(b, ")");
+       buf_puts(b, as_expr ? "; " : ";\n");
+@@ -2051,7 +2051,7 @@ void emit_block_binds(Compiler *c, int blk, const int *yargs, int yc,
+       if (bl && al) refuse_alias_of_snapshot(c, yargs[k], bp);
        if (bl && al && al->n < (int)(sizeof al->lv / sizeof al->lv[0])) {
          if (!as_expr && !al->open) { buf_puts(b, "{\n"); emit_indent(b, indent); al->open = 1; }
 -        buf_printf(b, "const char **_cell_%s = &(", bpr);
@@ -59,10 +147,10 @@ index 87c630f..5f9a419 100644
          buf_puts(b, ")");
          buf_puts(b, as_expr ? "; " : ";\n");
 diff --git a/src/codegen_stmt.c b/src/codegen_stmt.c
-index 2405afa..d745a30 100644
+index 7287bab9..b2bb9033 100644
 --- a/src/codegen_stmt.c
 +++ b/src/codegen_stmt.c
-@@ -6666,16 +6666,18 @@ static void emit_tail_value(Compiler *c, int node, Buf *b) {
+@@ -7060,16 +7060,18 @@ static void emit_tail_value(Compiler *c, int node, Buf *b) {
       writes widened its variant -- and the conversion is the one the assignment
       side already makes (#4089), through the boxed form the converting entries
       take. */

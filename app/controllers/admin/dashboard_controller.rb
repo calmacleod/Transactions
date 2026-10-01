@@ -1,5 +1,5 @@
 module Admin
-  class DashboardController < BaseController
+  class DashboardController < Admin::BaseController
     def index
       users = User.includes(:expense_transactions).order(:email_address).to_a
       invitations = UserInvitation.recent.limit(25)
@@ -10,9 +10,9 @@ module Admin
           user_count: users.size,
           admin_count: users.select(&:admin?).size,
           pending_invitation_count: UserInvitation.pending.count,
-          total_ai_spend_label: money_from_microdollars(ai_request_microdollars(AiRequest.all))
+          total_ai_spend_label: money_from_microdollars(ai_request_microdollars(AiRequest.where({})))
         },
-        users: users.map { |user| user_props(user, ai_spend_microdollars: ai_spend_by_user_id.fetch(user.id, 0)) },
+        users: users.map { |user| user_props(user, ai_spend_by_user_id.fetch(user.id, 0)) },
         invitations: invitations.map { |invitation| invitation_props(invitation) },
         actions: {
           invite: admin_invitations_path,
@@ -27,12 +27,12 @@ module Admin
 
     private
 
-    def user_props(user, ai_spend_microdollars:)
+    def user_props(user, ai_spend_microdollars)
       {
         id: user.id,
         email_address: user.email_address,
         role: user.role,
-        role_label: user.role.titleize,
+        role_label: user.role.to_s.titleize,
         transaction_count: user.expense_transactions.size,
         ai_spend_label: money_from_microdollars(ai_spend_microdollars),
         csv_reminder_enabled: user.csv_reminder_enabled?,
@@ -45,7 +45,7 @@ module Admin
       user_ids = users.map(&:id)
       return {} if user_ids.empty?
 
-      AiRequest.where(user_id: user_ids).group(:user_id).sum(ai_request_microdollars_expression)
+      AiRequest.where(user_id: user_ids).group(:user_id).pluck(:user_id, Arel.sql("SUM(#{ai_request_microdollars_expression})")).to_h
     end
 
     def invitation_props(invitation)

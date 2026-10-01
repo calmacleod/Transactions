@@ -22,7 +22,7 @@ class DashboardSummaryTest < ActiveSupport::TestCase
     end
 
     assert_equal 2, transaction_queries.count { |sql| sql.match?(/COUNT\(\*\)/) }
-    assert_equal 2, transaction_queries.count { |sql| sql.match?(/SUM\("expense_transactions"\."amount_cents"\)/) }
+    assert_equal 2, transaction_queries.count { |sql| sql.match?(/SUM\((?:"expense_transactions"\.)?"?amount_cents"?\)/) }
     assert transaction_queries.none? { |sql| sql.match?(/SELECT "expense_transactions"\.\*/) }
   end
 

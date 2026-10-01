@@ -8,7 +8,7 @@ class ModelsController < ApplicationController
     provider_counts = Model.group(:provider).count
     models = sorted_models(Model.by_provider(params[:provider]).matching(params[:query]))
     models = models.select { |model| model.capabilities.include?(params[:capability]) } if params[:capability].present?
-    models = models.first(250)
+    models = models.to_a.first(250)
 
     render inertia: {
       stats: {
@@ -133,7 +133,7 @@ class ModelsController < ApplicationController
       provider: model.provider,
       favorite: model.favorite?,
       user_selectable: model.user_selectable?,
-      update_path: admin_model_path(model),
+      update_path: admin_model_path(model.id),
       input_modalities: model.input_modalities.presence || [ "unknown" ],
       output_modalities: model.output_modalities.presence || [ "unknown" ],
       capabilities: model.capabilities,

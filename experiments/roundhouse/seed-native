@@ -4,12 +4,16 @@ require "sqlite3"
 require "bcrypt"
 require "time"
 require "fileutils"
+require "json"
+require "date"
 
 root = File.expand_path("../..", __dir__)
 project = File.expand_path(ARGV.fetch(0, "#{root}/tmp/roundhouse/spinel-native"))
 expected = File.join(root, "tmp/roundhouse") + "/"
 abort "Expected a generated project under #{expected}" unless project.start_with?(expected)
-load File.join(project, "config/schema.rb")
+schema_file = File.join(project, "config/schema.rb")
+abort "No generated schema at #{schema_file}. Run experiments/roundhouse/experiment spinel-native #{File.basename(project)} before seeding." unless File.file?(schema_file)
+load schema_file
 FileUtils.mkdir_p(File.join(project, "storage"))
 database = SQLite3::Database.new(File.join(project, "storage/development.sqlite3"))
 Schema.statements.each { |sql| database.execute(sql) }
@@ -32,3 +36,38 @@ unless database.get_first_value("SELECT id FROM users WHERE email_address = ?", 
   database.execute("INSERT INTO users (#{names}) VALUES (#{placeholders})", values.values)
 end
 puts "Seeded local experiment login: #{email} / spinel-local-experiment"
+
+if ARGV.include?("--fixtures")
+  now = Time.now.utc.strftime("%Y-%m-%d %H:%M:%S.%6N")
+  user_id = database.get_first_value("SELECT id FROM users WHERE email_address = ?", email)
+  insert = lambda do |table, identity, attributes|
+    where = identity.keys.map { |key| "#{key} = ?" }.join(" AND ")
+    existing = database.get_first_value("SELECT id FROM #{table} WHERE #{where}", identity.values)
+    next existing if existing
+
+    values = { "created_at" => now, "updated_at" => now }.merge(identity).merge(attributes)
+    fields = values.keys.map { |name| %Q("#{name}") }.join(", ")
+    slots = Array.new(values.size, "?").join(", ")
+    database.execute("INSERT INTO #{table} (#{fields}) VALUES (#{slots})", values.values)
+    database.last_insert_row_id
+  end
+  month = Date.today.strftime("%Y-%m")
+  category = insert.call("categories", { "user_id" => user_id, "name" => "Native groceries" }, { "color" => "#22c55e", "monthly_budget_cents" => 10_000 })
+  subcategory = insert.call("transaction_subcategories", { "user_id" => user_id, "name" => "Native essentials" }, { "color" => "#3b82f6" })
+  batch = insert.call("import_batches", { "user_id" => user_id, "filename" => "native-fixtures.csv" }, { "status" => "complete", "rows_count" => 3, "transactions_count" => 3, "imported_at" => now })
+  transaction_ids = []
+  [[ "Native market", 1_250, "debit", category ], [ "Native cafe", 450, "debit", nil ], [ "Native refund", 200, "credit", category ]].each_with_index do |(description, amount, direction, category_id), index|
+    attributes = { "occurred_on" => "#{month}-01", "description" => description, "amount_cents" => amount, "direction" => direction,
+                   "category_id" => category_id, "source" => "statement_csv", "card_last4" => "1234", "raw_data" => "{}" }
+    id = insert.call("expense_transactions", { "user_id" => user_id, "external_id" => "native-fixture-#{index}" }, attributes.merge("import_batch_id" => batch))
+    transaction_ids << id
+    insert.call("import_rows", { "user_id" => user_id, "import_batch_id" => batch, "row_number" => index + 1 }, attributes.merge("external_id" => "native-fixture-#{index}", "classification_status" => "pending"))
+  end
+  insert.call("expense_transaction_subcategories", { "expense_transaction_id" => transaction_ids.first, "transaction_subcategory_id" => subcategory }, { "user_id" => user_id })
+  chat = insert.call("ai_chats", { "user_id" => user_id, "title" => "Native fixture chat" }, { "context_filters" => "{}" })
+  insert.call("ai_chat_transactions", { "ai_chat_id" => chat, "expense_transaction_id" => transaction_ids.first }, { "user_id" => user_id })
+  insert.call("ai_chat_messages", { "ai_chat_id" => chat, "content" => "Review [[transaction:#{transaction_ids.first}]]" }, { "user_id" => user_id, "role" => "assistant", "status" => "complete", "metadata" => "{}", "estimated_cost_microdollars" => 0 })
+  fixtures = { user_id: user_id, category_id: category, subcategory_id: subcategory, import_id: batch, transaction_ids: transaction_ids, chat_id: chat, month: month }
+  File.write(File.join(project, "storage/native-fixtures.json"), JSON.pretty_generate(fixtures))
+  puts "Seeded page fixtures (debit total $17.00, credit $2.00)"
+end

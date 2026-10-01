@@ -62,7 +62,7 @@ module Ai
       PROMPT
 
       response.parsed.fetch("insights").map do |insight|
-        insight.symbolize_keys.slice(:finding_key, :title, :body, :action)
+        insight.transform_keys(&:to_sym).slice(:finding_key, :title, :body, :action)
       end
     rescue StandardError => error
       Rails.logger.warn("RubyLLM insight editing failed: #{error.class}: #{error.message}")
@@ -70,7 +70,7 @@ module Ai
     end
 
     def llm_findings(findings)
-      findings.map do |finding|
+      Array(findings).map do |finding|
         finding.slice(:key, :kind, :title, :body, :action, :severity, :metric, :score)
       end
     end
@@ -100,11 +100,11 @@ module Ai
     end
 
     def transaction_scope
-      user&.expense_transactions || ExpenseTransaction.all
+      user ? ExpenseTransaction.where(user_id: user.id) : ExpenseTransaction.all
     end
 
     def insight_scope
-      user&.insights || Insight.all
+      user ? Insight.where(user_id: user.id) : Insight.all
     end
   end
 end

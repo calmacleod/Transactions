@@ -18,8 +18,8 @@ module Ai
     end
 
     def respond_to_chat(chat:, assistant_message:)
-      question = chat.messages.where(role: "user").where(created_at: ..assistant_message.created_at).ordered.last&.content.to_s
-      transactions = chat.expense_transactions.includes(:category, :subcategories)
+      question = AiChatMessage.where(ai_chat_id: chat.id, role: "user").where(created_at: ..assistant_message.created_at).ordered.last&.content.to_s
+      transactions = ExpenseTransaction.where(id: chat.expense_transaction_ids).includes(:category, :subcategories)
       prompt = prompt_for(question:, transactions:, filters: chat.context_filters, chat:)
       tool_message = nil
 
@@ -165,7 +165,7 @@ module Ai
         tool_call = event.fetch(:tool_call)
         message = chat.messages.create!(
           role: "tool",
-          content: "Calling #{tool_call.name.humanize}",
+          content: "Calling #{tool_call.name.to_s.humanize}",
           status: "thinking",
           metadata: {
             assistant_message_id: assistant_message.id,
@@ -186,9 +186,10 @@ module Ai
           status: "thinking",
           metadata: { assistant_message_id: assistant_message.id, kind: "tool_result" }
         )
+        tool_name = message.metadata["name"].to_s
         message.update!(
           status: "complete",
-          content: "#{message.metadata["name"].presence&.humanize || "Tool"} returned",
+          content: "#{tool_name.empty? ? 'Tool' : tool_name.to_s.humanize} returned",
           metadata: message.metadata.merge("result" => normalize_tool_result(result))
         )
         AiChatChannel.broadcast_tool_result(chat, assistant_message, normalize_tool_result(result))

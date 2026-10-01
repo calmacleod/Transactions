@@ -5,7 +5,7 @@ class ImportsController < ApplicationController
     batches = current_user.import_batches.with_attached_source_file.order(created_at: :desc).limit(100)
 
     render inertia: {
-      import_batches: batches.map { |batch| import_batch_index_props(batch) },
+      import_batches: batches.map { |import_batch| import_batch_index_props(import_batch) },
       actions: {
         dashboard: root_path,
         upload: imports_path
@@ -15,11 +15,11 @@ class ImportsController < ApplicationController
 
   def create
     uploaded_file = params.require(:csv_file)
-    batch = StatementCsvImporter.new(io: uploaded_file.tempfile, filename: uploaded_file.original_filename, user: current_user).preview
-    attach_uploaded_file(batch, uploaded_file)
-    ClassifyImportRowsJob.perform_later(batch.id, current_user.id)
+    import_batch = StatementCsvImporter.new(io: uploaded_file.tempfile, filename: uploaded_file.original_filename, user: current_user).preview
+    attach_uploaded_file(import_batch, uploaded_file)
+    ClassifyImportRowsJob.perform_later(import_batch.id, current_user.id)
 
-    redirect_to preview_import_path(batch.id), notice: "Review #{helpers.pluralize(batch.import_rows.count, "transaction")} from #{batch.filename}."
+    redirect_to preview_import_path(import_batch.id), notice: "Review #{helpers.pluralize(import_batch.import_rows.count, "transaction")} from #{import_batch.filename}."
   rescue ActionController::ParameterMissing
     redirect_to root_path, alert: "Choose a CSV file to import."
   rescue StandardError => error
@@ -27,34 +27,34 @@ class ImportsController < ApplicationController
   end
 
   def preview
-    batch = current_user.import_batches.includes(import_rows: :category).find(params[:id])
-    duplicate_context = duplicate_context_for(batch.import_rows.ordered)
-    unfinished = batch.unfinished?
+    import_batch = current_user.import_batches.includes(import_rows: :category).find(params[:id])
+    duplicate_context = duplicate_context_for(import_batch.import_rows.ordered)
+    unfinished = import_batch.unfinished?
 
     render inertia: {
-      import_batch: import_batch_props(batch),
-      rows: batch.import_rows.ordered.map { |row| import_row_props(row, duplicate_context:) },
-      groups: import_group_props(batch.import_rows.ordered, duplicate_context),
+      import_batch: import_batch_props(import_batch),
+      rows: import_batch.import_rows.ordered.map { |row| import_row_props(row, duplicate_context:) },
+      groups: import_group_props(import_batch.import_rows.ordered, duplicate_context),
       categories: category_options(current_user.categories.by_name),
       actions: {
-        commit: unfinished ? commit_import_path(batch) : nil,
-        download: batch.source_file_retained? ? download_import_path(batch) : nil,
+        commit: unfinished ? commit_import_path(import_batch.id) : nil,
+        download: import_batch.source_file_retained? ? download_import_path(import_batch.id) : nil,
         dashboard: root_path,
         classification_stream: unfinished ? {
           channel: "ImportBatchChannel",
-          import_batch_id: batch.id
+          import_batch_id: import_batch.id
         } : nil
       }
     }
   end
 
   def commit
-    batch = current_user.import_batches.find(params[:id])
-    return redirect_to preview_import_path(batch.id), alert: "#{batch.filename} is already finished." unless batch.unfinished?
+    import_batch = current_user.import_batches.find(params[:id])
+    return redirect_to preview_import_path(import_batch.id), alert: "#{import_batch.filename} is already finished." unless import_batch.unfinished?
 
-    StatementCsvImporter.new(io: StringIO.new, filename: batch.filename, user: current_user).commit(batch:, rows: permitted_import_rows)
+    StatementCsvImporter.new(io: StringIO.new, filename: import_batch.filename, user: current_user).commit(batch: import_batch, rows: permitted_import_rows)
 
-    redirect_to root_path, notice: "Imported #{helpers.pluralize(batch.transactions_count, "new transaction")} from #{batch.filename}."
+    redirect_to root_path, notice: "Imported #{helpers.pluralize(import_batch.transactions_count, "new transaction")} from #{import_batch.filename}."
   rescue ActionController::ParameterMissing
     redirect_to root_path, alert: "Choose a CSV file to import."
   rescue StandardError => error
@@ -62,53 +62,53 @@ class ImportsController < ApplicationController
   end
 
   def download
-    batch = current_user.import_batches.find(params[:id])
-    return redirect_to preview_import_path(batch.id), alert: "The original CSV is not retained for this import." unless batch.source_file_retained?
+    import_batch = current_user.import_batches.find(params[:id])
+    return redirect_to preview_import_path(import_batch.id), alert: "The original CSV is not retained for this import." unless import_batch.source_file_retained?
 
-    send_data batch.source_file.download,
-      filename: batch.source_file.filename.to_s,
-      type: batch.source_file.content_type || "text/csv",
+    send_data import_batch.source_file.download,
+      filename: import_batch.source_file.filename.to_s,
+      type: import_batch.source_file.content_type || "text/csv",
       disposition: "attachment"
   end
 
   private
 
-  def import_batch_props(batch)
+  def import_batch_props(import_batch)
     {
-      id: batch.id,
-      filename: batch.filename,
-      rows_count: batch.rows_count,
-      transactions_count: batch.transactions_count,
-      status: batch.status,
-      active: batch.unfinished?,
-      complete: batch.complete?,
-      read_only: !batch.unfinished?,
-      imported_at_label: batch.imported_at&.strftime("%b %-d, %Y"),
-      retained_file: batch.source_file_retained?,
-      source_file_label: batch.source_file_retained? ? batch.source_file.filename.to_s : nil
+      id: import_batch.id,
+      filename: import_batch.filename,
+      rows_count: import_batch.rows_count,
+      transactions_count: import_batch.transactions_count,
+      status: import_batch.status,
+      active: import_batch.unfinished?,
+      complete: import_batch.complete?,
+      read_only: !import_batch.unfinished?,
+      imported_at_label: import_batch.imported_at&.strftime("%b %-d, %Y"),
+      retained_file: import_batch.source_file_retained?,
+      source_file_label: import_batch.source_file_retained? ? import_batch.source_file.filename.to_s : nil
     }
   end
 
-  def import_batch_index_props(batch)
+  def import_batch_index_props(import_batch)
     {
-      id: batch.id,
-      filename: batch.filename,
-      status: batch.status,
-      status_label: batch.status.to_s.titleize,
-      rows_count: batch.rows_count,
-      transactions_count: batch.transactions_count,
-      skipped_count: [ batch.rows_count.to_i - batch.transactions_count.to_i, 0 ].max,
-      created_at_label: batch.created_at.strftime("%b %-d, %Y"),
-      created_at_time_label: batch.created_at.strftime("%-l:%M %p"),
-      imported_at_label: batch.imported_at&.strftime("%b %-d, %Y"),
-      imported_at_time_label: batch.imported_at&.strftime("%-l:%M %p"),
-      retained_file: batch.source_file_retained?,
-      source_file_label: batch.source_file_retained? ? batch.source_file.filename.to_s : nil,
-      notes: batch.notes,
-      preview_path: preview_import_path(batch.id),
-      download_path: batch.source_file_retained? ? download_import_path(batch) : nil,
-      complete: batch.complete?,
-      unfinished: batch.unfinished?
+      id: import_batch.id,
+      filename: import_batch.filename,
+      status: import_batch.status,
+      status_label: import_batch.status.to_s.titleize,
+      rows_count: import_batch.rows_count,
+      transactions_count: import_batch.transactions_count,
+      skipped_count: [ import_batch.rows_count.to_i - import_batch.transactions_count.to_i, 0 ].max,
+      created_at_label: import_batch.created_at.strftime("%b %-d, %Y"),
+      created_at_time_label: import_batch.created_at.strftime("%-l:%M %p"),
+      imported_at_label: import_batch.imported_at&.strftime("%b %-d, %Y"),
+      imported_at_time_label: import_batch.imported_at&.strftime("%-l:%M %p"),
+      retained_file: import_batch.source_file_retained?,
+      source_file_label: import_batch.source_file_retained? ? import_batch.source_file.filename.to_s : nil,
+      notes: import_batch.notes,
+      preview_path: preview_import_path(import_batch.id),
+      download_path: import_batch.source_file_retained? ? download_import_path(import_batch.id) : nil,
+      complete: import_batch.complete?,
+      unfinished: import_batch.unfinished?
     }
   end
 
@@ -138,16 +138,16 @@ class ImportsController < ApplicationController
   end
 
   def permitted_import_rows
-    params.require(:import).fetch(:rows, []).map do |row|
+    params.require(:import).fetch("rows", []).map do |row|
       row.permit(:id, :occurred_on, :description, :amount, :amount_cents, :direction, :card_last4, :category_id, :manually_classified, :notes, :included, :include_duplicate)
     end
   end
 
-  def attach_uploaded_file(batch, uploaded_file)
+  def attach_uploaded_file(import_batch, uploaded_file)
     return unless current_user.retain_uploaded_csv?
 
     uploaded_file.tempfile.rewind
-    batch.source_file.attach(
+    import_batch.source_file.attach(
       io: uploaded_file.tempfile,
       filename: uploaded_file.original_filename,
       content_type: uploaded_file.content_type.presence || "text/csv"
@@ -200,7 +200,7 @@ class ImportsController < ApplicationController
       occurred_on_label: transaction.occurred_on.strftime("%b %-d, %Y"),
       description: transaction.description,
       amount_label: money_from_cents(transaction.amount_cents),
-      direction: transaction.direction.titleize,
+      direction: transaction.direction.to_s.titleize,
       card_last4: transaction.card_last4,
       category: category_props(transaction.category),
       notes: transaction.notes

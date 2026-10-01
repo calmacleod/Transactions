@@ -1,0 +1,1986 @@
+diff --git a/runtime/ruby/action_controller/base.rb b/runtime/ruby/action_controller/base.rb
+index 16f85283..b190183d 100644
+--- a/runtime/ruby/action_controller/base.rb
++++ b/runtime/ruby/action_controller/base.rb
+@@ -331,9 +331,15 @@ module ActionController
+     # headers ride the same unsent seam as `headers` above, and the
+     # Content-Disposition write joins it when the harness wires
+     # header emission.
+-    def send_data(data, type: "application/octet-stream", disposition: "attachment")
++    def send_data(data, type: "application/octet-stream", disposition: "attachment", filename: nil)
+       @body = data
+       @content_type = type
++      if filename
++        safe_name = filename.gsub('\\', '\\\\').gsub('"', '\\"').gsub("\r", '').gsub("\n", '')
++        @headers['Content-Disposition'] = disposition + '; filename="' + safe_name + '"'
++      else
++        @headers['Content-Disposition'] = disposition
++      end
+       @performed = true
+       nil
+     end
+diff --git a/runtime/ruby/action_controller/base.rbs b/runtime/ruby/action_controller/base.rbs
+index 408d6d6c..34bc2076 100644
+--- a/runtime/ruby/action_controller/base.rbs
++++ b/runtime/ruby/action_controller/base.rbs
+@@ -93,7 +93,7 @@ module ActionController
+     def cache_control_max_age: () -> Integer
+     def cache_control_public: () -> bool
+     def headers: () -> Hash[String, String]
+-    def send_data: (String data, ?type: String, ?disposition: String) -> void
++    def send_data: (String data, ?type: String, ?disposition: String, ?filename: String?) -> void
+ 
+     # Monomorphic on Symbol — body looks up STATUS_CODES. Integer
+     # pass-through was previously supported via `is_a?(Integer)`
+diff --git a/runtime/ruby/active_record/arel.rb b/runtime/ruby/active_record/arel.rb
+index 6b13d3dc..9e03efa8 100644
+--- a/runtime/ruby/active_record/arel.rb
++++ b/runtime/ruby/active_record/arel.rb
+@@ -69,6 +69,14 @@ module Arel
+       @qualified
+     end
+ 
++    def asc
++      @qualified + " ASC"
++    end
++
++    def desc
++      @qualified + " DESC"
++    end
++
+     def in(subquery)
+       "#{@qualified} IN (#{subquery.to_sql})"
+     end
+diff --git a/runtime/ruby/active_record/arel.rbs b/runtime/ruby/active_record/arel.rbs
+index 1d68f80f..40c60168 100644
+--- a/runtime/ruby/active_record/arel.rbs
++++ b/runtime/ruby/active_record/arel.rbs
+@@ -28,6 +28,8 @@ module Arel
+   end
+ 
+   class Attribute
++    def asc: () -> String
++    def desc: () -> String
+     @qualified: String
+ 
+     def initialize: (String qualified) -> void
+diff --git a/runtime/ruby/active_record/base.rb b/runtime/ruby/active_record/base.rb
+index 23d95276..857ac02f 100644
+--- a/runtime/ruby/active_record/base.rb
++++ b/runtime/ruby/active_record/base.rb
+@@ -524,7 +524,8 @@ module ActiveRecord
+       _adapter_count
+     end
+ 
+-    def self.exists?(id)
++    def self.exists?(id = nil)
++      return count > 0 if id.nil?
+       _adapter_exists_by_id?(id)
+     end
+ 
+diff --git a/runtime/ruby/active_record/base.rbs b/runtime/ruby/active_record/base.rbs
+index 784d9874..0aa383f1 100644
+--- a/runtime/ruby/active_record/base.rbs
++++ b/runtime/ruby/active_record/base.rbs
+@@ -199,7 +199,7 @@ module ActiveRecord
+     def self.find_by!: (Hash[Symbol, untyped] conditions) -> Base
+     def self.where: (Hash[Symbol, untyped] conditions) -> Array[Base]
+     def self.count: () -> Integer
+-    def self.exists?: (Integer id) -> bool
++    def self.exists?: (?Integer? id) -> bool
+     def self.none?: () -> bool
+     def self.any?: () -> bool
+     def self.delete_all: () -> nil
+diff --git a/runtime/ruby/active_record/relation.rb b/runtime/ruby/active_record/relation.rb
+index 3ea6c143..9d45be28 100644
+--- a/runtime/ruby/active_record/relation.rb
++++ b/runtime/ruby/active_record/relation.rb
+@@ -46,6 +46,98 @@ module ActiveRecord
+       @ctes = []
+     end
+ 
++    def spawn
++      relation = Relation.new(@model)
++      relation.copy_query(@wheres.dup, @joins.dup, @orders.dup, @groups.dup, @havings.dup, @select_sql, @distinct, @limit, @offset, @includes.dup, @records, @scope_attributes.dup, @from, @ctes.dup)
++      relation
++    end
++
++    def copy_query(wheres, joins, orders, groups, havings, select_sql, distinct, limit, offset, includes, records, scope_attributes, from, ctes)
++      @wheres = wheres
++      @joins = joins
++      @orders = orders
++      @groups = groups
++      @havings = havings
++      @select_sql = select_sql
++      @distinct = distinct
++      @limit = limit
++      @offset = offset
++      @includes = includes
++      @records = records
++      @scope_attributes = scope_attributes
++      @from = from
++      @ctes = ctes
++      nil
++    end
++
++    def where(condition = nil, *args)
++      spawn.mutable_where(condition, *args)
++    end
++
++    def not(condition = nil, *args)
++      spawn.mutable_not(condition, *args)
++    end
++
++    def order(*parts)
++      spawn.mutable_order(*parts)
++    end
++
++    def group(*parts)
++      spawn.mutable_group(*parts)
++    end
++
++    def having(condition, *args)
++      spawn.mutable_having(condition, *args)
++    end
++
++    def limit(n)
++      spawn.mutable_limit(n)
++    end
++
++    def offset(n)
++      spawn.mutable_offset(n)
++    end
++
++    def select(*specs)
++      spawn.mutable_select(*specs)
++    end
++
++    def distinct
++      spawn.mutable_distinct()
++    end
++
++    def includes(*names)
++      spawn.mutable_includes(*names)
++    end
++
++    def preload(*names)
++      spawn.mutable_preload(*names)
++    end
++
++    def eager_load(*names)
++      spawn.mutable_eager_load(*names)
++    end
++
++    def joins(spec)
++      spawn.mutable_joins(spec)
++    end
++
++    def left_outer_joins(spec)
++      spawn.mutable_left_outer_joins(spec)
++    end
++
++    def from(source)
++      spawn.mutable_from(source)
++    end
++
++    def or(other)
++      spawn.mutable_or(other)
++    end
++
++    def with_recursive(ctes)
++      spawn.mutable_with_recursive(ctes)
++    end
++
+     # ---- chain methods (return self) --------------------------------
+ 
+     # `with_recursive(parents: [base, step])` — a recursive common table
+@@ -53,7 +145,7 @@ module ActiveRecord
+     # 7.1). Rendered ahead of the SELECT; `from("parents")` then reads
+     # from it. lobsters walks a comment's ancestors this way on the reply
+     # page (`Comment#parents`).
+-    def with_recursive(ctes)
++    def mutable_with_recursive(ctes)
+       @records = nil
+       ctes.each do |name, parts|
+         @ctes << "#{name} AS (#{parts.map { |p| p.to_sql }.join(" UNION ALL ")})"
+@@ -64,14 +156,23 @@ module ActiveRecord
+     # `from("parents")` — the FROM source, in place of this model's own
+     # table. The String form only: Rails also takes a relation (a
+     # subquery) there, which no corpus call writes.
+-    def from(source)
++    def mutable_from(source)
+       @records = nil
+       @from = source
+       self
+     end
+ 
+     # `where(hash)` / `where("raw sql")` / `where("a = ? AND b = ?", x, y)`.
+-    def where(condition = nil, *args)
++    def mutable_where(condition = nil, *args)
++      # Equality predicates seed records created through a relation, as
++      # Rails' scope_for_create does. IN lists and raw SQL are filters only.
++      if condition.is_a?(Hash)
++        condition.each do |key, value|
++          unless value.is_a?(Array) || value.is_a?(Hash) || value.is_a?(Relation) || key.to_s.include?(".")
++            @scope_attributes[key.to_sym] = value
++          end
++        end
++      end
+       add_condition(condition, args, false)
+       self
+     end
+@@ -99,7 +200,7 @@ module ActiveRecord
+ 
+     # `where.not(...)` is lowered to `not(...)` on the relation: negate the
+     # condition back onto this relation.
+-    def not(condition = nil, *args)
++    def mutable_not(condition = nil, *args)
+       add_condition(condition, args, true)
+       self
+     end
+@@ -137,7 +238,7 @@ module ActiveRecord
+     # Rails requires matching structure (joins/limit) on both sides;
+     # the receiver's structural clauses are kept here. An empty side is
+     # an always-true condition (matches Rails: no filter to OR against).
+-    def or(other)
++    def mutable_or(other)
+       @records = nil
+       mine = @wheres.length > 0 ? @wheres.join(" AND ") : "1=1"
+       other_wheres = other.where_clauses
+@@ -179,8 +280,8 @@ module ActiveRecord
+     # the first term keep the loaded order -- which is the table's row
+     # order, the same order SQLite hands back for tied keys -- and a
+     # page sorted here matches one sorted by the database byte for byte.
+-    def order(*parts)
+-      terms = parts.map { |p| order_term(p) }
++    def mutable_order(*parts)
++      terms = parts.flatten.map { |p| order_term(p) }
+       terms.each { |t| @orders << t }
+       loaded = @records
+       return self if loaded.nil?
+@@ -213,7 +314,7 @@ module ActiveRecord
+     end
+ 
+     def order!(*parts)
+-      terms = parts.map { |p| order_term(p) }
++      terms = parts.flatten.map { |p| order_term(p) }
+       terms.each { |t| @orders << t }
+       loaded = @records
+       return self if loaded.nil?
+@@ -316,19 +417,19 @@ module ActiveRecord
+       a <=> b
+     end
+ 
+-    def limit(n)
++    def mutable_limit(n)
+       @records = nil
+       @limit = n
+       self
+     end
+ 
+-    def offset(n)
++    def mutable_offset(n)
+       @records = nil
+       @offset = n
+       self
+     end
+ 
+-    def group(*parts)
++    def mutable_group(*parts)
+       @records = nil
+       # Symbols qualify against this relation's table (Rails renders
+       # `GROUP BY "tags"."id"`), so a grouped column stays unambiguous
+@@ -341,7 +442,7 @@ module ActiveRecord
+       self
+     end
+ 
+-    def having(condition, *args)
++    def mutable_having(condition, *args)
+       @records = nil
+       @havings << substitute_binds(condition.to_s, args)
+       self
+@@ -369,14 +470,14 @@ module ActiveRecord
+     # `on_stories_not_authored_by.above_average` — render one INNER JOIN,
+     # where appending both made SQLite reject every column of the joined
+     # table as ambiguous.
+-    def joins(spec)
++    def mutable_joins(spec)
+       @records = nil
+       frag = join_fragment(spec)
+       @joins << frag unless @joins.include?(frag)
+       self
+     end
+ 
+-    def left_outer_joins(spec)
++    def mutable_left_outer_joins(spec)
+       @records = nil
+       frag = join_fragment(spec)
+       @joins << frag unless @joins.include?(frag)
+@@ -424,7 +525,7 @@ module ActiveRecord
+     # mode (`@select_sql` an EMPTY string, so the next hop emitted
+     # `SELECT  FROM memberships …`) was silent until something forced
+     # the query. Raise instead.
+-    def select(*specs)
++    def mutable_select(*specs)
+       raise ArgumentError, "select: no columns (a block form reached the projection)" if specs.empty?
+       @records = nil
+       cols = []
+@@ -435,7 +536,7 @@ module ActiveRecord
+       self
+     end
+ 
+-    def distinct
++    def mutable_distinct
+       @records = nil
+       @distinct = true
+       self
+@@ -447,19 +548,19 @@ module ActiveRecord
+     # model's synthesized `preload_associations` (batched `IN` loads
+     # into the `_preload_<assoc>` caches). Models without a synthesized
+     # override inherit Base's no-op and stay lazy (correct, just N+1).
+-    def includes(*names)
++    def mutable_includes(*names)
+       @records = nil
+       names.each { |n| @includes << n }
+       self
+     end
+ 
+-    def preload(*names)
++    def mutable_preload(*names)
+       @records = nil
+       names.each { |n| @includes << n }
+       self
+     end
+ 
+-    def eager_load(*names)
++    def mutable_eager_load(*names)
+       @records = nil
+       names.each { |n| @includes << n }
+       self
+@@ -895,7 +996,7 @@ module ActiveRecord
+       sql = "#{sql} #{@joins.join(" ")}" if @joins.length > 0
+       sql = "#{sql} WHERE #{@wheres.join(" AND ")}" if @wheres.length > 0
+       rows = ActiveRecord.adapter.select_rows(sql)
+-      rows.length == 0 ? 0.0 : rows[0]["n"].to_f
++      rows.length == 0 ? 0 : (rows[0]["n"] || 0)
+     end
+ 
+     # `group(:col).count` — Rails hands back a Hash of group-key =>
+@@ -1134,12 +1235,41 @@ module ActiveRecord
+     # `Rooms::Direct.find_or_create_for` does exactly that: `find_for`
+     # plucks the user ids, then hands the SAME relation to `grant_to`,
+     # which built memberships for user 0.
+-    def pluck(col)
++    def pluck(*cols)
+       prior = @select_sql
+-      @select_sql = "#{@table}.#{col} AS v"
+-      rows = ActiveRecord.adapter.select_rows(to_sql)
+-      @select_sql = prior
+-      rows.map { |row| row["v"] }
++      @select_sql = cols.each_with_index.map do |col, i|
++        term = col.is_a?(Symbol) ? "#{@table}.#{col}" : col.to_s
++        "#{term} AS v#{i}"
++      end.join(", ")
++      begin
++        rows = ActiveRecord.adapter.select_rows(to_sql)
++        values = rows.map do |row|
++          cols.each_with_index.map { |col, i| row["v#{i}"] }
++        end
++        cols.length == 1 ? values.map { |row| row[0] } : values
++      ensure
++        @select_sql = prior
++      end
++    end
++
++    def minimum(col)
++      extremum(col, "MIN")
++    end
++
++    def maximum(col)
++      extremum(col, "MAX")
++    end
++
++    def extremum(col, function)
++      prior = @select_sql
++      @select_sql = "#{function}(#{@table}.#{col}) AS v"
++      begin
++        rows = ActiveRecord.adapter.select_rows(to_sql)
++        value = rows.empty? ? nil : rows[0]["v"]
++        value
++      ensure
++        @select_sql = prior
++      end
+     end
+ 
+     # `pick(col)` — Rails' `limit(1).pluck(col).first`: the single value
+@@ -1255,10 +1385,22 @@ module ActiveRecord
+       record = find_by(conditions)
+       return record if !record.nil?
+       created = @model.new(scope_attributes.merge(conditions))
++      yield created if block_given?
+       created.save
+       created
+     end
+ 
++    # The block initializes only a newly built record, before validation.
++    # Existing matches are returned without yielding, like Rails.
++    def find_or_create_by!(conditions)
++      record = find_by(conditions)
++      return record unless record.nil?
++      created = @model.new(scope_attributes.merge(conditions))
++      yield created if block_given?
++      created.save!
++      created
++    end
++
+     # ---- SQL composition --------------------------------------------
+ 
+     def to_sql
+diff --git a/runtime/ruby/active_record/relation.rbs b/runtime/ruby/active_record/relation.rbs
+index 157e07c1..37317690 100644
+--- a/runtime/ruby/active_record/relation.rbs
++++ b/runtime/ruby/active_record/relation.rbs
+@@ -4,6 +4,25 @@ module ActiveRecord
+   # type is `untyped` in v1 — the lowered model methods carry the model
+   # identity; per-element typing is a later (generic-Relation) refinement.
+   class Relation
++    def spawn: () -> Relation
++    def copy_query: (Array[String] wheres, Array[String] joins, Array[String] orders, Array[String] groups, Array[String] havings, String? select_sql, bool distinct, Integer? limit, Integer? offset, Array[untyped] includes, untyped records, Hash[Symbol, untyped] scope_attributes, String? from, Array[String] ctes) -> nil
++    def mutable_where: (?untyped condition, *untyped args) -> Relation
++    def mutable_not: (?untyped condition, *untyped args) -> Relation
++    def mutable_order: (*untyped parts) -> Relation
++    def mutable_group: (*untyped parts) -> Relation
++    def mutable_having: (untyped condition, *untyped args) -> Relation
++    def mutable_limit: (Integer n) -> Relation
++    def mutable_offset: (Integer n) -> Relation
++    def mutable_select: (*untyped specs) -> Relation
++    def mutable_distinct: () -> Relation
++    def mutable_includes: (*untyped names) -> Relation
++    def mutable_preload: (*untyped names) -> Relation
++    def mutable_eager_load: (*untyped names) -> Relation
++    def mutable_joins: (untyped spec) -> Relation
++    def mutable_left_outer_joins: (untyped spec) -> Relation
++    def mutable_from: (String source) -> Relation
++    def mutable_or: (Relation other) -> Relation
++    def mutable_with_recursive: (Hash[Symbol, Array[Relation]] ctes) -> Relation
+     def initialize: (untyped model) -> void
+ 
+     def where: (?untyped condition, *untyped args) -> Relation
+@@ -129,7 +148,7 @@ module ActiveRecord
+     def first_n: (Integer n) -> Array[untyped]
+     def last_n: (Integer n) -> Array[untyped]
+     def count: () -> Integer
+-    def sum: (untyped expr) -> Float
++    def sum: (untyped expr) -> untyped
+     def group_count: () -> Hash[untyped, Integer]
+     def empty?: () -> bool
+     def any?: () -> bool
+@@ -168,14 +187,18 @@ module ActiveRecord
+     # lowerer monomorphizing per call site from the schema, the way
+     # `ids` below can be Array[Integer] because it only ever reads a
+     # primary key.
+-    def pluck: (untyped col) -> Array[untyped]
++    def pluck: (*untyped cols) -> Array[untyped]
++    def minimum: (untyped col) -> untyped
++    def maximum: (untyped col) -> untyped
++    def extremum: (untyped col, String function) -> untyped
+     def pick: (untyped col) -> untyped
+     def ids: () -> Array[Integer]
+     def find: (Integer id) -> untyped
+     def find_by: (untyped conditions) -> untyped
+     def find_by!: (untyped conditions) -> untyped
+     def first_or_initialize: () -> untyped
+-    def find_or_create_by: (Hash[Symbol, untyped] conditions) -> untyped
++    def find_or_create_by: (Hash[Symbol, untyped] conditions) ?{ (untyped) -> untyped } -> untyped
++    def find_or_create_by!: (Hash[Symbol, untyped] conditions) ?{ (untyped) -> untyped } -> untyped
+ 
+     def to_sql: () -> String
+     def to_subquery_sql: () -> String
+diff --git a/runtime/ruby/active_storage.rb b/runtime/ruby/active_storage.rb
+index 91bee90a..6843b9a5 100644
+--- a/runtime/ruby/active_storage.rb
++++ b/runtime/ruby/active_storage.rb
+@@ -1087,6 +1087,12 @@ module ActiveStorage
+       @blob
+     end
+ 
++    def download
++      b = blob
++      raise FileNotFoundError, "No file attached" if b.nil?
++      b.download
++    end
++
+     def filename
+       b = blob
+       b.nil? ? nil : b.filename
+diff --git a/runtime/ruby/active_storage.rbs b/runtime/ruby/active_storage.rbs
+index 9ce233ae..c876b7bf 100644
+--- a/runtime/ruby/active_storage.rbs
++++ b/runtime/ruby/active_storage.rbs
+@@ -167,6 +167,7 @@ module ActiveStorage
+   end
+ 
+   class Attached
++    def download: () -> String
+     @record_type: String
+     @record_id: Integer
+     @name: String
+diff --git a/runtime/ruby/active_support_ext.rb b/runtime/ruby/active_support_ext.rb
+index 447fe12b..be1d19d3 100644
+--- a/runtime/ruby/active_support_ext.rb
++++ b/runtime/ruby/active_support_ext.rb
+@@ -34,6 +34,17 @@
+ # Integer's `"0"` is not blank, a Symbol's `"sym"` is not blank, and a
+ # String is itself.
+ module ActiveSupport
++  def self.string_first(text, count)
++    raise ArgumentError, "negative length" if count < 0
++    text[0, count]
++  end
++
++  def self.string_last(text, count)
++    raise ArgumentError, "negative length" if count < 0
++    return "" if count == 0
++    text.length <= count ? text : text[text.length - count, count]
++  end
++
+   def self.blank?(value)
+     return true if value.nil?
+     return true if value == false
+diff --git a/runtime/ruby/active_support_ext.rbs b/runtime/ruby/active_support_ext.rbs
+index ab3d485a..4478caa9 100644
+--- a/runtime/ruby/active_support_ext.rbs
++++ b/runtime/ruby/active_support_ext.rbs
+@@ -1,4 +1,6 @@
+ module ActiveSupport
++  def self.string_first: (String text, Integer count) -> String
++  def self.string_last: (String text, Integer count) -> String
+   def self.blank?: (untyped value) -> bool
+ 
+   def self.present?: (untyped value) -> bool
+diff --git a/runtime/ruby/params.rb b/runtime/ruby/params.rb
+index 059afe52..2f0ad134 100644
+--- a/runtime/ruby/params.rb
++++ b/runtime/ruby/params.rb
+@@ -104,4 +104,29 @@ module Params
+     end
+     !narrowed.nil?
+   end
++  def self.array_provided(sub, key)
++    sub.key?(key) && sub[key].is_a?(Array)
++  end
++
++  def self.array(sub, key)
++    value = sub.fetch(key, [])
++    if value.is_a?(Array)
++      value.reject { |item| item.nil? || item.is_a?(Hash) || item.is_a?(Array) }.map { |item| item.to_s }
++    else
++      []
++    end
++  end
++
++  # Scalar permits reject arrays and nested objects even when a malicious
++  # request supplies one under an otherwise permitted key.
++  def self.permit_scalars(params, keys)
++    permitted = {}
++    keys.each do |key|
++      next unless params.key?(key)
++      value = params[key]
++      permitted[key] = value unless value.is_a?(Hash) || value.is_a?(Array)
++    end
++    permitted
++  end
++
+ end
+diff --git a/runtime/ruby/params.rbs b/runtime/ruby/params.rbs
+index c4e713be..f10da808 100644
+--- a/runtime/ruby/params.rbs
++++ b/runtime/ruby/params.rbs
+@@ -1,6 +1,9 @@
+ module Params
++  def self.permit_scalars: (Hash[String, Roundhouse::ParamValue], Array[String]) -> Hash[String, untyped]
+   def self.sub: (Hash[String, Roundhouse::ParamValue], String) -> Hash[String, Roundhouse::ParamValue]
+   def self.str: (Hash[String, Roundhouse::ParamValue], String, String) -> String
+   def self.provided: (Hash[String, Roundhouse::ParamValue], String) -> bool
+   def self.require_key: (Hash[String, Roundhouse::ParamValue], String) -> Roundhouse::ParamValue
++  def self.array_provided: (Hash[String, Roundhouse::ParamValue], String) -> bool
++  def self.array: (Hash[String, Roundhouse::ParamValue], String) -> Array[String]
+ end
+diff --git a/runtime/spinel/active_support_duration.rb b/runtime/spinel/active_support_duration.rb
+index e5a5363c..32dd0c75 100644
+--- a/runtime/spinel/active_support_duration.rb
++++ b/runtime/spinel/active_support_duration.rb
+@@ -26,8 +26,10 @@ module ActiveSupport
+     SECONDS_PER_MONTH = 2629746
+     SECONDS_PER_YEAR = 31556952
+ 
+-    def initialize(seconds)
++    def initialize(seconds, months = 0, days = 0)
+       @seconds = seconds
++      @months = months
++      @days = days
+     end
+ 
+     def self.seconds(n)
+@@ -55,19 +57,19 @@ module ActiveSupport
+     end
+ 
+     def self.days(n)
+-      new(n * SECONDS_PER_DAY)
++      new(n * SECONDS_PER_DAY, 0, n)
+     end
+ 
+     def self.day(n)
+-      new(n * SECONDS_PER_DAY)
++      new(n * SECONDS_PER_DAY, 0, n)
+     end
+ 
+     def self.weeks(n)
+-      new(n * SECONDS_PER_WEEK)
++      new(n * SECONDS_PER_WEEK, 0, n * 7)
+     end
+ 
+     def self.week(n)
+-      new(n * SECONDS_PER_WEEK)
++      new(n * SECONDS_PER_WEEK, 0, n * 7)
+     end
+ 
+     def self.fortnights(n)
+@@ -79,19 +81,19 @@ module ActiveSupport
+     end
+ 
+     def self.months(n)
+-      new(n * SECONDS_PER_MONTH)
++      new(n * SECONDS_PER_MONTH, n, 0)
+     end
+ 
+     def self.month(n)
+-      new(n * SECONDS_PER_MONTH)
++      new(n * SECONDS_PER_MONTH, n, 0)
+     end
+ 
+     def self.years(n)
+-      new(n * SECONDS_PER_YEAR)
++      new(n * SECONDS_PER_YEAR, n * 12, 0)
+     end
+ 
+     def self.year(n)
+-      new(n * SECONDS_PER_YEAR)
++      new(n * SECONDS_PER_YEAR, n * 12, 0)
+     end
+ 
+     # A Time minus seconds is a Time, so `ago`/`from_now` (and the
+@@ -101,19 +103,26 @@ module ActiveSupport
+     # `travel_to` in a test moves what `70.days.ago` means. See the
+     # TEST CLOCK block in active_support_time_parsing.rb.
+     def ago
+-      ActiveSupport.now.utc - @seconds
++      shift(-1)
+     end
+ 
+     def until
+-      ActiveSupport.now.utc - @seconds
++      shift(-1)
+     end
+ 
+     def from_now
+-      ActiveSupport.now.utc + @seconds
++      shift(1)
+     end
+ 
+     def since
+-      ActiveSupport.now.utc + @seconds
++      shift(1)
++    end
++
++    def shift(direction)
++      time = ActiveSupport.now
++      time = ActiveSupport.months_since(time, @months * direction) if @months != 0
++      time = ActiveSupport.days_since(time, @days * direction) if @days != 0
++      time + direction * (@seconds - @months * SECONDS_PER_MONTH - @days * SECONDS_PER_DAY)
+     end
+ 
+     def to_i
+diff --git a/runtime/spinel/active_support_duration.rbs b/runtime/spinel/active_support_duration.rbs
+index 599ab3d5..017a4baa 100644
+--- a/runtime/spinel/active_support_duration.rbs
++++ b/runtime/spinel/active_support_duration.rbs
+@@ -7,8 +7,10 @@
+ module ActiveSupport
+   class Duration
+     @seconds: Integer
++    @months: Integer
++    @days: Integer
+ 
+-    def initialize: (Integer seconds) -> void
++    def initialize: (Integer seconds, ?Integer months, ?Integer days) -> void
+     def self.seconds: (Integer n) -> Duration
+     def self.second: (Integer n) -> Duration
+     def self.minutes: (Integer n) -> Duration
+@@ -25,6 +27,7 @@ module ActiveSupport
+     def self.month: (Integer n) -> Duration
+     def self.years: (Integer n) -> Duration
+     def self.year: (Integer n) -> Duration
++    def shift: (Integer direction) -> Time
+     def ago: () -> Time
+     def until: () -> Time
+     def from_now: () -> Time
+diff --git a/runtime/spinel/multipart.rb b/runtime/spinel/multipart.rb
+index eb71d1f9..534a84ec 100644
+--- a/runtime/spinel/multipart.rb
++++ b/runtime/spinel/multipart.rb
+@@ -36,6 +36,10 @@ module ActionDispatch
+     # so a part never touches the disk before the storage service
+     # decides where it lives.
+     class UploadedFile
++      def tempfile
++        @tempfile ||= StringIO.new(@data)
++      end
++
+       attr_reader :original_filename, :content_type
+ 
+       def initialize(data, original_filename, content_type)
+diff --git a/runtime/spinel/multipart.rbs b/runtime/spinel/multipart.rbs
+index 106f0aa8..e66ab486 100644
+--- a/runtime/spinel/multipart.rbs
++++ b/runtime/spinel/multipart.rbs
+@@ -2,6 +2,7 @@
+ module ActionDispatch
+   module Http
+     class UploadedFile
++      def tempfile: () -> StringIO
+       @data: String
+       @original_filename: String
+       @content_type: String
+diff --git a/runtime/spinel/scaffold/main.rb b/runtime/spinel/scaffold/main.rb
+index f2ce9568..68461033 100644
+--- a/runtime/spinel/scaffold/main.rb
++++ b/runtime/spinel/scaffold/main.rb
+@@ -308,7 +308,6 @@ module Main
+     request_path = req.path
+     if request_path.end_with?(".json")
+       request_format = :json
+-      request_path = request_path[0...-5]
+     end
+     # Turbo Stream is negotiated by the Accept header, not by a path
+     # suffix — a Turbo-driven form POST asks for
+diff --git a/src/analyze/body/send.rs b/src/analyze/body/send.rs
+index b61c373b..2ece44b2 100644
+--- a/src/analyze/body/send.rs
++++ b/src/analyze/body/send.rs
+@@ -1670,7 +1670,8 @@ pub(super) fn time_method(method: &Symbol) -> Option<Ty> {
+         | "prev_month" | "next_month" | "last_month" | "months_ago" | "months_since"
+         | "prev_year" | "next_year" | "last_year" | "years_ago" | "years_since"
+         | "change" | "advance" | "ago" | "since" | "from_now"
+-        | "round" | "floor" | "ceil" | "to_date" | "to_datetime" => time(),
++        | "round" | "floor" | "ceil" | "to_datetime" => time(),
++        "to_date" => Ty::Class { id: ClassId(Symbol::from("Date")), args: vec![] },
+         // `Time - x` is `Time` for a Duration arg but a Float for a
+         // Time arg — the receiver-only dispatch can't disambiguate, so
+         // gradual `Untyped` (the chains read `.before?`/`/ 60`/`> 1.minute`
+diff --git a/src/analyze/mod.rs b/src/analyze/mod.rs
+index 7037f18a..f77315aa 100644
+--- a/src/analyze/mod.rs
++++ b/src/analyze/mod.rs
+@@ -3229,8 +3229,13 @@ impl Analyzer {
+             if ctx.local_bindings.contains_key(name) {
+                 continue;
+             }
+-            if let Some(ty) =
+-                self.declared_param_ty(class_id, action_name, params.fields.len() + i, name)
++            let index = params.fields.len() + i;
++            let observed = [own, from_origin].into_iter().flatten()
++                .filter_map(|v| v.get(index).cloned())
++                .filter(|t| !matches!(t, Ty::Var { .. }))
++                .reduce(unify_param_ty);
++            if let Some(ty) = observed.or_else(||
++                self.declared_param_ty(class_id, action_name, index, name))
+             {
+                 ctx.local_bindings.insert(name.clone(), ty);
+             }
+@@ -3981,6 +3986,16 @@ impl Analyzer {
+                 record(&lc.name, m);
+             }
+         }
++        drop(record);
++        for controller in &app.controllers {
++            for action in controller.actions() {
++                let mut shape: Vec<(Symbol, bool)> = action.params.fields.keys()
++                    .map(|n| (n.clone(), false)).collect();
++                shape.extend(action.opt_params.iter().map(|(n, _)| (n.clone(), false)));
++                shape.extend(action.kw_params.iter().map(|(n, _)| (n.clone(), true)));
++                out.insert((controller.name.clone(), action.name.clone()), Some(shape));
++            }
++        }
+         out.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))).collect()
+     }
+ 
+@@ -5382,14 +5397,17 @@ fn captured_block_ty() -> Ty {
+ 
+ fn param_ty_with_default(observed: Option<Ty>, param: &crate::dialect::Param) -> Option<Ty> {
+     let observed = observed.filter(|t| !matches!(t, Ty::Var { .. }));
++    let empty_default = param.default.as_ref().is_some_and(|d| matches!(&*d.node, ExprNode::Hash { entries, .. } if entries.is_empty()) || matches!(&*d.node, ExprNode::Array { elements, .. } if elements.is_empty()));
+     let default = param
+         .default
+         .as_ref()
+         .and_then(|d| d.ty.clone())
+         .filter(|t| !matches!(t, Ty::Var { .. }));
+     match (observed, default) {
++        (Some(o), Some(_)) if empty_default => Some(o),
+         (Some(o), Some(d)) => Some(crate::analyze::body::union_of(o, d)),
+         (Some(o), None) => Some(o),
++        (None, Some(Ty::Nil)) => Some(Ty::Untyped),
+         (None, Some(d)) => Some(d),
+         (None, None) => None,
+     }
+diff --git a/src/analyze/registry/controllers.rs b/src/analyze/registry/controllers.rs
+index 64dd1963..7d4c35db 100644
+--- a/src/analyze/registry/controllers.rs
++++ b/src/analyze/registry/controllers.rs
+@@ -44,8 +44,8 @@ pub(in crate::analyze) fn register(
+     // and per-controller overrides land when a fixture forces them.
+     let mut app_ctrl = ClassInfo::default();
+     let params_ty = Ty::Hash {
+-        key: Box::new(Ty::Sym),
+-        value: Box::new(Ty::Str),
++        key: Box::new(Ty::Str),
++        value: Box::new(Ty::Untyped),
+     };
+     app_ctrl.class_methods.insert(Symbol::from("params"), params_ty);
+     app_ctrl.class_methods.insert(Symbol::from("session"),
+diff --git a/src/analyze/registry/stdlib.rs b/src/analyze/registry/stdlib.rs
+index a7cff0c8..764a70ed 100644
+--- a/src/analyze/registry/stdlib.rs
++++ b/src/analyze/registry/stdlib.rs
+@@ -79,8 +79,8 @@ pub(in crate::analyze) fn register(classes: &mut HashMap<ClassId, ClassInfo>) {
+     // wired, but the call shape needs to resolve.
+     for name in ["Date", "DateTime"] {
+         let mut cls = ClassInfo::default();
+-        cls.class_methods.insert(Symbol::from("current"), Ty::Untyped);
+-        cls.class_methods.insert(Symbol::from("today"), Ty::Untyped);
++        cls.class_methods.insert(Symbol::from("current"), Ty::Class { id: ClassId(Symbol::from(name)), args: vec![] });
++        cls.class_methods.insert(Symbol::from("today"), Ty::Class { id: ClassId(Symbol::from(name)), args: vec![] });
+         cls.class_methods.insert(Symbol::from("now"), Ty::Untyped);
+         // The parse family has a concrete answer where `current` /
+         // `today` / `now` above do not yet: `Ty::Time` is roundhouse's
+@@ -88,7 +88,16 @@ pub(in crate::analyze) fn register(classes: &mut HashMap<ClassId, ClassInfo>) {
+         // entries would move types in every app that calls them, so it
+         // is deliberately not part of this change.
+         for parser in ["parse", "strptime", "iso8601", "civil"] {
+-            cls.class_methods.insert(Symbol::from(parser), Ty::Time);
++            cls.class_methods.insert(Symbol::from(parser), Ty::Class { id: ClassId(Symbol::from(name)), args: vec![] });
++        }
++        for method in ["beginning_of_month", "end_of_month", "beginning_of_week", "end_of_week", "advance", "to_date"] {
++            cls.instance_methods.insert(Symbol::from(method), Ty::Class { id: ClassId(Symbol::from(name)), args: vec![] });
++        }
++        for method in ["iso8601", "strftime", "to_s"] {
++            cls.instance_methods.insert(Symbol::from(method), Ty::Str);
++        }
++        for method in ["year", "month", "mon", "day", "mday", "wday"] {
++            cls.instance_methods.insert(Symbol::from(method), Ty::Int);
+         }
+         classes.insert(ClassId(Symbol::from(name)), cls);
+     }
+diff --git a/src/emit/ruby/library.rs b/src/emit/ruby/library.rs
+index 8dd48e0d..a14eaa22 100644
+--- a/src/emit/ruby/library.rs
++++ b/src/emit/ruby/library.rs
+@@ -2168,6 +2168,7 @@ pub(crate) fn apply_helper_lowering(lcs: &mut [LibraryClass], app: &App) {
+         .collect();
+     let helper_ivars = helper_read_ivars(app);
+     let view_ivars = view_assigned_ivars(app);
++    let route_segments = crate::lower::routes::helper_id_segments(app);
+     for lc in lcs.iter_mut() {
+         // CONTROLLERS in the index provide `helper_method`s to views:
+         // only the call-site rewrite applies to them — their methods
+@@ -2188,6 +2189,14 @@ pub(crate) fn apply_helper_lowering(lcs: &mut [LibraryClass], app: &App) {
+         let own_methods: std::collections::HashSet<Symbol> =
+             lc.methods.iter().map(|m| m.name.clone()).collect();
+         for m in &mut lc.methods {
++            // Service classes including url_helpers need the same dynamic
++            // query-option split as controllers. Qualifying the call alone
++            // would bind its trailing Hash as a positional path argument.
++            if lc.includes.iter().any(|i| i.0.as_str() == "RouteHelpers") {
++                m.body = crate::lower::controller_to_library::rewrites::rewrite_route_helpers(
++                    &m.body, &own_methods, &route_segments,
++                );
++            }
+             // A helper module's own methods become module-functions so the
+             // rewritten `Module.method` call has a real target — Rails mixed
+             // them into a view instance, but the emitted views are module
+diff --git a/src/emit/shared/schema_sql.rs b/src/emit/shared/schema_sql.rs
+index a0a0069a..cfd6e805 100644
+--- a/src/emit/shared/schema_sql.rs
++++ b/src/emit/shared/schema_sql.rs
+@@ -152,6 +152,17 @@ pub fn render_schema_statements_for(schema: &Schema, dialect: Dialect) -> Result
+             if !col.nullable {
+                 line.push_str(" NOT NULL");
+             }
++            if let Some(default) = &col.default {
++                let literal = match &col.col_type {
++                    ColumnType::Boolean => match dialect {
++                        Dialect::Sqlite => if matches!(default.as_str(), "true" | "t" | "1") { "1" } else { "0" }.to_string(),
++                        Dialect::Postgres => default.clone(),
++                    },
++                    ColumnType::Integer | ColumnType::BigInt | ColumnType::Float | ColumnType::Decimal { .. } => default.clone(),
++                    _ => format!("'{}'", default.replace('\'', "''")),
++                };
++                line.push_str(&format!(" DEFAULT {literal}"));
++            }
+             lines.push(line);
+         }
+         writeln!(s, "{}", lines.join(",\n")).unwrap();
+@@ -293,7 +304,7 @@ end
+             vec![
+                 "CREATE TABLE IF NOT EXISTS articles (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  \
+                  title TEXT NOT NULL,\n  body TEXT,\n  author_id INTEGER NOT NULL,\n  \
+-                 published INTEGER NOT NULL,\n  created_at TEXT NOT NULL\n)",
++                 published INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL\n)",
+                 "CREATE INDEX IF NOT EXISTS index_articles_on_author_id ON articles (author_id)",
+                 "CREATE UNIQUE INDEX IF NOT EXISTS index_articles_on_title_and_author_id ON articles (title, author_id)",
+             ]
+@@ -309,7 +320,7 @@ end
+             vec![
+                 "CREATE TABLE IF NOT EXISTS \"articles\" (\n  \"id\" bigserial PRIMARY KEY,\n  \
+                  \"title\" character varying NOT NULL,\n  \"body\" text,\n  \
+-                 \"author_id\" bigint NOT NULL,\n  \"published\" boolean NOT NULL,\n  \
++                 \"author_id\" bigint NOT NULL,\n  \"published\" boolean NOT NULL DEFAULT false,\n  \
+                  \"created_at\" timestamp(6) without time zone NOT NULL\n)",
+                 "CREATE INDEX IF NOT EXISTS \"index_articles_on_author_id\" ON \"articles\" (\"author_id\")",
+                 "CREATE UNIQUE INDEX IF NOT EXISTS \"index_articles_on_title_and_author_id\" \
+diff --git a/src/ingest/model.rs b/src/ingest/model.rs
+index a2ac582f..247a8bb8 100644
+--- a/src/ingest/model.rs
++++ b/src/ingest/model.rs
+@@ -2053,7 +2053,8 @@ fn ty_of_column(t: &ColumnType) -> Ty {
+         ColumnType::Float | ColumnType::Decimal { .. } => Ty::Float,
+         ColumnType::String { .. } | ColumnType::Text => Ty::Str,
+         ColumnType::Boolean => Ty::Bool,
+-        ColumnType::Date | ColumnType::DateTime | ColumnType::Time => Ty::Time,
++        ColumnType::Date => Ty::Class { id: ClassId(Symbol::from("Date")), args: vec![] },
++        ColumnType::DateTime | ColumnType::Time => Ty::Time,
+         ColumnType::Binary => Ty::Str,
+         // Rails exposes a schema-less JSON value here: it may be an
+         // Array, Hash, scalar, or nil, so neither String nor one fixed
+diff --git a/src/ingest/schema.rs b/src/ingest/schema.rs
+index 055c7760..a5989649 100644
+--- a/src/ingest/schema.rs
++++ b/src/ingest/schema.rs
+@@ -790,6 +790,8 @@ struct ColumnOpts {
+ 
+ // Not `string_value` alone: schema.rb dumps an integer, float or boolean default unquoted (`default: 0`, `default: true`).
+ fn default_value(node: &Node<'_>) -> Option<String> {
++    if node.as_array_node().is_some_and(|n| n.elements().is_empty()) { return Some("[]".to_string()); }
++    if node.as_hash_node().is_some_and(|n| n.elements().is_empty()) { return Some("{}".to_string()); }
+     if let Some(n) = integer_value(node) {
+         return Some(n.to_string());
+     }
+diff --git a/src/lower/controller_to_library/mod.rs b/src/lower/controller_to_library/mod.rs
+index fe8ee206..681d5e87 100644
+--- a/src/lower/controller_to_library/mod.rs
++++ b/src/lower/controller_to_library/mod.rs
+@@ -331,7 +331,10 @@ pub fn lower_controllers_with_arel_views_assocs_and_routes(
+         // `None` → legacy: every public method is an action.
+         let routed = routed_by_controller
+             .map(|m| m.get(&controller.name).cloned().unwrap_or_default());
+-        let methods = build_methods(controller, controllers, &params_specs, &json_actions, &text_format_actions, routed.as_ref(), &view_ivars, &partials, format_breadth, route_id_segments, inferred_params);
++        let mut methods = build_methods(controller, controllers, &params_specs, &json_actions, &text_format_actions, routed.as_ref(), &view_ivars, &partials, format_breadth, route_id_segments, inferred_params);
++        for method in &mut methods {
++            crate::lower::params_permit::rewrite_residual(&mut method.body);
++        }
+         all_methods.push((methods, controller));
+     }
+     subclass_template_hooks(&mut all_methods, controllers, &view_ivars, &partials);
+@@ -2421,7 +2424,7 @@ fn action_to_method(
+             // Fallback for helpers whose permit list we didn't recognize
+             // (campfire's `role_params` builds a bare Hash) — stays
+             // typed-coarse rather than panicking.
+-            Ty::Hash { key: Box::new(Ty::Sym), value: Box::new(Ty::Untyped) }
++            a.body.ty.clone().filter(|ty| !ty.is_unknown()).unwrap_or(Ty::Untyped)
+         }
+     } else if is_public {
+         // Routed actions terminate in render/redirect → Nil.
+@@ -2539,7 +2542,12 @@ fn mark_optional(sig: Ty, params: &[Param]) -> Ty {
+     match sig {
+         Ty::Fn { params: mut tps, block, ret, effects } => {
+             for (tp, p) in tps.iter_mut().zip(params) {
+-                if p.default.is_some() && !p.keyword && !p.rest {
++                if p.keyword {
++                    tp.kind = if p.rest { crate::ty::ParamKind::KeywordRest }
++                        else { crate::ty::ParamKind::Keyword { required: p.default.is_none() } };
++                } else if p.rest {
++                    tp.kind = crate::ty::ParamKind::Rest;
++                } else if p.default.is_some() {
+                     tp.kind = crate::ty::ParamKind::Optional;
+                 }
+             }
+diff --git a/src/lower/controller_to_library/params.rs b/src/lower/controller_to_library/params.rs
+index 8d9c515f..184e1260 100644
+--- a/src/lower/controller_to_library/params.rs
++++ b/src/lower/controller_to_library/params.rs
+@@ -56,6 +56,7 @@ use crate::ident::{ClassId, Symbol, VarId};
+ use crate::naming::camelize;
+ use crate::span::Span;
+ use crate::ty::Ty;
++use crate::lower::typing::fn_sig;
+ 
+ use super::util::map_expr;
+ 
+@@ -115,6 +116,7 @@ pub struct ParamsSpec {
+     /// the models are known; empty until then, which is every field a
+     /// String — the shape every emitter already compiles.
+     pub file_fields: std::collections::BTreeSet<Symbol>,
++    pub array_fields: std::collections::BTreeSet<Symbol>,
+ }
+ 
+ /// Every distinct `(resource, fields)` permit list in the app, deduped.
+@@ -195,6 +197,8 @@ impl ParamsSpecs {
+ fn field_ty(spec: &ParamsSpec, field: &Symbol) -> Ty {
+     if spec.file_fields.contains(field) {
+         Ty::Union { variants: vec![uploaded_file_ty(), Ty::Nil] }
++    } else if spec.array_fields.contains(field) {
++        Ty::Array { elem: Box::new(Ty::Str) }
+     } else {
+         Ty::Str
+     }
+@@ -248,6 +252,12 @@ fn field_reads(spec: &ParamsSpec, field: &Symbol, sub: Expr, span: Span) -> (Exp
+             call(uploaded.clone(), "provided", vec![sub.clone(), str_lit(field.as_str())], Ty::Bool),
+             call(uploaded, "from_params", vec![sub, str_lit(field.as_str())], field_ty(spec, field)),
+         )
++    } else if spec.array_fields.contains(field) {
++        let params = vec![Symbol::from("Params")];
++        (
++            call(params.clone(), "array_provided", vec![sub.clone(), str_lit(field.as_str())], Ty::Bool),
++            call(params, "array", vec![sub, str_lit(field.as_str())], field_ty(spec, field)),
++        )
+     } else {
+         let params = vec![Symbol::from("Params")];
+         (
+@@ -376,6 +386,7 @@ pub fn specs_from_lists(lists: &[(Symbol, Vec<Symbol>)]) -> ParamsSpecs {
+                 declaring: Vec::new(),
+                 is_canonical: true,
+                 file_fields: std::collections::BTreeSet::new(),
++                array_fields: std::collections::BTreeSet::new(),
+             })
+             .collect(),
+     }
+@@ -424,6 +435,7 @@ fn record(
+                 declaring: vec![controller.clone()],
+                 is_canonical: false,
+                 file_fields: std::collections::BTreeSet::new(),
++                array_fields: std::collections::BTreeSet::new(),
+             });
+         }
+     }
+@@ -450,8 +462,12 @@ fn collect_from_expr(
+         }
+     }
+     if let Some((resource, fields, nested)) = match_permit_call_full(expr) {
+-        warn_nested_keys(&resource, &nested, controller, expr.span);
+-        record(resource, fields, controller, expr.span, Wants::default(), index, specs);
++        let arrays = permitted_arrays(expr);
++        let unsupported: Vec<Symbol> = nested.into_iter().filter(|k| !arrays.contains(k)).collect();
++        warn_nested_keys(&resource, &unsupported, controller, expr.span);
++        record(resource.clone(), fields.clone(), controller, expr.span, Wants::default(), index, specs);
++        let i = index[&(resource, fields)];
++        specs[i].array_fields.extend(arrays);
+         // Stop here. The merge form (`permit(...).merge(k: v)`) matched
+         // this node with the WIDER field set; recursing would reach the
+         // inner bare permit and — now that specs key on the field list —
+@@ -934,14 +950,16 @@ fn match_permit_call_full(expr: &Expr) -> Option<(Symbol, Vec<Symbol>, Vec<Symbo
+         }
+         let (k, v) = &entries[0];
+         let resource = sym_of(k)?;
+-        let (fields, nested) = sym_array(v)?;
++        let (mut fields, nested) = sym_array(v)?;
++        fields.extend(permitted_arrays(expr));
+         return Some((resource, fields, nested));
+     }
+ 
+     // Form 2: `<x>.permit(...)` where `<x>` is `params.require(:resource)`.
+     if method.as_str() == "permit" {
+         let (resource, _) = match_require_chain(recv)?;
+-        let (fields, nested) = collect_permit_args(args)?;
++        let (mut fields, nested) = collect_permit_args(args)?;
++        fields.extend(permitted_arrays(expr));
+         return Some((resource, fields, nested));
+     }
+ 
+@@ -964,6 +982,24 @@ fn match_permit_call_full(expr: &Expr) -> Option<(Symbol, Vec<Symbol>, Vec<Symbo
+     None
+ }
+ 
++// Only scalar arrays (`key: []`) are supported here; nested permitted
++// hashes retain their diagnostic and cannot cross the mass-assignment boundary.
++fn permitted_arrays(expr: &Expr) -> std::collections::BTreeSet<Symbol> {
++    let mut keys = std::collections::BTreeSet::new();
++    fn visit(e: &Expr, keys: &mut std::collections::BTreeSet<Symbol>) {
++        if let ExprNode::Hash { entries, .. } = &*e.node {
++            for (k, v) in entries {
++                if matches!(&*v.node, ExprNode::Array { elements, .. } if elements.is_empty()) {
++                    if let Some(key) = sym_of(k) { keys.insert(key); }
++                }
++            }
++        }
++        e.node.for_each_child(&mut |child| visit(child, keys));
++    }
++    visit(expr, &mut keys);
++    keys
++}
++
+ /// Match `params.require(:resource)` — returns the resource symbol on
+ /// success. The unit second tuple element is reserved for shapes that
+ /// might carry a third component later (e.g. nested permits).
+@@ -1187,7 +1223,7 @@ fn build_params_class(spec: &ParamsSpec) -> LibraryClass {
+     methods.push(synth_index_read(spec));
+     methods.push(synth_to_h(spec));
+     if spec.wants_to_attrs {
+-        methods.push(synth_to_attrs(&spec.class_id, &spec.fields));
++        methods.push(synth_to_attrs(spec));
+     }
+     if spec.wants_except {
+         methods.push(synth_except(&spec.class_id, &spec.fields));
+@@ -1251,6 +1287,8 @@ fn synth_params_initialize(spec: &ParamsSpec) -> MethodDef {
+         // A file field's "nothing" is nil, not "" — see `field_ty`.
+         let rhs = if spec.file_fields.contains(field) {
+             expr(ExprNode::Lit { value: Literal::Nil }, Some(Ty::Nil))
++        } else if spec.array_fields.contains(field) {
++            expr(ExprNode::Array { elements: Vec::new(), style: crate::expr::ArrayStyle::Brackets }, Some(field_ty(spec, field)))
+         } else {
+             expr(ExprNode::Lit { value: Literal::Str { value: String::new() } }, Some(Ty::Str))
+         };
+@@ -1603,7 +1641,9 @@ fn synth_from_raw(spec: &ParamsSpec) -> MethodDef {
+ /// `""` — the same distinction `<field>_provided` was introduced for.
+ /// Writing it would overwrite a column default on create, which is the
+ /// data loss the presence slots were added to stop.
+-fn synth_to_attrs(owner: &ClassId, fields: &[Symbol]) -> MethodDef {
++fn synth_to_attrs(spec: &ParamsSpec) -> MethodDef {
++    let owner = &spec.class_id;
++    let fields = &spec.fields;
+     use crate::lower::typing::with_ty;
+     let attrs = Symbol::from("attrs");
+     // The declared type is `initialize`'s parameter type verbatim: this
+@@ -1643,7 +1683,7 @@ fn synth_to_attrs(owner: &ClassId, fields: &[Symbol]) -> MethodDef {
+         );
+         let value = with_ty(
+             Expr::new(Span::synthetic(), ExprNode::Ivar { name: field.clone() }),
+-            Ty::Str,
++            if spec.array_fields.contains(field) { Ty::Array { elem: Box::new(Ty::Str) } } else { Ty::Str },
+         );
+         let write = Expr::new(
+             Span::synthetic(),
+@@ -1792,90 +1832,22 @@ fn expr(node: ExprNode, ty: Option<Ty>) -> Expr {
+ }
+ 
+ fn synth_to_h(spec: &ParamsSpec) -> MethodDef {
+-    let owner = &spec.class_id;
+-    let entries: Vec<(Expr, Expr)> = spec
+-        .fields
+-        .iter()
+-        .map(|field| {
+-            let key = expr(
+-                ExprNode::Lit { value: Literal::Str { value: field.as_str().to_string() } },
+-                Some(Ty::Str),
+-            );
+-            let ivar = expr(ExprNode::Ivar { name: field.clone() }, Some(field_ty(spec, field)));
+-            // A String hash cannot hold a file: the uploaded NAME stands
+-            // in, which is what Rails' own `to_s` on one gives.
+-            let value = if spec.file_fields.contains(field) {
+-                expr(
+-                    ExprNode::Send {
+-                        recv: Some(expr(
+-                            ExprNode::Const {
+-                                path: uploaded_file_class()
+-                                    .0
+-                                    .as_str()
+-                                    .split("::")
+-                                    .map(Symbol::from)
+-                                    .collect(),
+-                            },
+-                            None,
+-                        )),
+-                        method: Symbol::from("name_of"),
+-                        args: vec![ivar],
+-                        block: None,
+-                        parenthesized: true,
+-                    },
+-                    Some(Ty::Str),
+-                )
+-            } else {
+-                ivar
+-            };
+-            (key, value)
+-        })
+-        .collect();
+-    let hash_ty = Ty::Hash {
+-        key: Box::new(Ty::Str),
+-        value: Box::new(Ty::Str),
+-    };
+-    let hash = Expr {
+-        span: Span::synthetic(),
+-        node: Box::new(ExprNode::Hash { entries, kwargs: false }),
+-        ty: Some(hash_ty.clone()),
+-        effects: EffectSet::default(),
+-        leading_blank_line: false,
+-        diagnostic: None,
+-        hint: None,
+-        decisions: 0,
+-    };
+-    let ret_ty = hash_ty;
+-    MethodDef {
+-        name_span: crate::span::Span::synthetic(),
+-        name: Symbol::from("to_h"),
+-        receiver: MethodReceiver::Instance,
+-        params: Vec::new(),
+-        body: hash,
+-        signature: Some(fn_sig(vec![], ret_ty)),
+-        effects: EffectSet::default(),
+-        enclosing_class: Some(owner.0.clone()),
+-        kind: AccessorKind::Method,
+-        is_async: false,
+-            mutates_self: false,
+-            block_param: None,
+-    }
+-}
+-
+-fn fn_sig(params: Vec<(Symbol, Ty)>, ret: Ty) -> Ty {
+-    Ty::Fn {
+-        params: params
+-            .into_iter()
+-            .map(|(name, ty)| crate::ty::Param {
+-                name,
+-                ty,
+-                kind: crate::ty::ParamKind::Required,
+-            })
+-            .collect(),
+-        block: None,
+-        ret: Box::new(ret),
+-        effects: crate::effect::EffectSet::pure(),
++    let mut method = synth_to_attrs(spec);
++    method.name = Symbol::from("to_h");
++    fn strings(e: &mut Expr, spec: &ParamsSpec) {
++        e.node.for_each_child_mut(&mut |c| strings(c, spec));
++        if let ExprNode::Lit { value: Literal::Sym { value } } = &*e.node {
++            *e.node = ExprNode::Lit { value: Literal::Str { value: value.as_str().to_string() } };
++            e.ty = Some(Ty::Str);
++        }
++        if let ExprNode::Ivar { name } = &*e.node {
++            if spec.fields.contains(name) { e.ty = Some(field_ty(spec, name)); }
++        }
++        if let Some(Ty::Hash { key, .. }) = &mut e.ty { **key = Ty::Str; }
+     }
++    strings(&mut method.body, spec);
++    method.signature = Some(crate::lower::typing::fn_sig(Vec::new(), Ty::Hash { key: Box::new(Ty::Str), value: Box::new(Ty::Untyped) }));
++    method
+ }
+ 
+ /// Build the `ClassInfo` registry entry for a synthesized Params class
+diff --git a/src/lower/enumerable_ext.rs b/src/lower/enumerable_ext.rs
+index 650f4658..fcc5e2f5 100644
+--- a/src/lower/enumerable_ext.rs
++++ b/src/lower/enumerable_ext.rs
+@@ -74,6 +74,16 @@ fn rewrite(expr: &mut Expr) {
+     // member of a group direct room). Both halves answer `to_a`, and
+     // on the Array that follows `first(n)` means what Ruby means.
+     if matches!(method.as_str(), "first" | "last") && args.len() == 1 && block.is_none() {
++        if matches!(recv.as_ref().and_then(|r| r.ty.as_ref()), Some(Ty::Str)) {
++            let receiver = recv.take().expect("checked above");
++            let size = args.remove(0);
++            *recv = Some(Expr::new(span, ExprNode::Const { path: vec![Symbol::from("ActiveSupport")] }));
++            *method = Symbol::from(if method.as_str() == "first" { "string_first" } else { "string_last" });
++            args.extend([receiver, size]);
++            expr.ty = Some(Ty::Str);
++            *parenthesized = true;
++            return;
++        }
+         if let Some(array_ty) = recv.as_ref().and_then(|r| relation_or_array_half(r.ty.as_ref())) {
+             let receiver = recv.take().expect("checked above");
+             let mut to_a = Expr::new(
+diff --git a/src/lower/helper_kwargs.rs b/src/lower/helper_kwargs.rs
+index 77dc3e0e..f3cbf405 100644
+--- a/src/lower/helper_kwargs.rs
++++ b/src/lower/helper_kwargs.rs
+@@ -58,6 +58,7 @@ use crate::ident::Symbol;
+ 
+ pub fn apply_helper_kwarg_positional_lowering(app: &mut App) {
+     apply_to_test_modules(app);
++    preserve_contextual_keywords(app);
+     apply_to_library_class_calls(app);
+     let params = helper_param_names(app);
+     if params.is_empty() {
+@@ -70,6 +71,30 @@ pub fn apply_helper_kwarg_positional_lowering(app: &mut App) {
+     }
+ }
+ 
++/// A default reading the callee's context cannot safely be copied into an
++/// omitted argument at the caller. Keep the original named binding on such
++/// library methods instead of flattening keywords and passing a Hash into
++/// the first positional slot. Required keywords are already preserved.
++fn preserve_contextual_keywords(app: &mut App) {
++    for lc in &mut app.library_classes {
++        for method in &mut lc.methods {
++            let contextual = method.params.iter().any(|p| p.from_keyword && p.default.as_ref().is_some_and(|e| !is_context_free(e)));
++            let instance = !lc.is_module && method.receiver == crate::dialect::MethodReceiver::Instance && method.name.as_str() != "initialize";
++            if !contextual && !instance { continue; }
++            for p in &mut method.params {
++                if p.from_keyword { p.keyword = true; }
++            }
++            if let Some(crate::ty::Ty::Fn { params, .. }) = &mut method.signature {
++                for (signature, source) in params.iter_mut().zip(&method.params) {
++                    if source.from_keyword {
++                        signature.kind = crate::ty::ParamKind::Keyword { required: source.default.is_none() };
++                    }
++                }
++            }
++        }
++    }
++}
++
+ /// The same repair for a library class's CLASS method called through
+ /// its constant — lobsters' `Routes.title_path(story, anchor: a)`
+ /// against `def title_path story, anchor: nil` (in `class << self`),
+@@ -85,14 +110,14 @@ fn apply_to_library_class_calls(app: &mut App) {
+     let mut params: HashMap<(String, Symbol), Vec<Slot>> = HashMap::new();
+     for lc in &app.library_classes {
+         for m in &lc.methods {
+-            if m.receiver != crate::dialect::MethodReceiver::Class
++            if (m.receiver != crate::dialect::MethodReceiver::Class && m.name.as_str() != "initialize")
+                 || m.params.iter().any(|p| p.rest || p.keyword)
+                 || !m.params.iter().any(|p| p.from_keyword)
+             {
+                 continue;
+             }
+             params.insert(
+-                (lc.name.0.as_str().to_string(), m.name.clone()),
++                (lc.name.0.as_str().to_string(), if m.name.as_str() == "initialize" { Symbol::from("new") } else { m.name.clone() }),
+                 m.params.iter().map(slot_of).collect(),
+             );
+         }
+@@ -102,11 +127,28 @@ fn apply_to_library_class_calls(app: &mut App) {
+     }
+     let mut rewrite = |e: &mut Expr| rewrite_class_calls(e, &params);
+     super::for_each_hook_body(app, &mut rewrite);
++    // A singleton method can call another singleton method bare. Its
++    // flattened named keywords need the same binding as C.method(...).
++    for lc in &mut app.library_classes {
++        for m in &mut lc.methods {
++            if m.receiver == crate::dialect::MethodReceiver::Class {
++                rewrite_owned_class_calls(&mut m.body, lc.name.0.as_str(), &params);
++            }
++        }
++    }
+     for view in &mut app.views {
+         rewrite_class_calls(&mut view.body, &params);
+     }
+ }
+ 
++fn rewrite_owned_class_calls(e: &mut Expr, class: &str, params: &HashMap<(String, Symbol), Vec<Slot>>) {
++    e.node.for_each_child_mut(&mut |c| rewrite_owned_class_calls(c, class, params));
++    let ExprNode::Send { recv: None, method, args, .. } = &mut *e.node else { return };
++    if let Some(slots) = params.get(&(class.to_string(), method.clone())) {
++        respell(args, slots, true);
++    }
++}
++
+ fn rewrite_class_calls(e: &mut Expr, params: &HashMap<(String, Symbol), Vec<Slot>>) {
+     e.node.for_each_child_mut(&mut |c| rewrite_class_calls(c, params));
+     let ExprNode::Send { recv: Some(recv), method, args, .. } = &mut *e.node else { return };
+diff --git a/src/lower/mod.rs b/src/lower/mod.rs
+index f1f8fd08..4babbb32 100644
+--- a/src/lower/mod.rs
++++ b/src/lower/mod.rs
+@@ -52,6 +52,7 @@ pub mod where_range_split;
+ pub mod params_merge;
+ pub mod csv_generate;
+ pub mod duration;
++pub mod decimal;
+ pub mod and_return;
+ pub mod case_lambda;
+ pub mod first_or_create;
+@@ -764,6 +765,7 @@ pub fn apply_post_analyze_lowerings(
+     ran!("presence_in");
+     enumerable_ext::apply_enumerable_ext_grounding(app);
+     ran!("enumerable_ext");
++    decimal::apply_decimal_grounding(app);
+     time_calendar::apply_time_calendar_grounding(app);
+     ran!("time_calendar");
+     diags.extend(where_range_split::apply_where_range_split(app));
+diff --git a/src/lower/model_to_library/associations.rs b/src/lower/model_to_library/associations.rs
+index 2f53cb4e..4b4daccf 100644
+--- a/src/lower/model_to_library/associations.rs
++++ b/src/lower/model_to_library/associations.rs
+@@ -189,6 +189,7 @@ pub(super) fn push_association_methods(
+                                 })
+                             {
+                                 methods.push(synth_through_collection_writer(owner, name, target));
++                                methods.push(synth_through_id_writer(owner, name, target));
+                                 methods.push(synth_through_sync(
+                                     owner,
+                                     name,
+@@ -559,6 +560,38 @@ fn synth_has_many_id_reader(owner: &ClassId, name: &Symbol) -> MethodDef {
+     }
+ }
+ 
++/// Resolve ids through the target's normal find before assigning the
++/// collection, so missing records raise and the existing writer owns sync.
++fn synth_through_id_writer(owner: &ClassId, name: &Symbol, target: &ClassId) -> MethodDef {
++    let ids = Symbol::from("ids");
++    let id = Symbol::from("rh_target_id");
++    let records = Expr::new(Span::synthetic(), ExprNode::Send {
++        recv: Some(var_ref(ids.clone())), method: Symbol::from("map"), args: vec![],
++        block: Some(Expr::new(Span::synthetic(), ExprNode::Lambda {
++            params: vec![id.clone()], rest_param: None, block_param: None,
++            body: Expr::new(Span::synthetic(), ExprNode::Send {
++                recv: Some(class_const(target)), method: Symbol::from("find"),
++                args: vec![var_ref(id)], block: None, parenthesized: true,
++            }), block_style: crate::expr::BlockStyle::Brace,
++        })), parenthesized: false,
++    });
++    let assign = Expr::new(Span::synthetic(), ExprNode::Send {
++        recv: Some(Expr::new(Span::synthetic(), ExprNode::SelfRef)),
++        method: Symbol::from(format!("{}=", name.as_str())), args: vec![records],
++        block: None, parenthesized: true,
++    });
++    let array = Ty::Array { elem: Box::new(Ty::Int) };
++    MethodDef {
++        name_span: Span::synthetic(),
++        name: Symbol::from(format!("{}_ids=", crate::naming::singularize(name.as_str()))),
++        receiver: MethodReceiver::Instance, params: vec![Param::positional(ids.clone())],
++        body: seq(vec![assign, var_ref(ids.clone())]),
++        signature: Some(fn_sig(vec![(ids, array.clone())], array)),
++        effects: EffectSet::default(), enclosing_class: Some(owner.0.clone()),
++        kind: AccessorKind::Method, is_async: false, mutates_self: true, block_param: None,
++    }
++}
++
+ /// Association-extension methods (`has_many :memberships do def
+ /// grant_to(users) … end end`) FLATTENED onto the owner as
+ /// `<assoc>_<method>` instance methods.
+diff --git a/src/lower/model_to_library/schema.rs b/src/lower/model_to_library/schema.rs
+index 746ddd4c..5e762329 100644
+--- a/src/lower/model_to_library/schema.rs
++++ b/src/lower/model_to_library/schema.rs
+@@ -665,25 +665,32 @@ fn field_storage_setter(table: &Table, field: &Symbol) -> Symbol {
+     }
+ }
+ 
+-/// A permitted param is a String; a `typed_store` scalar's writer takes
+-/// its DECLARED type (`s.integer :avatar_source` → `avatar_source=:
+-/// (Integer)`). The gem casts on write the way ActiveModel does, so the
+-/// typed factory casts here — handing the String through is what spinel
+-/// refused as a contradicted `--rbs` seed on upstream lobsters' User.
+-/// Column writers need nothing: their write side is String-shaped.
+-fn typed_store_param_value(model: &crate::dialect::Model, field: &Symbol, value: Expr) -> Expr {
+-    let attr_ty = crate::lower::typed_store::typed_store_decls(&model.body)
+-        .into_iter()
+-        .flat_map(|(_, attrs)| attrs)
+-        .find(|a| a.name == *field && !a.is_array)
+-        .and_then(|a| crate::analyze::typed_store_ty(a.decl_ty.as_str()));
++/// Params carry strings even when the model writer accepts a numeric or
++/// boolean column. Convert at this boundary, just as Active Record casts
++/// form values before assignment; a C cast of the string pointer corrupts
++/// the stored integer. Virtual typed-store attributes use the same rule.
++fn typed_param_value(model: &Model, table: &Table, field: &Symbol, value: Expr) -> Expr {
++    let attr_ty = table.columns.iter().find(|col| col.name == *field)
++        .map(|col| ty_of_column(&col.col_type))
++        .or_else(|| crate::lower::typed_store::typed_store_decls(&model.body)
++            .into_iter()
++            .flat_map(|(_, attrs)| attrs)
++            .find(|a| a.name == *field && !a.is_array)
++            .and_then(|a| crate::analyze::typed_store_ty(a.decl_ty.as_str())));
+     match attr_ty {
+-        Some(Ty::Int) => no_arg_send(value, "to_i"),
+-        Some(Ty::Float) => no_arg_send(value, "to_f"),
+-        Some(Ty::Bool) => Expr::new(
+-            Span::synthetic(),
+-            ExprNode::Cast { value, target_ty: Ty::Bool },
+-        ),
++        Some(Ty::Int) => with_ty(no_arg_send(value, "to_i"), Ty::Int),
++        Some(Ty::Float) => with_ty(no_arg_send(value, "to_f"), Ty::Float),
++        Some(Ty::Bool) => {
++            // ActiveModel::Type::Boolean's string false values. An empty
++            // string clears a nullable boolean in Rails; the non-null
++            // boolean slots represented here use false for that value.
++            let false_values = with_ty(Expr::new(Span::synthetic(), ExprNode::Array {
++                elements: ["", "0", "f", "F", "false", "FALSE", "off", "OFF"]
++                    .into_iter().map(|s| lit_str(s.to_string())).collect(),
++                style: ArrayStyle::Brackets,
++            }), Ty::Array { elem: Box::new(Ty::Str) });
++            with_ty(no_arg_send(bool_send(false_values, "include?", value), "!"), Ty::Bool)
++        }
+         _ => value,
+     }
+ }
+@@ -759,7 +766,7 @@ fn synth_attr_reader(owner: &ClassId, col: &Column, model: &Model) -> MethodDef
+         // storage ivar.
+         (
+             temporal_reader_body(col),
+-            Ty::Union { variants: vec![Ty::Time, Ty::Nil] },
++            Ty::Union { variants: vec![temporal_value_ty(col), Ty::Nil] },
+         )
+     } else if is_generic_json_col(col, model) {
+         (json_reader_body(col), Ty::Untyped)
+@@ -893,13 +900,13 @@ fn temporal_reader_body(col: &Column) -> Expr {
+                     Span::synthetic(),
+                     ExprNode::Const { path: vec![Symbol::from("ActiveSupport")] },
+                 )),
+-                method: Symbol::from("parse_db_time"),
++                method: Symbol::from(if col.col_type == crate::schema::ColumnType::Date { "parse_db_date" } else { "parse_db_time" }),
+                 args: vec![ivar],
+                 block: None,
+                 parenthesized: true,
+             },
+         ),
+-        Ty::Union { variants: vec![Ty::Time, Ty::Nil] },
++        Ty::Union { variants: vec![temporal_value_ty(col), Ty::Nil] },
+     )
+ }
+ 
+@@ -970,11 +977,11 @@ fn synth_temporal_writer(owner: &ClassId, col: &Column) -> MethodDef {
+     let value_param = Symbol::from("value");
+     let (value_ty, text_ty) = if col.nullable {
+         (
+-            Ty::Union { variants: vec![Ty::Time, Ty::Nil] },
++            Ty::Union { variants: vec![temporal_value_ty(col), Ty::Nil] },
+             Ty::Union { variants: vec![Ty::Str, Ty::Nil] },
+         )
+     } else {
+-        (Ty::Time, Ty::Str)
++        (temporal_value_ty(col), Ty::Str)
+     };
+     let normalize = with_ty(
+         Expr::new(
+@@ -1273,7 +1280,7 @@ pub(super) fn push_from_params_method(
+             ExprNode::Send {
+                 recv: Some(var_ref(instance.clone())),
+                 method: field_storage_setter(table, field),
+-                args: vec![typed_store_param_value(model, field, p_field.clone())],
++                args: vec![typed_param_value(model, table, field, p_field.clone())],
+                 block: None,
+                 parenthesized: false,
+             },
+@@ -3114,6 +3121,14 @@ fn schema_default_literal(col: &Column) -> Option<Expr> {
+             )),
+             _ => None,
+         },
++        ColumnType::Json if raw == "{}" => Some(with_ty(
++            Expr::new(Span::synthetic(), ExprNode::Hash { entries: vec![], kwargs: false }),
++            Ty::Hash { key: Box::new(Ty::Str), value: Box::new(Ty::Untyped) },
++        )),
++        ColumnType::Json if raw == "[]" => Some(with_ty(
++            Expr::new(Span::synthetic(), ExprNode::Array { elements: vec![], style: ArrayStyle::Brackets }),
++            Ty::Array { elem: Box::new(Ty::Untyped) },
++        )),
+         // Temporal / binary / json / reference defaults are SQL
+         // expressions as often as they are literals (`-> { "DATETIME(
+         // 'now') }`), and none of the corpus declares one that isn't.
+@@ -3254,7 +3269,7 @@ fn synth_update_typed(
+             ExprNode::Send {
+                 recv: Some(self_ref()),
+                 method: field_storage_setter(table, field),
+-                args: vec![typed_store_param_value(model, field, p_field)],
++                args: vec![typed_param_value(model, table, field, p_field)],
+                 block: None,
+                 parenthesized: false,
+             },
+@@ -3529,6 +3544,18 @@ fn synth_update_hash(
+     let rich_text: std::collections::BTreeSet<Symbol> =
+         crate::lower::rich_text::rich_text_attrs(model).into_iter().map(|(_s, a)| a).collect();
+     let mut virtuals = super::writable_field_set(model, table);
++    for assoc in model.associations() {
++        if let Association::HasMany { name, through: Some(_), .. } = assoc {
++            let field = Symbol::from(format!("{}_ids", crate::naming::singularize(name.as_str())));
++            let assign = Expr::new(Span::synthetic(), ExprNode::Send {
++                recv: Some(self_ref()), method: Symbol::from(format!("{}=", field.as_str())),
++                args: vec![Expr::new(Span::synthetic(), ExprNode::Cast {
++                    value: lookup(&field), target_ty: Ty::Array { elem: Box::new(Ty::Int) },
++                })], block: None, parenthesized: true,
++            });
++            stmts.push(when_present(&field, assign));
++        }
++    }
+     // Hand-written `def <field>=` in the model body. `writable_field_set`
+     // deliberately leaves these out — its callers hold a field name and
+     // ask `model_defines_writer` per-field — but `update` has to
+@@ -3607,3 +3634,9 @@ fn synth_update_hash(
+             block_param: None,
+     }
+ }
++
++fn temporal_value_ty(col: &Column) -> Ty {
++    if col.col_type == crate::schema::ColumnType::Date {
++        Ty::Class { id: ClassId(Symbol::from("Date")), args: vec![] }
++    } else { Ty::Time }
++}
+diff --git a/src/lower/model_to_library/validations.rs b/src/lower/model_to_library/validations.rs
+index 7e4fea52..fd63bcf6 100644
+--- a/src/lower/model_to_library/validations.rs
++++ b/src/lower/model_to_library/validations.rs
+@@ -434,7 +434,8 @@ fn inline_presence_check(attr: &Symbol, attr_ty: Option<&Ty>) -> Expr {
+     // unconditionally — lobsters' `validates :created_at, presence:
+     // true` on Username rejected every record. Blank on the stored
+     // form is nil-or-empty text.
+-    if matches!(attr_ty, Some(Ty::Time)) {
++    let temporal = |ty: &Ty| matches!(ty, Ty::Time) || matches!(ty, Ty::Class { id, .. } if id.0.as_str() == "Date");
++    if attr_ty.is_some_and(|ty| temporal(ty) || matches!(ty, Ty::Union { variants } if variants.iter().any(temporal))) {
+         let raw_ivar = ivar(&Symbol::from(format!("{}_raw", attr.as_str())));
+         let cond = bool_op(
+             BoolOpKind::Or,
+diff --git a/src/lower/params_permit.rs b/src/lower/params_permit.rs
+index 114b75a2..9d13a3a5 100644
+--- a/src/lower/params_permit.rs
++++ b/src/lower/params_permit.rs
+@@ -5,7 +5,13 @@ use crate::ident::Symbol;
+ use crate::ty::Ty;
+ 
+ pub fn apply_params_permit_lowering(app: &mut App) {
+-    super::for_each_hook_body(app, &mut rewrite);
++    super::for_each_hook_body(app, &mut |e| rewrite(e, false));
++}
++
++// Flat permit declarations must survive until typed Params DTOs are
++// synthesized. Filter only the remaining hash/array-row calls afterward.
++pub(crate) fn rewrite_residual(expr: &mut Expr) {
++    rewrite(expr, true);
+ }
+ 
+ fn is_param_value(ty: Option<&Ty>) -> bool {
+@@ -20,15 +26,22 @@ fn is_request_params(e: &Expr) -> bool {
+     }
+ }
+ 
+-fn rewrite(expr: &mut Expr) {
+-    expr.node.for_each_child_mut(&mut rewrite);
++fn rewrite(expr: &mut Expr, residual: bool) {
++    expr.node.for_each_child_mut(&mut |e| rewrite(e, residual));
+     let ExprNode::Send { recv: Some(r), method, args, block: None, .. } = &*expr.node else { return };
+     let nested = is_param_value(r.ty.as_ref());
++    let hash_or_unknown = matches!(r.ty.as_ref(), None | Some(Ty::Hash { .. } | Ty::Record { .. } | Ty::Var { .. } | Ty::Untyped));
+     let replacement = match (method.as_str(), args.as_slice()) {
+         ("permit!" | "to_unsafe_h", []) if nested || is_request_params(r) => Some(r.clone()),
+-        ("permit", keys) if nested && !keys.is_empty() => {
++        ("permit", keys) if (nested || is_request_params(r) || (residual && hash_or_unknown)) && !keys.is_empty() => {
+             let Some(names) = keys.iter().map(sym_name).collect::<Option<Vec<_>>>() else { return };
+-            Some(send(expr.span, Some(r.clone()), "slice", names.into_iter().map(|n| str_lit(expr.span, n)).collect()))
++            let params = Expr::new(expr.span, ExprNode::Const { path: vec![Symbol::from("Params")] });
++            let mut keys = Expr::new(expr.span, ExprNode::Array {
++                elements: names.into_iter().map(|n| str_lit(expr.span, n)).collect(),
++                style: Default::default(),
++            });
++            keys.ty = Some(Ty::Array { elem: Box::new(Ty::Str) });
++            Some(send(expr.span, Some(params), "permit_scalars", vec![r.clone(), keys]))
+         }
+         ("require", [key]) if nested => {
+             let Some(name) = sym_name(key) else { return };
+diff --git a/src/lower/routes.rs b/src/lower/routes.rs
+index c15e4de5..ebefeb73 100644
+--- a/src/lower/routes.rs
++++ b/src/lower/routes.rs
+@@ -572,6 +572,7 @@ fn collect_flat_routes(spec: &RouteSpec, out: &mut Vec<FlatRoute>, ctx: &Ctx) {
+                 standard_resource_actions()
+             };
+ 
++            let standard_start = out.len();
+             for (action, method, suffix) in actions {
+                 let action_name: &str = action;
+                 let suffix: &str = suffix;
+@@ -650,6 +651,9 @@ fn collect_flat_routes(spec: &RouteSpec, out: &mut Vec<FlatRoute>, ctx: &Ctx) {
+                     });
+                 }
+             }
++            // Rails places collection/member/nested declarations before
++            // the standard member routes, so :id cannot swallow a collection action.
++            let standard_routes = out.split_off(standard_start);
+             let child_ctx = Ctx {
+                 parents: {
+                     let mut p = ctx.parents.clone();
+@@ -666,6 +670,7 @@ fn collect_flat_routes(spec: &RouteSpec, out: &mut Vec<FlatRoute>, ctx: &Ctx) {
+             for child in nested {
+                 collect_flat_routes(child, out, &child_ctx);
+             }
++            out.extend(standard_routes);
+         }
+         RouteSpec::Scope { path, module, as_prefix, defaults, nest, entries } => {
+             let mut child = ctx.clone();
+diff --git a/src/lower/scope_chain.rs b/src/lower/scope_chain.rs
+index 11007459..49924f85 100644
+--- a/src/lower/scope_chain.rs
++++ b/src/lower/scope_chain.rs
+@@ -2048,6 +2048,15 @@ fn owner_model_from_name(owner: &Expr, models: &HashSet<ClassId>) -> Option<Clas
+         _ => return None,
+     };
+     let id = ClassId(Symbol::from(crate::naming::camelize(name).as_str()));
++    if models.contains(&id) {
++        return Some(id);
++    }
++    // Rails authentication/tenant readers name the same owner as their
++    // non-prefixed local (current_user/user, current_account/account).
++    // Prefer an actual CurrentUser model above, and still require the
++    // resulting model to declare the association in assoc_read_target.
++    let name = name.strip_prefix("current_")?;
++    let id = ClassId(Symbol::from(crate::naming::camelize(name).as_str()));
+     models.contains(&id).then_some(id)
+ }
+ 
+@@ -3216,14 +3225,29 @@ fn rewrite_send(expr: &mut Expr, ctx: &Ctx, locals: &mut Locals) -> Option<Class
+                                                     },
+                                                 )])
+                                             }
++                                            _ if matches!(&*r.node, ExprNode::Send { method, .. } if method.as_str() == "merge") => {
++                                                let entry = (syn(span, ExprNode::Lit { value: Literal::Sym { value: fk.clone() } }), owner_id.clone());
++                                                Some(vec![put(span, Some(args[0].clone()), Symbol::from("merge"),
++                                                    vec![syn(span, ExprNode::Hash { entries: vec![entry], kwargs: true })], None, true)])
++                                            }
+                                             _ => None,
+                                         }
+                                     }
++                                    _ if matches!(args[0].ty.as_ref(), Some(crate::ty::Ty::Hash { .. })) => {
++                                        Some(vec![put(span, Some(args[0].clone()), Symbol::from("merge"),
++                                            vec![syn(span, ExprNode::Hash { entries: vec![fk_entry], kwargs: true })], None, true)])
++                                    }
+                                     _ => None,
+                                 }
+                             } else {
+                                 None
+                             };
++                            let merged = merged.or_else(|| {
++                                if args.len() != 1 { return None; }
++                                let entry = (syn(span, ExprNode::Lit { value: Literal::Sym { value: fk.clone() } }), owner_id.clone());
++                                Some(vec![put(span, Some(args[0].clone()), Symbol::from("merge"),
++                                    vec![syn(span, ExprNode::Hash { entries: vec![entry], kwargs: true })], None, true)])
++                            });
+                             if let Some(merged) = merged {
+                                 *expr = put(
+                                     span,
+@@ -3622,12 +3646,50 @@ mod tests {
+     use super::*;
+     use crate::span::Span;
+ 
++    fn put(span: Span, recv: Option<Expr>, method: Symbol, args: Vec<Expr>, block: Option<Expr>, parenthesized: bool) -> Expr {
++        Expr::new(span, ExprNode::Send { recv, method, args, block, parenthesized })
++    }
++
+     fn span() -> Span {
+         Span::synthetic()
+     }
+     fn int_lit(n: i64) -> Expr {
+         Expr::new(span(), ExprNode::Lit { value: Literal::Int { value: n } })
+     }
++
++    #[test]
++    fn current_model_reader_keeps_its_association_owner() {
++        let user = ingest(
++            "class User < ApplicationRecord\n  has_many :transactions, foreign_key: :user_id\nend\n",
++            "app/models/user.rb",
++        );
++        let batch = ingest(
++            "class Batch < ApplicationRecord\n  has_many :transactions, foreign_key: :batch_id\nend\n",
++            "app/models/batch.rb",
++        );
++        let transactions = ingest("class Transaction < ApplicationRecord\nend\n", "app/models/transaction.rb");
++        let models_v = vec![user, batch, transactions];
++        let scopes = build_scope_registry(&models_v);
++        let models = model_set(&models_v);
++        let assocs = build_assoc_registry(&models_v);
++        let owner = put(span(), None, Symbol::from("current_user"), vec![], None, false);
++        let association = put(span(), Some(owner), Symbol::from("transactions"), vec![], None, false);
++        let mut expression = put(span(), Some(association), Symbol::from("includes"), vec![], None, false);
++        rewrite_call_site(&mut expression, &regs(&scopes, &models, &assocs), None, None);
++        let lowered = format!("{:?}", expression);
++        assert!(lowered.contains("Relation"), "association must become a relation: {lowered}");
++        assert!(lowered.contains("user_id"), "owner must remain User: {lowered}");
++        assert!(!lowered.contains("batch_id"), "must not use another owner's foreign key: {lowered}");
++    }
++
++    #[test]
++    fn a_literal_current_model_name_wins_over_its_prefix() {
++        let models = HashSet::from([
++            ClassId(Symbol::from("User")), ClassId(Symbol::from("CurrentUser")),
++        ]);
++        let owner = put(span(), None, Symbol::from("current_user"), vec![], None, false);
++        assert_eq!(owner_model_from_name(&owner, &models), Some(ClassId(Symbol::from("CurrentUser"))));
++    }
+     fn rel_marker() -> Expr {
+         Expr::new(span(), ExprNode::Var { id: VarId(0), name: Symbol::from("__rel") })
+     }
+diff --git a/src/lower/string_inflections.rs b/src/lower/string_inflections.rs
+index e1e95b6f..c8aeb57a 100644
+--- a/src/lower/string_inflections.rs
++++ b/src/lower/string_inflections.rs
+@@ -24,7 +24,7 @@ fn is_string(ty: Option<&Ty>) -> bool {
+ fn rewrite(expr: &mut Expr) {
+     expr.node.for_each_child_mut(&mut rewrite);
+     let ExprNode::Send { recv: Some(r), method, args, block: None, .. } = &*expr.node else { return };
+-    if !matches!(method.as_str(), "humanize" | "titleize") || !args.is_empty() || !is_string(r.ty.as_ref()) {
++    if !matches!(method.as_str(), "humanize" | "titleize") || !args.is_empty() || !(is_string(r.ty.as_ref()) || matches!(&*r.node, ExprNode::Send { method, args, .. } if method.as_str() == "to_s" && args.is_empty())) {
+         return;
+     }
+     let text = r.clone();
+diff --git a/src/lower/time_calendar.rs b/src/lower/time_calendar.rs
+index dbd23c8b..d6684009 100644
+--- a/src/lower/time_calendar.rs
++++ b/src/lower/time_calendar.rs
+@@ -14,6 +14,20 @@ pub fn apply_time_calendar_grounding(app: &mut App) {
+ 
+ fn rewrite(expr: &mut Expr) {
+     expr.node.for_each_child_mut(&mut rewrite);
++    if let ExprNode::Range { begin, end, exclusive } = &*expr.node {
++        if begin.as_ref().is_some_and(is_date_value) || end.as_ref().is_some_and(is_date_value) {
++            let nil = || Expr::new(expr.span, ExprNode::Lit { value: Literal::Nil });
++            *expr.node = ExprNode::Send {
++                recv: Some(Expr::new(expr.span, ExprNode::Const { path: vec![Symbol::from("DateRange")] })),
++                method: Symbol::from("new"),
++                args: vec![begin.clone().unwrap_or_else(nil), end.clone().unwrap_or_else(nil),
++                    Expr::new(expr.span, ExprNode::Lit { value: Literal::Bool { value: *exclusive } })],
++                block: None, parenthesized: true,
++            };
++            expr.ty = Some(Ty::Class { id: ClassId(Symbol::from("DateRange")), args: vec![] });
++            return;
++        }
++    }
+     if let ExprNode::Send { recv: Some(r), method, .. } = &mut *expr.node {
+         if is_time_const(r) && method.as_str() == "use_zone" {
+             *r = Expr::new(r.span, ExprNode::Const { path: vec![Symbol::from("ActiveSupport")] });
+@@ -43,9 +57,19 @@ fn rewrite(expr: &mut Expr) {
+         expr.ty = Some(Ty::Time);
+         return;
+     }
++    if method.as_str() == "to_date" && args.is_empty() && is_duration_time(r) {
++        *expr.node = active_support_call("to_date", vec![r.clone()]);
++        expr.ty = Some(Ty::Class { id: ClassId(Symbol::from("Date")), args: vec![] });
++        return;
++    }
+     if !is_time_value(r) {
+         return;
+     }
++    if method.as_str() == "to_date" && args.is_empty() {
++        *expr.node = active_support_call("to_date", vec![r.clone()]);
++        expr.ty = Some(Ty::Class { id: ClassId(Symbol::from("Date")), args: vec![] });
++        return;
++    }
+     if method.as_str() == "in_time_zone" && args.len() <= 1 {
+         let grounded = match args.first() {
+             Some(zone) => active_support_call("in_time_zone", vec![r.clone(), zone.clone()]),
+@@ -200,3 +224,22 @@ fn is_time_value(e: &Expr) -> bool {
+         None => false,
+     }
+ }
++
++fn is_date_value(e: &Expr) -> bool {
++    if matches!(&e.ty, Some(Ty::Class { id, .. }) if id.0.as_str() == "Date") { return true; }
++    match &*e.node {
++        ExprNode::Send { recv: Some(r), method, .. } => {
++            matches!(&*r.node, ExprNode::Const { path } if path.len() == 1 && path[0].as_str() == "Date") ||
++                matches!(method.as_str(), "beginning_of_month" | "end_of_month" | "beginning_of_week" | "end_of_week" | "advance" | "to_date") && is_date_value(r)
++        }
++        _ => false,
++    }
++}
++
++fn is_duration_time(e: &Expr) -> bool {
++    let ExprNode::Send { recv: Some(r), method, args, block: None, .. } = &*e.node else { return false; };
++    if !args.is_empty() || !matches!(method.as_str(), "ago" | "from_now" | "until" | "since") { return false; }
++    matches!(&*r.node, ExprNode::Send { method, .. } if matches!(method.as_str(),
++        "second" | "seconds" | "minute" | "minutes" | "hour" | "hours" | "day" | "days" |
++        "week" | "weeks" | "fortnight" | "fortnights" | "month" | "months" | "year" | "years"))
++}
+diff --git a/src/lower/decimal.rs b/src/lower/decimal.rs
+new file mode 100644
+index 00000000..989e73a5
+--- /dev/null
++++ b/src/lower/decimal.rs
+@@ -0,0 +1,19 @@
++//! BigDecimal util conversions without reopening native builtin types.
++use crate::app::App;
++use crate::expr::{Expr, ExprNode};
++use crate::ident::{ClassId, Symbol};
++use crate::ty::Ty;
++
++pub fn apply_decimal_grounding(app: &mut App) {
++    super::for_each_hook_body(app, &mut rewrite);
++}
++fn rewrite(e: &mut Expr) {
++    e.node.for_each_child_mut(&mut rewrite);
++    let ExprNode::Send { recv: Some(r), method, args, block: None, .. } = &*e.node else { return; };
++    if method.as_str() != "to_d" || !args.is_empty() { return; }
++    let text = Expr::new(e.span, ExprNode::Send {
++        recv: Some(r.clone()), method: Symbol::from("to_s"), args: vec![], block: None, parenthesized: false,
++    });
++    *e.node = ExprNode::Send { recv: None, method: Symbol::from("BigDecimal"), args: vec![text], block: None, parenthesized: true };
++    e.ty = Some(Ty::Class { id: ClassId(Symbol::from("BigDecimal")), args: vec![] });
++}
+diff --git a/tests/params_schema_coercion.rs b/tests/params_schema_coercion.rs
+new file mode 100644
+index 00000000..7285be3e
+--- /dev/null
++++ b/tests/params_schema_coercion.rs
+@@ -0,0 +1,69 @@
++//! Form strings must reach numeric and boolean setters as values, not C pointers.
++use std::{collections::HashMap, path::PathBuf};
++
++#[test]
++fn typed_create_and_update_cast_scalar_column_values() {
++    let files = [
++        ("db/schema.rb", "ActiveRecord::Schema.define do\n create_table :users do |t|\n t.integer :hour, null: false\n t.float :ratio\n t.boolean :enabled, null: false\n t.string :name\n end\nend"),
++        ("app/models/user.rb", "class User < ApplicationRecord\nend"),
++        ("app/controllers/users_controller.rb", "class UsersController < ApplicationController\n def create\n User.create!(user_params)\n end\n def update\n User.find(params[:id]).update!(user_params)\n end\n private\n def user_params\n params.require(:user).permit(:hour, :ratio, :enabled, :name)\n end\nend"),
++    ];
++    let tree: HashMap<PathBuf, Vec<u8>> = files.into_iter().map(|(p,s)| (p.into(), s.as_bytes().to_vec())).collect();
++    let mut app = roundhouse::ingest::ingest_app_from_tree(tree).unwrap();
++    roundhouse::session::analyze_and_lower(&mut app);
++    let emitted = roundhouse::emit::ruby::emit_lowered_models(&app);
++    let source = &emitted.iter().find(|file| file.path.ends_with("app/models/user.rb")).unwrap().content;
++    for method in ["from_params", "update_from_user_params!"] {
++        let section = source.split(&format!("def {}", if method == "from_params" { "self.from_params" } else { method })).nth(1).unwrap_or_else(|| panic!("missing {method}: {source}"));
++        // Both helpers must cast at assignment; checking the emitted method
++        // catches the String-to-Integer path that the native app corrupted.
++        assert!(section.contains("p.hour.to_i"), "{method}: {section}");
++        assert!(section.contains("p.ratio.to_f"), "{method}: {section}");
++        assert!(section.contains("include?") && section.contains("p.enabled"), "{method}: {section}");
++    }
++}
++
++#[test]
++fn contextual_defaults_and_instance_keywords_keep_named_binding() {
++    let files = [
++        ("db/schema.rb", "ActiveRecord::Schema.define do\n create_table :users do |t|\n t.string :name\n end\nend"),
++        ("app/models/user.rb", "class User < ApplicationRecord\nend"),
++        ("app/controllers/users_controller.rb", "class UsersController < ApplicationController\n def show\n Report.new(user: User.find(params[:id])).call(schema: nil)\n end\nend"),
++    ];
++    let tree: HashMap<PathBuf, Vec<u8>> = files.into_iter().map(|(p,s)| (p.into(), s.as_bytes().to_vec())).collect();
++    let mut app = roundhouse::ingest::ingest_app_from_tree(tree).unwrap();
++    app.library_classes.extend(roundhouse::ingest::ingest_library_classes(b"class Report\n def initialize(model: Current.user, user: nil)\n @model=model\n @user=user\n end\n def call(start_date: Time.now, schema: nil)\n start_date\n end\nend", "app/services/report.rb").unwrap());
++    roundhouse::session::analyze_and_lower(&mut app);
++    let mut files = roundhouse::emit::ruby::emit_spinel(&app);
++    files.extend(roundhouse::emit::ruby::emit_library(&app));
++    let source = files.iter().map(|file| file.content.as_str()).collect::<Vec<_>>().join("\n");
++    assert!(source.contains("def initialize(model:"), "context default must stay in callee: {}", files.iter().filter(|f| f.path.to_string_lossy().contains("report") || f.path.to_string_lossy().contains("users_controller")).map(|f| f.content.as_str()).collect::<Vec<_>>().join("\n"));
++    assert!(source.contains("def call(start_date:"), "instance method keeps named binding");
++    assert!(source.contains("Report.new(user:"), "caller can omit the context default");
++    assert!(source.contains(".call(schema:"), "schema must not bind to start_date");
++}
++
++#[test]
++fn collection_route_precedes_standard_dynamic_member() {
++    let mut tree = HashMap::new();
++    tree.insert(PathBuf::from("config/routes.rb"), b"Rails.application.routes.draw do\n resources :users, only: %i[index update] do\n patch :bulk_update, on: :collection\n end\nend".to_vec());
++    let app = roundhouse::ingest::ingest_app_from_tree(tree).unwrap();
++    let routes = roundhouse::lower::routes::flatten_routes(&app);
++    let collection = routes.iter().position(|r| r.path == "/users/bulk_update").unwrap();
++    let member = routes.iter().position(|r| r.path == "/users/:id").unwrap();
++    assert!(collection < member, "a collection action must not bind as an id");
++}
++
++#[test]
++fn nested_array_rows_use_scalar_permit_on_emitted_hashes() {
++    let files = [
++        ("app/controllers/imports_controller.rb", "class ImportsController < ApplicationController\n def create\n render json: permitted_rows\n end\n private\n def permitted_rows\n params.require(:import).fetch(\"rows\", []).map { |row| row.permit(:id, :included) }\n end\nend"),
++    ];
++    let tree: HashMap<PathBuf, Vec<u8>> = files.into_iter().map(|(p,s)| (p.into(), s.as_bytes().to_vec())).collect();
++    let mut app = roundhouse::ingest::ingest_app_from_tree(tree).unwrap();
++    roundhouse::session::analyze_and_lower(&mut app);
++    let files = roundhouse::emit::ruby::emit_spinel(&app);
++    let source = &files.iter().find(|f| f.path.ends_with("app/controllers/imports_controller.rb")).unwrap().content;
++    assert!(source.contains("Params.permit_scalars(row,"), "{source}");
++    assert!(!source.contains("row.permit("), "{source}");
++}

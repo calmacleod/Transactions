@@ -14,10 +14,12 @@ module Insights
     end
 
     def call
-      summary.merge(
+      {
+        period:,
+        overview:,
         transaction_ids: records.map(&:id),
         findings: findings
-      )
+      }
     end
 
     def summary
@@ -102,7 +104,7 @@ module Insights
       return [] unless user
 
       category_transactions = current_expenses.group_by(&:category_id)
-      user.categories.where.not(monthly_budget_cents: nil).filter_map do |category|
+      Category.where(user_id: user.id).where.not(monthly_budget_cents: nil).filter_map do |category|
         budget = category.monthly_budget_cents.to_i
         spent = category_transactions.fetch(category.id, []).sum(&:amount_cents)
         next if budget.zero? || spent.zero?
@@ -168,6 +170,8 @@ module Insights
             transactions:,
             filters: category_filters(category_id)
           )
+        else
+          next
         end
       end
     end
@@ -189,7 +193,7 @@ module Insights
         build_finding(
           key: "merchant-frequency-#{Digest::SHA256.hexdigest(merchant).first(10)}",
           kind: "merchant_frequency",
-          title: "#{merchant.titleize} visits rose to #{current_count} this month",
+          title: "#{merchant.to_s.titleize} visits rose to #{current_count} this month",
           body: "The recent baseline is #{format_number(baseline)} visit#{'s' unless baseline == 1}; the extra frequency added #{money(current_total)} this month.",
           action: "Review the linked visits together and decide whether fewer trips or a per-visit cap would help.",
           severity: "warning",
@@ -242,7 +246,7 @@ module Insights
       return if recurring_merchants.empty?
 
       monthly_cents = recurring_merchants.sum { |merchant| merchant[:monthly_cents] }
-      names = recurring_merchants.first(4).map { |merchant| merchant[:name].titleize }
+      names = recurring_merchants.first(4).map { |merchant| merchant[:name].to_s.titleize }
       transactions = recurring_merchants.flat_map { |merchant| merchant[:current_transactions] }
       return if transactions.empty?
 
@@ -387,7 +391,7 @@ module Insights
     end
 
     def merchant_key(transaction)
-      transaction.merchant_name.downcase.squish
+      transaction.merchant_name.to_s.downcase.squish
     end
 
     def expenses_by_month
@@ -431,7 +435,7 @@ module Insights
     def money(cents)
       value = cents.to_i
       sign = value.negative? ? "-" : ""
-      "#{sign}$#{format('%.2f', value.abs.to_d / 100)}"
+      "#{sign}$#{format('%.2f', (value.abs.to_d / 100).to_f)}"
     end
 
     def format_number(value)

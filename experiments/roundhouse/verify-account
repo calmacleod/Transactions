@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Normal invitation registration, scoped access and expiring reset token flows."""
+import http.cookiejar
+import json
+from pathlib import Path
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+
+base, project = sys.argv[1], Path(sys.argv[2]).resolve()
+assert base.startswith('http://127.0.0.1:')
+assert project.is_relative_to(Path(__file__).resolve().parents[2] / 'tmp/roundhouse')
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args):
+        return None
+
+def browser():
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), NoRedirect())
+def call(agent, path, payload=None, method=None, token=''):
+    data = None if payload is None else json.dumps(payload).encode()
+    request = urllib.request.Request(base + path, data=data, method=method, headers={'Content-Type':'application/json', 'X-CSRF-Token':token, 'X-Inertia':'true'})
+    try:
+        result = agent.open(request, timeout=20)
+    except urllib.error.HTTPError as error:
+        result = error
+    body = result.read().decode()
+    return result.code, result.headers, body
+
+def csrf(agent):
+    try:
+        with agent.open(base + '/session/new', timeout=10) as page:
+            return re.search(r'<meta name="csrf-token" content="([^"]*)"', page.read().decode())[1]
+    except urllib.error.HTTPError as error:
+        raise AssertionError(error.read().decode())
+
+def redirected(result, expected):
+    code, headers, body = result
+    assert code in (302,303), (code,body[:300])
+    assert headers['Location'].startswith(expected), dict(headers)
+
+def latest_mail(recipient, subject):
+    files = sorted((project / 'storage/mail').glob('*.json'), key=lambda f:f.stat().st_mtime, reverse=True)
+    mail = next((json.loads(f.read_text()) for f in files if json.loads(f.read_text())['to'] == recipient and json.loads(f.read_text())['subject'] == subject), None)
+    assert mail is not None, (recipient, subject)
+    return mail
+
+admin = browser()
+token = csrf(admin)
+redirected(call(admin, '/session', {'email_address':'spinel@example.test','password':'spinel-local-experiment'}, token=token), '/')
+recipient = 'native-' + uuid.uuid4().hex[:10] + '@example.test'
+redirected(call(admin, '/admin/invitations', {'user_invitation':{'email_address':recipient}}, token=token), '/admin')
+mail = latest_mail(recipient, 'Your Transactions invitation')
+link = next(line for line in mail['body'].splitlines() if '/registrations/new?' in line)
+invite_code = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)['code'][0]
+new_user = browser()
+new_token = csrf(new_user)
+registration = {'user':{'email_address':recipient,'invite_code':invite_code,'password':'native-new-password','password_confirmation':'native-new-password'}}
+redirected(call(new_user, '/registrations', registration, token=new_token), '/')
+code, _, body = call(new_user, '/transactions')
+assert code == 200, (code,body[:300])
+page = json.loads(body)
+assert page['props']['auth']['authenticated'] is True and page['props']['auth']['email'] == recipient, page
+assert page['props']['transactions'] == [], page['props']['transactions']
+assert call(new_user, '/admin')[0] in (302,303), 'new user must not access admin'
+print('Invitation delivery, one-time code, normal registration, tenant isolation and admin authorization: passed', flush=True)
+
+redirected(call(new_user, '/passwords', {'email_address':recipient}, token=new_token), '/session/new')
+mail = latest_mail(recipient, 'Reset your password')
+link = next(line for line in mail['body'].splitlines() if '/passwords/' in line)
+reset_path = urllib.parse.urlparse(link).path
+code, _, body = call(new_user, reset_path)
+assert code == 200, (code,body[:300])
+reset_action = json.loads(body)['props']['actions']['password']
+redirected(call(new_user, reset_action, {'password':'native-reset-password','password_confirmation':'native-reset-password'}, 'PATCH', new_token), '/session/new')
+assert call(new_user, '/transactions')[0] in (302,303), 'reset must revoke existing sessions'
+redirected(call(new_user, reset_path), '/passwords/new')
+redirected(call(new_user, '/session', {'email_address':recipient,'password':'native-new-password'}, token=new_token), '/session/new')
+redirected(call(new_user, '/session', {'email_address':recipient,'password':'native-reset-password'}, token=new_token), '/transactions')
+assert call(new_user, '/transactions')[0] == 200
+print('Normal password reset, signed token invalidation, session revocation and new-password login: passed', flush=True)
+redirected(call(new_user, '/session', method='DELETE', token=new_token), '/session/new')
+redirected(call(admin, '/session', method='DELETE', token=token), '/session/new')

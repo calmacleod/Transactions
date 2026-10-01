@@ -29,7 +29,7 @@ class DashboardSummary
   def category_totals
     @category_totals ||= begin
       totals = expenses.group(:category_id).pluck(:category_id, Arel.sql("SUM(amount_cents)"), Arel.sql("COUNT(*)"))
-      categories = (user&.categories || Category.all).where(id: totals.map(&:first).compact).index_by(&:id)
+      categories = (user ? Category.where(user_id: user.id) : Category.all).where(id: totals.map(&:first).compact).index_by(&:id)
 
       totals.map { |category_id, cents, count| category_total(categories[category_id] || uncategorized_category, cents, count) }
         .sort_by { |item| -item[:cents] }
@@ -46,7 +46,7 @@ class DashboardSummary
         total = totals.fetch(wday, { count: 0, cents: 0 })
 
         {
-          name: name.first(3),
+          name: name[0, 3],
           full_name: name,
           wday:,
           count: total[:count],
@@ -183,8 +183,8 @@ class DashboardSummary
     return if merchant.blank? || merchant[:count] < 2
 
     {
-      title: "Watch repeat spending at #{merchant[:merchant].titleize}",
-      body: "#{merchant[:count]} purchases at #{merchant[:merchant].titleize} total #{money(merchant[:cents])}. This is a good candidate for a monthly cap.",
+      title: "Watch repeat spending at #{merchant[:merchant].to_s.titleize}",
+      body: "#{merchant[:count]} purchases at #{merchant[:merchant].to_s.titleize} total #{money(merchant[:cents])}. This is a good candidate for a monthly cap.",
       severity: "warning",
       amount_cents: merchant[:cents],
       filters: merchant[:filters]
@@ -214,10 +214,10 @@ class DashboardSummary
   end
 
   def transaction_scope
-    user&.expense_transactions || ExpenseTransaction.all
+    user ? ExpenseTransaction.where(user_id: user.id) : ExpenseTransaction.all
   end
 
   def money(cents)
-    "$#{format('%.2f', cents.to_d / 100)}"
+    "$#{format('%.2f', (cents.to_d / 100).to_f)}"
   end
 end

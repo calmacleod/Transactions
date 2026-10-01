@@ -64,11 +64,13 @@ class SpendingController < ApplicationController
   end
 
   def category_month_rows(months)
-    grouped_totals = current_user.expense_transactions.expenses
+    grouped_totals = {}
+    current_user.expense_transactions.expenses
       .group(:category_id, "strftime('%Y-%m-01', occurred_on)")
-      .sum(:amount_cents)
-      .each_with_object(Hash.new { |categories, category_id| categories[category_id] = {} }) do |((category_id, month), cents), categories|
-        categories[category_id][Date.iso8601(month)] = cents
+      .pluck(:category_id, Arel.sql("strftime('%Y-%m-01', occurred_on)"), Arel.sql("SUM(amount_cents)"))
+      .each do |category_id, month, cents|
+        grouped_totals[category_id] ||= {}
+        grouped_totals[category_id][Date.iso8601(month)] = cents
       end
     categories_by_id = current_user.categories.where(id: grouped_totals.keys.compact).index_by(&:id)
 

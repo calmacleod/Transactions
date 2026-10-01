@@ -55,7 +55,7 @@ class ApplicationController < ActionController::Base
   end
 
   def onboarding_required?
-    Current.session&.user&.onboarding_required? || session[:preview_onboarding].present?
+    Current.user&.onboarding_required? || session[:preview_onboarding] == true
   end
 
   def money_from_cents(cents)
@@ -135,7 +135,7 @@ class ApplicationController < ActionController::Base
       notes: transaction.notes,
       classification_reason: transaction.classification_reason,
       confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending",
-      update_path: transaction_path(transaction),
+      update_path: transaction_path(transaction.id),
       view_path: transactions_path(transaction_id: transaction.id)
     }
   end
@@ -155,7 +155,7 @@ class ApplicationController < ActionController::Base
   end
 
   def insight_props(insight, transactions: [])
-    filters = (insight.payload.to_h["filters"] || insight.payload.to_h[:filters] || {}).symbolize_keys
+    filters = (insight.payload.to_h["filters"] || insight.payload.to_h[:filters] || {}).transform_keys(&:to_sym)
 
     {
       id: insight.id,
@@ -163,7 +163,7 @@ class ApplicationController < ActionController::Base
       body: insight.body,
       action: insight.action,
       kind: insight.kind,
-      kind_label: insight.kind.humanize,
+      kind_label: insight.kind.to_s.humanize,
       metric: insight.metric,
       severity: insight.severity,
       generation_source: insight.generation_source,

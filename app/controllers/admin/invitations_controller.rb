@@ -1,8 +1,8 @@
 module Admin
-  class InvitationsController < BaseController
+  class InvitationsController < Admin::BaseController
     def create
       invitation = UserInvitation.create_for!(
-        email_address: invitation_params.fetch(:email_address),
+        email_address: invitation_params.to_h.fetch("email_address"),
         invited_by: Current.user
       )
       UserMailer.invitation(invitation, invitation.raw_code).deliver_later
