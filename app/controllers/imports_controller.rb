@@ -19,7 +19,7 @@ class ImportsController < ApplicationController
     attach_uploaded_file(import_batch, uploaded_file)
     ClassifyImportRowsJob.perform_later(import_batch.id, current_user.id)
 
-    redirect_to preview_import_path(import_batch.id), notice: "Review #{helpers.pluralize(import_batch.import_rows.count, "transaction")} from #{import_batch.filename}."
+    redirect_to preview_import_path(import_batch), notice: "Review #{helpers.pluralize(import_batch.import_rows.count, "transaction")} from #{import_batch.filename}."
   rescue ActionController::ParameterMissing
     redirect_to root_path, alert: "Choose a CSV file to import."
   rescue StandardError => error
@@ -37,8 +37,8 @@ class ImportsController < ApplicationController
       groups: import_group_props(import_batch.import_rows.ordered, duplicate_context),
       categories: category_options(current_user.categories.by_name),
       actions: {
-        commit: unfinished ? commit_import_path(import_batch.id) : nil,
-        download: import_batch.source_file_retained? ? download_import_path(import_batch.id) : nil,
+        commit: unfinished ? commit_import_path(import_batch) : nil,
+        download: import_batch.source_file_retained? ? download_import_path(import_batch) : nil,
         dashboard: root_path,
         classification_stream: unfinished ? {
           channel: "ImportBatchChannel",
@@ -50,7 +50,7 @@ class ImportsController < ApplicationController
 
   def commit
     import_batch = current_user.import_batches.find(params[:id])
-    return redirect_to preview_import_path(import_batch.id), alert: "#{import_batch.filename} is already finished." unless import_batch.unfinished?
+    return redirect_to preview_import_path(import_batch), alert: "#{import_batch.filename} is already finished." unless import_batch.unfinished?
 
     StatementCsvImporter.new(io: StringIO.new, filename: import_batch.filename, user: current_user).commit(batch: import_batch, rows: permitted_import_rows)
 
@@ -63,7 +63,7 @@ class ImportsController < ApplicationController
 
   def download
     import_batch = current_user.import_batches.find(params[:id])
-    return redirect_to preview_import_path(import_batch.id), alert: "The original CSV is not retained for this import." unless import_batch.source_file_retained?
+    return redirect_to preview_import_path(import_batch), alert: "The original CSV is not retained for this import." unless import_batch.source_file_retained?
 
     send_data import_batch.source_file.download,
       filename: import_batch.source_file.filename.to_s,
@@ -105,8 +105,8 @@ class ImportsController < ApplicationController
       retained_file: import_batch.source_file_retained?,
       source_file_label: import_batch.source_file_retained? ? import_batch.source_file.filename.to_s : nil,
       notes: import_batch.notes,
-      preview_path: preview_import_path(import_batch.id),
-      download_path: import_batch.source_file_retained? ? download_import_path(import_batch.id) : nil,
+      preview_path: preview_import_path(import_batch),
+      download_path: import_batch.source_file_retained? ? download_import_path(import_batch) : nil,
       complete: import_batch.complete?,
       unfinished: import_batch.unfinished?
     }

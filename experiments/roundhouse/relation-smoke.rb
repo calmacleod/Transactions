@@ -1,5 +1,5 @@
 # Run under CRuby to verify the shared runtime's create/find/block behavior.
-require_relative '../../tmp/roundhouse/toolchain/runtime/ruby/active_record/relation'
+require_relative '../../tmp/roundhouse/toolchain-final-20261002/runtime/ruby/active_record/relation'
 
 class NativeRecord
   attr_accessor :attributes, :color, :saved

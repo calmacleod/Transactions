@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Exercise the compiled app over HTTP using the isolated experiment account."""
 import http.cookiejar
+from datetime import date
+from decimal import Decimal
 import json
 from pathlib import Path
 import re
+import sqlite3
 import sys
 import urllib.error
 import urllib.request
@@ -101,13 +104,26 @@ if failures:
     raise SystemExit('Native page failures:\n' + '\n'.join(failures))
 
 if len(sys.argv) > 2:
-    fixture = json.loads((Path(sys.argv[2]) / 'storage/native-fixtures.json').read_text())
-    assert pages['/']['metrics']['total_spend_label'] == '$17.00', pages['/']['metrics']
-    assert pages['/']['metrics']['transaction_count'] == 3
-    assert pages['/']['metrics']['expense_count'] == 2
+    project = Path(sys.argv[2]).resolve()
+    fixture = json.loads((project / 'storage/native-fixtures.json').read_text())
+    # Action checks commit another CSV. Compare against independent database
+    # values so this verifier still checks totals after those writes.
+    month_start = date.today().replace(day=1)
+    next_month = (month_start.replace(year=month_start.year + 1, month=1)
+                  if month_start.month == 12 else month_start.replace(month=month_start.month + 1))
+    with sqlite3.connect((project / 'storage/development.sqlite3').as_uri() + '?mode=ro', uri=True) as database:
+        rows = database.execute(
+            'SELECT direction, amount_cents, category_id FROM expense_transactions '
+            'WHERE user_id = ? AND occurred_on >= ? AND occurred_on < ?',
+            [fixture['user_id'], month_start.isoformat(), next_month.isoformat()]).fetchall()
+    expenses = [row for row in rows if row[0] == 'debit']
+    spend = sum(row[1] for row in expenses)
+    assert pages['/']['metrics']['total_spend_label'] == f'${Decimal(spend) / 100:,.2f}', pages['/']['metrics']
+    assert pages['/']['metrics']['transaction_count'] == len(rows)
+    assert pages['/']['metrics']['expense_count'] == len(expenses)
     category = next(row for row in pages['/budgets']['categories'] if row['id'] == fixture['category_id'])
-    assert category['spent_cents'] == 1250, category
-    assert pages['/budgets']['unclassified']['spent_cents'] == 450
+    assert category['spent_cents'] == sum(row[1] for row in expenses if row[2] == fixture['category_id']), category
+    assert pages['/budgets']['unclassified']['spent_cents'] == sum(row[1] for row in expenses if row[2] is None)
     code, _, body = request(f"/imports/{fixture['import_id']}/preview", headers={'X-Inertia': 'true'})
     assert code == 200, f'import preview: {code}, {body[:160]}'
     assert len(json.loads(body)['props']['rows']) == 3

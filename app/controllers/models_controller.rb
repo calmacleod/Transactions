@@ -133,7 +133,7 @@ class ModelsController < ApplicationController
       provider: model.provider,
       favorite: model.favorite?,
       user_selectable: model.user_selectable?,
-      update_path: admin_model_path(model.id),
+      update_path: admin_model_path(model),
       input_modalities: model.input_modalities.presence || [ "unknown" ],
       output_modalities: model.output_modalities.presence || [ "unknown" ],
       capabilities: model.capabilities,

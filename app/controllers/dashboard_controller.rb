@@ -91,7 +91,7 @@ class DashboardController < ApplicationController
       status: import_batch.status,
       rows_count: import_batch.import_rows.count,
       created_at_label: import_batch.created_at.strftime("%b %-d, %Y"),
-      preview_path: preview_import_path(import_batch.id)
+      preview_path: preview_import_path(import_batch)
     }
   end
 end

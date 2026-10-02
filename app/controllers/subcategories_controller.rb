@@ -1,7 +1,7 @@
 class SubcategoriesController < ApplicationController
   def index
     render inertia: {
-      subcategories: current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory).merge(destroy_path: subcategory_path(subcategory.id)) },
+      subcategories: current_user.transaction_subcategories.by_name.map { |subcategory| subcategory_props(subcategory).merge(destroy_path: subcategory_path(subcategory)) },
       actions: {
         create: subcategories_path
       }

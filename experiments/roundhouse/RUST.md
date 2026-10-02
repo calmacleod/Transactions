@@ -22,7 +22,7 @@ runnable Rust executable with Roundhouse.**
 | Release survey transpilation | Exit 0: emitted 156 files, with four ingest gaps. |
 | Build of release survey output | Exit 101: 1,244 Rust compiler errors and 430 warnings. No executable produced. |
 
-The current compiler's separate analysis reports 32 errors, 480 warnings,
+That historical compiler's separate analysis reported 32 errors, 480 warnings,
 31 gap-attributed notes, three ingest gaps, and five unknown gems:
 `inertia_rails`, `pagy`, `resend`, `ruby_llm`, and `schematist`.
 These diagnostics include Roundhouse coverage limits; they do not establish
@@ -55,8 +55,9 @@ artifacts, and full logs are under the already ignored `tmp/roundhouse/`.
 No existing database or environment file was copied into the experiment.
 No Rails server, provider request, or deployment was started.
 
-The driver pins the source compiler to the revision tested above. It uses
-the installed Rust 1.97.1 toolchain by default; override with
+The current driver pins the October 2 compiler snapshot described in
+[README.md](README.md) and uses Rust 1.98.1; these historical Rust results
+have not been rerun on that snapshot. Override with
 `RUST_TOOLCHAIN=<installed-toolchain>` if needed.
 
 ```sh
@@ -73,8 +74,8 @@ experiments/roundhouse/experiment build
 experiments/roundhouse/experiment run
 ```
 
-`check`, `strict`, and `build` are expected to fail with this app and this
-compiler revision. They save full diagnostics and exit codes in
+`check`, `strict`, and `build` failed in the historical Rust run. The October 2
+Rust target has not been revalidated. Commands save diagnostics and exit codes in
 `tmp/roundhouse/logs/`. `survey` succeeds but its output is incomplete.
 `setup` and an uncached `build` need network access.
 

@@ -1,0 +1,43 @@
+# Application-used external API boundaries. RubyLLM implementations remain
+# in the real Rails gem and the experiment's native facade; opaque results
+# deliberately stay untyped. These declarations use Roundhouse's normal
+# sig/ input rather than replacing unresolved constants in generated code.
+module RubyLLM
+  def self.config: () -> untyped
+  def self.models: () -> untyped
+  def self.chat: (model: String, provider: String) -> untyped
+
+  class Model
+    def price: (Symbol kind) -> untyped
+  end
+end
+
+module InertiaRails
+  def self.defer: (?group: String) { () -> untyped } -> untyped
+end
+
+module BCrypt
+  module Errors
+    class InvalidHash < StandardError
+      def message: () -> String
+    end
+  end
+end
+
+# These exceptions are implemented by Ruby/Spinel themselves. The interfaces
+# let the ordinary constant registry resolve application rescue clauses.
+module Errno
+  class ENOENT < SystemCallError
+    def message: () -> String
+  end
+end
+
+module JSON
+  class JSONError < StandardError
+    def message: () -> String
+  end
+
+  class ParserError < JSONError
+    def message: () -> String
+  end
+end

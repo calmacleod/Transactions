@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Exercise normal auth and writes against the isolated native fixture database."""
+import calendar
+from datetime import date, datetime, timedelta, timezone
 import http.cookiejar
 import json
 from pathlib import Path
@@ -9,6 +11,7 @@ import sys
 import traceback
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -85,20 +88,127 @@ def auth():
     assert request('/session', credentials, headers={'X-CSRF-Token': 'invalid'})[0] == 422
     assert request('/session', credentials, headers={'X-CSRF-Token': None, 'X-XSRF-Token': 'invalid'})[0] == 422
     assert request('/session', credentials, headers={'Origin': 'http://attacker.test'})[0] == 422
-    redirect(request('/session', {**credentials, 'password': 'incorrect'}))
-    assert request('/transactions')[0] in (302, 303)
-    assert redirect(request('/session', credentials, headers={'X-CSRF-Token': None, 'X-XSRF-Token': csrf, 'Origin': base})) == '/transactions'
+    invalid_credentials = [
+        {**credentials, 'password': 'incorrect'},
+        {**credentials, 'email_address': 'missing-native@example.test'},
+        {**credentials, 'password': ''},
+        {**credentials, 'password': None},
+        {'email_address': credentials['email_address']},
+    ]
+    for invalid in invalid_credentials:
+        assert redirect(request('/session', invalid)) == '/session/new'
+        assert request('/transactions')[0] in (302, 303)
+    normalized = {**credentials, 'email_address': '  SPINEL@EXAMPLE.TEST  '}
+    assert redirect(request('/session', normalized, headers={'X-CSRF-Token': None, 'X-XSRF-Token': csrf, 'Origin': base})) == '/transactions'
     assert props('/')['auth']['authenticated'] is True
-check('normal login, signed session, wrong password and CSRF', auth)
+check('normal and normalized login, invalid credentials, signed session and CSRF', auth)
 
 def filters():
     rows = props('/transactions?direction=credit&per_page=all')['transactions']
-    assert len(rows) == 1 and rows[0]['direction'] == 'credit', rows
+    expected = {row['id'] for row in database.execute("SELECT id FROM expense_transactions WHERE user_id = ? AND direction = 'credit'", [fixture['user_id']])}
+    assert {row['id'] for row in rows} == expected and all(row['direction'] == 'credit' for row in rows), rows
     rows = props('/transactions?query=Native%20market')['transactions']
     assert len(rows) == 1 and rows[0]['id'] == fixture['transaction_ids'][0], rows
     assert ':id' in props('/transactions')['actions']['chat_template']
     assert ':id' in props('/budgets')['actions']['update_template']
 check('transaction search, filters and action URLs', filters)
+
+def date_filters():
+    # The app's default time zone is UTC. Build the calendar bounds
+    # independently of the native Date/Duration adapters under test.
+    today = datetime.now(timezone.utc).date()
+    first = date.fromisoformat(fixture['month'] + '-01')
+    last = first + timedelta(days=2)
+
+    def month_start(months_ago):
+        year, month = divmod(today.year * 12 + today.month - 1 - months_ago, 12)
+        return date(year, month + 1, 1)
+
+    previous_month = month_start(1)
+    quick_ranges = {
+        'month_to_date': (month_start(0), today),
+        'past_week': (today - timedelta(days=7), today),
+        'last_30_days': (today - timedelta(days=30), today),
+        'previous_month': (previous_month, previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])),
+        'last_3_months': (month_start(3), today),
+    }
+    advertised = props('/transactions?limit=all')['quick_ranges']
+    assert {item['value'] for item in advertised} == set(quick_ranges), advertised
+
+    # Seeded records share one date. Add temporary controls immediately
+    # outside/on each boundary so an ignored filter or exclusive endpoint
+    # cannot pass by returning an empty result or the original fixture.
+    control_dates = {first - timedelta(days=1), first, first + timedelta(days=1), last, last + timedelta(days=1)}
+    for start, end in quick_ranges.values():
+        control_dates.update((start - timedelta(days=1), start, end, end + timedelta(days=1)))
+    original = database.execute('SELECT * FROM expense_transactions WHERE id = ? AND user_id = ?', [fixture['transaction_ids'][0], fixture['user_id']]).fetchone()
+    assert original is not None, fixture
+    template = {key: original[key] for key in original.keys() if key != 'id'}
+    columns = ', '.join('"' + key + '"' for key in template)
+    slots = ', '.join('?' for _ in template)
+    marker = 'native-date-filter-' + uuid.uuid4().hex
+    control_ids = []
+    try:
+        for day in sorted(control_dates):
+            record = {**template, 'occurred_on': day.isoformat(), 'description': marker + ' ' + day.isoformat(),
+                      'external_id': marker + '-' + day.isoformat(), 'import_batch_id': None}
+            cursor = database.execute('INSERT INTO expense_transactions (' + columns + ') VALUES (' + slots + ')', list(record.values()))
+            control_ids.append(cursor.lastrowid)
+        database.commit()
+        records = [(row['id'], date.fromisoformat(row['occurred_on'])) for row in database.execute(
+            'SELECT id, occurred_on FROM expense_transactions WHERE user_id = ?', [fixture['user_id']])]
+
+        def label(day):
+            return day.strftime('%b') + ' ' + str(day.day) + ', ' + str(day.year)
+
+        def assert_range(name, filters, start, end):
+            path = '/transactions?' + urllib.parse.urlencode({'limit': 'all', **filters})
+            page = props(path)  # Also asserts HTTP 200, including malformed/empty input.
+            expected = sorted((identifier, day.isoformat()) for identifier, day in records
+                              if (start is None or day >= start) and (end is None or day <= end))
+            actual = sorted((row['id'], row['occurred_on']) for row in page['transactions'])
+            assert actual == expected, (name, path, expected, actual)
+            assert page['pagination']['count'] == len(expected), (name, page['pagination'], expected)
+            if start is not None and end is not None:
+                summary = 'Showing ' + label(start) + ' to ' + label(end)
+            elif start is not None:
+                summary = 'Showing records from ' + label(start)
+            elif end is not None:
+                summary = 'Showing records through ' + label(end)
+            else:
+                summary = 'Showing filtered records'
+            assert page['date_summary'] == summary, (name, summary, page['date_summary'])
+            print('transaction date filter ' + name + ': passed', flush=True)
+
+        cases = [
+            ('start-only', {'start_date': first.isoformat()}, first, None),
+            ('end-only', {'end_date': first.isoformat()}, None, first),
+            ('inclusive-both', {'start_date': first.isoformat(), 'end_date': last.isoformat()}, first, last),
+            ('same-day-inclusive', {'start_date': first.isoformat(), 'end_date': first.isoformat()}, first, first),
+            ('invalid-start', {'start_date': 'not-a-date'}, None, None),
+            ('invalid-end', {'end_date': fixture['month'] + '-32'}, None, None),
+            ('invalid-both', {'start_date': 'not-a-date', 'end_date': fixture['month'] + '-32'}, None, None),
+            ('valid-start-invalid-end', {'start_date': first.isoformat(), 'end_date': 'not-a-date'}, first, None),
+            ('invalid-start-valid-end', {'start_date': 'not-a-date', 'end_date': first.isoformat()}, None, first),
+            ('empty-start', {'start_date': ''}, None, None),
+            ('empty-end', {'end_date': ''}, None, None),
+            ('empty-both', {'start_date': '', 'end_date': ''}, None, None),
+            ('whitespace-dates', {'start_date': ' ', 'end_date': ' '}, None, None),
+        ]
+        for name, filters, start, end in cases:
+            assert_range(name, filters, start, end)
+        for name, (start, end) in quick_ranges.items():
+            assert_range(name, {'quick_range': name}, start, end)
+        assert_range('quick-range-overrides-manual-dates', {
+            'quick_range': 'month_to_date', 'start_date': (today + timedelta(days=1)).isoformat(),
+            'end_date': (today - timedelta(days=120)).isoformat(),
+        }, *quick_ranges['month_to_date'])
+    finally:
+        if control_ids:
+            slots = ', '.join('?' for _ in control_ids)
+            database.execute('DELETE FROM expense_transactions WHERE user_id = ? AND id IN (' + slots + ')', [fixture['user_id'], *control_ids])
+            database.commit()
+check('date filter bounds, invalid/empty inputs and every quick range', date_filters)
 
 def budgets():
     identifier = fixture['category_id']
@@ -128,8 +238,9 @@ check('transaction notes, category and tags', transaction_edit)
 def saved_query():
     name = 'Native saved ' + uuid.uuid4().hex[:8]
     path = redirect(request('/saved_transaction_queries', {'name': name, 'filters': {'direction': 'credit'}}))
-    page = props(path)
-    assert len(page['transactions']) == 1 and page['transactions'][0]['direction'] == 'credit', page
+    page = props(path + '&per_page=all')
+    expected = {row['id'] for row in database.execute("SELECT id FROM expense_transactions WHERE user_id = ? AND direction = 'credit'", [fixture['user_id']])}
+    assert {row['id'] for row in page['transactions']} == expected and all(row['direction'] == 'credit' for row in page['transactions']), page
     query = next(q for q in page['saved_queries'] if q['name'] == name)
     redirect(request(query['destroy_path'], method='DELETE'))
 check('save, apply and delete transaction filters', saved_query)

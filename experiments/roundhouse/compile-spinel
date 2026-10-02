@@ -15,9 +15,10 @@ args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 work = root / "tmp/roundhouse"
 project = args.project.resolve()
+spinel_dir = Path(os.environ.get("SPINEL_TOOLCHAIN_DIR", work / "spinel-final-20261002"))
 environment = os.environ.copy()
 environment.update(
-    PATH=str(work / "spinel-toolchain/bin") + os.pathsep + environment["PATH"],
+    PATH=str(spinel_dir / "bin") + os.pathsep + environment["PATH"],
     XDG_CACHE_HOME=str(work / "spin-cache"),
     XDG_CONFIG_HOME=str(work / "spin-config"),
     SPIN_OFFLINE="1",
@@ -25,7 +26,7 @@ environment.update(
     LIBRARY_PATH=str(work / "jemalloc-install/lib") + os.pathsep + "/opt/homebrew/opt/icu4c/lib" + os.pathsep + environment.get("LIBRARY_PATH", ""),
 )
 resolved = subprocess.run(
-    [str(work / "spinel-toolchain/bin/spin"), "flags"],
+    [str(spinel_dir / "bin/spin"), "flags"],
     cwd=project, env=environment, capture_output=True, text=True, check=True,
 )
 flags = shlex.split(resolved.stdout)
@@ -34,7 +35,7 @@ if args.without_rbs:
     del flags[index:index + 2]
 command = [str(root / 'experiments/roundhouse/guard'), '--max-rss-mb',
            environment.get('NATIVE_BUILD_MAX_RSS_MB', '1024'), '--seconds', '600', '--',
-           str(work / "spinel-toolchain/bin/spinel"), *flags,
+           str(spinel_dir / "bin/spinel"), *flags,
            "-O", "0", *(['--debug'] if args.debug else []), "--no-inline-hot", "--jobs=1", "--cc=clang -Wno-nullability-completeness", "bin/blog.rb", "-o", "build/bin/blog"]
 (project / "build/bin").mkdir(parents=True, exist_ok=True)
 log = work / "logs" / (project.name + "-build.log")

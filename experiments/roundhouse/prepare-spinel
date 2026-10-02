@@ -23,9 +23,7 @@ def replace(path, old, new):
 (project / 'native_compat.rbs').write_text((compat / 'native.rbs').read_text())
 (project / 'native_unicode.rb').write_text((compat / 'unicode.rb').read_text())
 (project / 'native_ruby_llm.rb').write_text((compat / 'ruby_llm.rb').read_text())
-(project / 'native_date.rb').write_text((compat / 'date.rb').read_text())
-(project / 'native_date.rbs').write_text((compat / 'date.rbs').read_text())
-replace('main.rb', 'require_relative "boot"', 'require_relative "native_date"\nrequire_relative "native_ruby_llm"\nrequire_relative "boot"\nrequire_relative "native_compat"')
+replace('main.rb', 'require_relative "boot"', 'require_relative "native_ruby_llm"\nrequire_relative "boot"\nrequire_relative "native_schema"\nrequire_relative "native_compat"')
 
 # Evaluate the application's declaration-only schemas with its actual gem.
 # Export their JSON Schema, avoiding runtime class_eval in the native app.
@@ -43,7 +41,6 @@ metadata = subprocess.check_output(['bundle', 'exec', 'ruby', '-e', script, *map
 replace('app/controllers/imports_controller.rbs',
         'def transaction_key: (ImportRow record,',
         'def transaction_key: ((ImportRow | ExpenseTransaction) record,')
-replace('app/controllers/ai_chats_controller.rb', '(last_message && last_message.content).to_s.truncate(160)', 'ActiveSupport.truncate((last_message && last_message.content).to_s, 160)')
 table = None
 types = {}
 for line in (root / 'db/schema.rb').read_text().splitlines():
@@ -67,7 +64,6 @@ schema_source += '''  def self.cast(table, column, value)
 end
 '''
 (project / 'native_schema.rb').write_text(schema_source)
-replace('main.rb', 'require_relative "native_date"', 'require_relative "native_date"\nrequire_relative "native_schema"')
 for schema in sorted((root / 'app/schemas').glob('*.rb')):
     name = ''.join(word.capitalize() for word in schema.stem.split('_'))
     script = 'require "json"; require "schematist"; load ARGV[0]; puts Object.const_get(ARGV[1]).new.to_json'
@@ -109,22 +105,6 @@ for job in (root / 'app/jobs').glob('*_job.rb'):
     signatures = rbs.read_text().splitlines()
     rbs.write_text('\n'.join(line.rsplit(' -> ', 1)[0] + ' -> NativeJobHandle' if 'def self.perform_later' in line else line for line in signatures) + '\n')
 
-for file in project.rglob('*.rbs'):
-    if 'vendor' not in file.parts:
-        file.write_text(file.read_text().replace('Range[Date]', 'DateRange'))
-
-replace('runtime/active_support_time_parsing.rb', '    if value.is_a?(Time)\n',
-        '    return value.iso8601 if value.is_a?(Date)\n    if value.is_a?(Time)\n')
-replace('runtime/active_record/relation.rb', '      elsif val.nil?\n',
-        '      elsif val.is_a?(DateRange)\n'
-        '        parts = []\n'
-        '        parts << "#{qcol} >= #{ActiveRecord.adapter.escape_value(val.begin)}" if val.begin\n'
-        '        if val.end\n'
-        '          operator = val.exclude_end? ? "<" : "<="\n'
-        '          parts << "#{qcol} #{operator} #{ActiveRecord.adapter.escape_value(val.end)}"\n'
-        '        end\n'
-        '        parts.empty? ? "1=1" : parts.join(" AND ")\n'
-        '      elsif val.nil?\n')
 replace('runtime/active_record/relation.rb', '        value\n      ensure\n        @select_sql = prior',
         '        NativeSchema.cast(@table, col.to_s, value)\n      ensure\n        @select_sql = prior')
 replace('app/controllers/imports_controller.rb', 'uploaded_file = Params.require_key(@params, "csv_file")',
@@ -159,8 +139,7 @@ constants = 'module NativeInertia\n  VERSION = ' + json.dumps(version) + '\n  AS
 replace('native_compat.rb', 'require_relative "native_unicode"',
         'require_relative "native_unicode"\nrequire_relative "native_inertia"')
 for file in sorted((project / 'app/controllers').rglob('*.rb')):
-    source = file.read_text().replace("Date::DAYNAMES", "NativeCalendar::DAYNAMES")
-    file.write_text(source)
+    source = file.read_text()
     old = '  def process_action(action_name)\n'
     if old in source:
         component = str(file.relative_to(project / 'app/controllers')).removesuffix('_controller.rb')
@@ -171,16 +150,6 @@ replace('main.rb', 'request_obj.env["HTTP_X_CSRF_TOKEN"] = req.req_headers.fetch
         'request_obj.env["HTTP_X_CSRF_TOKEN"] = req.req_headers.fetch("x-csrf-token", req.req_headers.fetch("x-xsrf-token", ""))')
 replace('main.rb', '      controller.process_action(matched.action)',
         '      controller.verify_authenticity_token\n      controller.process_action(matched.action) unless controller.performed?')
-replace('main.rb', '    elsif req.multipart?\n',
-        '    elsif req.req_headers.fetch("content-type", "").start_with?("application/json") && !req.raw_body.empty?\n'
-        '      begin\n'
-        '        parsed = JSON.parse(req.raw_body)\n'
-        '        return nil unless parsed.is_a?(Hash)\n'
-        '        body = parsed\n'
-        '      rescue JSON::ParserError\n'
-        '        return nil\n'
-        '      end\n'
-        '    elsif req.multipart?\n')
 for file in (project / 'runtime/tep').glob('server*.rb'):
     file.write_text(file.read_text().replace('http://0.0.0.0:', 'http://127.0.0.1:'))
 
@@ -211,18 +180,8 @@ replace('runtime/tep/server_threaded.rb',
         '          Tep.log_request_timing(req.verb, req.path, res.status, request_started, "")\n'
         '        end\n')
 
-# These values remain boxed at Spinel's heterogeneous hash boundary.
-for name in ('current_expenses', 'previous_expenses', 'findings', 'unusual_transactions'):
-    previous = 'Array[Hash[Symbol, untyped]]' if name == 'unusual_transactions' else 'Array[untyped]'
-    replace('app/models/insights/analysis.rbs',
-            'def ' + name + ': () -> ' + previous,
-            'def ' + name + ': () -> untyped')
 replace('app/models/ai/controls.rbs',
         'def self.unambiguous_models: (ActiveRecord::Relation models)',
         'def self.unambiguous_models: (Array[Model] models)')
-
-for file in sorted((project / "app/models").rglob("*.rb")):
-    source = file.read_text()
-    file.write_text(source.replace("Date::DAYNAMES", "NativeCalendar::DAYNAMES"))
 
 print(f'Native compatibility prepared in {project}')

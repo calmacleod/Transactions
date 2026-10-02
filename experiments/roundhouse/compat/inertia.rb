@@ -4,7 +4,7 @@ module NativeInertia
     if value.is_a?(Date)
       value.iso8601
     elsif value.is_a?(Time)
-      NativeTime.iso8601(value)
+      value.iso8601(3)
     elsif value.is_a?(BigDecimal)
       value.to_s('F')
     elsif value.is_a?(Proc)

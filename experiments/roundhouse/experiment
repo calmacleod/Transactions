@@ -3,20 +3,21 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="$root/tmp/roundhouse"
-revision="3219450199e45b23bb716acdb63edbea01fd2714"
-spinel_revision="65121d29b14d7095d5172f50f232ee839332aab6"
+revision="e74a81da1fa9d465f6d0daac12483c1e0837f4e5"
+spinel_revision="7ca803c957565e40436155edaab47cf1cdd4b960"
 bcrypt_revision="a78ea0bfae6760c3143ea3b96bcd1594c82d6b7d"
-compiler="${ROUNDHOUSE_BIN:-$work/toolchain/target/release/roundhouse}"
-toolchain="${RUST_TOOLCHAIN:-1.97.1}"
-export CARGO_PROFILE_RELEASE_OPT_LEVEL="${CARGO_PROFILE_RELEASE_OPT_LEVEL:-1}"
+roundhouse_dir="${ROUNDHOUSE_TOOLCHAIN_DIR:-$work/toolchain-final-20261002}"
+spinel_dir="${SPINEL_TOOLCHAIN_DIR:-$work/spinel-final-20261002}"
+export ROUNDHOUSE_TOOLCHAIN_DIR="$roundhouse_dir" SPINEL_TOOLCHAIN_DIR="$spinel_dir"
+compiler="${ROUNDHOUSE_BIN:-$roundhouse_dir/target/release/roundhouse}"
+toolchain="${RUST_TOOLCHAIN:-1.98.1}"
+export CARGO_PROFILE_RELEASE_OPT_LEVEL="${CARGO_PROFILE_RELEASE_OPT_LEVEL:-0}"
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="${CARGO_PROFILE_RELEASE_CODEGEN_UNITS:-256}"
+export CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_INCREMENTAL=0
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 export CARGO_HOME="${CARGO_HOME:-$work/cargo-home}"
 mkdir -p "$work/logs"
 cd "$root"
-
-cargo_for_experiment() {
-  cargo "+$toolchain" "$@"
-}
 
 capture() {
   local name="$1" result=0
@@ -30,18 +31,18 @@ capture() {
 
 case "${1:-help}" in
   setup)
-    if [[ ! -d "$work/toolchain/.git" ]]; then
-      git clone --no-checkout https://github.com/rubys/roundhouse.git "$work/toolchain"
-      git -C "$work/toolchain" checkout --detach "$revision"
+    if [[ ! -e "$roundhouse_dir/.git" ]]; then
+      git clone --no-checkout https://github.com/rubys/roundhouse.git "$roundhouse_dir"
+      git -C "$roundhouse_dir" checkout --detach "$revision"
     fi
-    if [[ "$(git -C "$work/toolchain" rev-parse HEAD)" != "$revision" ]]; then
+    if [[ "$(git -C "$roundhouse_dir" rev-parse HEAD)" != "$revision" ]]; then
       printf 'Expected Roundhouse revision %s; preserve this checkout and use a separate compiler.\n' "$revision" >&2
       exit 1
     fi
-    if git -C "$work/toolchain" apply --reverse --check "$root/experiments/roundhouse/roundhouse.patch" 2>/dev/null; then
+    if git -C "$roundhouse_dir" apply --reverse --check "$root/experiments/roundhouse/roundhouse.patch" 2>/dev/null; then
       : # Already applied.
-    elif git -C "$work/toolchain" apply --check "$root/experiments/roundhouse/roundhouse.patch"; then
-      git -C "$work/toolchain" apply "$root/experiments/roundhouse/roundhouse.patch"
+    elif git -C "$roundhouse_dir" apply --check "$root/experiments/roundhouse/roundhouse.patch"; then
+      git -C "$roundhouse_dir" apply "$root/experiments/roundhouse/roundhouse.patch"
     else
       printf 'Roundhouse patch conflicts with local toolchain edits.\n' >&2
       exit 1
@@ -49,10 +50,10 @@ case "${1:-help}" in
     # build.rs embeds its checkout path. A moved Cargo cache can otherwise
     # reuse that old path and silently build without the native scaffold.
     # Clean only Roundhouse's artifacts; retain the dependency cache.
-    capture setup-clean cargo_for_experiment clean --release -p roundhouse \
-      --manifest-path "$work/toolchain/Cargo.toml"
-    capture setup cargo_for_experiment build --locked --release --bin roundhouse \
-      --manifest-path "$work/toolchain/Cargo.toml"
+    capture setup-clean cargo "+$toolchain" clean --release -p roundhouse \
+      --manifest-path "$roundhouse_dir/Cargo.toml"
+    capture setup cargo "+$toolchain" build --locked --release --bin roundhouse \
+      --manifest-path "$roundhouse_dir/Cargo.toml"
     "$compiler" --version
     ;;
   check)
@@ -71,28 +72,30 @@ case "${1:-help}" in
     capture survey "$compiler" --target rust --survey --allow-unsupported -o "$work/rust" .
     ;;
   build)
-    capture build cargo_for_experiment build --release --manifest-path "$work/rust/Cargo.toml"
+    capture build cargo "+$toolchain" build --release --manifest-path "$work/rust/Cargo.toml"
     ;;
   setup-spinel)
-    if [[ ! -d "$work/spinel-toolchain/.git" ]]; then
-      git clone --no-checkout https://github.com/matz/spinel.git "$work/spinel-toolchain"
-      git -C "$work/spinel-toolchain" checkout --detach "$spinel_revision"
+    if [[ ! -e "$spinel_dir/.git" ]]; then
+      git clone --no-checkout https://github.com/matz/spinel.git "$spinel_dir"
+      git -C "$spinel_dir" checkout --detach "$spinel_revision"
     fi
-    if [[ "$(git -C "$work/spinel-toolchain" rev-parse HEAD)" != "$spinel_revision" ]]; then
+    if [[ "$(git -C "$spinel_dir" rev-parse HEAD)" != "$spinel_revision" ]]; then
       printf 'Expected Spinel revision %s; preserve this checkout and use a separate compiler.\n' "$spinel_revision" >&2
       exit 1
     fi
-    if git -C "$work/spinel-toolchain" apply --reverse --check "$root/experiments/roundhouse/spinel-compiler.patch" 2>/dev/null; then
+    if [[ ! -s "$root/experiments/roundhouse/spinel-compiler.patch" ]]; then
+      : # The pinned upstream compiler needs no local patch.
+    elif git -C "$spinel_dir" apply --reverse --check "$root/experiments/roundhouse/spinel-compiler.patch" 2>/dev/null; then
       : # Already applied.
-    elif git -C "$work/spinel-toolchain" apply --check "$root/experiments/roundhouse/spinel-compiler.patch"; then
-      git -C "$work/spinel-toolchain" apply "$root/experiments/roundhouse/spinel-compiler.patch"
+    elif git -C "$spinel_dir" apply --check "$root/experiments/roundhouse/spinel-compiler.patch"; then
+      git -C "$spinel_dir" apply "$root/experiments/roundhouse/spinel-compiler.patch"
     else
       printf 'Compiler patch conflicts with local toolchain edits.\n' >&2
       exit 1
     fi
-    cd "$work/spinel-toolchain"
+    cd "$spinel_dir"
     capture spinel-toolchain-deps make deps
-    capture spinel-toolchain-build make -j1 MAKEFLAGS=-j1 all
+    capture spinel-toolchain-build make -j1 MAKEFLAGS=-j1 COPT='-O1 -g0' all
     bin/spinel --version
     bin/spin --version
     ;;
@@ -150,11 +153,11 @@ case "${1:-help}" in
     "$root/experiments/roundhouse/compile-spinel" "$project"
     ;;
   native-smoke)
-    capture compiler-smoke-build "$work/spinel-toolchain/bin/spinel" -O 0 --no-inline-hot \
+    capture compiler-smoke-build "$spinel_dir/bin/spinel" -O 0 --no-inline-hot \
       --cc='clang -Wno-nullability-completeness' "$root/experiments/roundhouse/compiler-smoke.rb" -o "$work/compiler-smoke"
     "$work/compiler-smoke"
     capture unicode-smoke-build env LIBRARY_PATH=/opt/homebrew/opt/icu4c/lib \
-      "$work/spinel-toolchain/bin/spinel" -O 0 --cc='clang -Wno-nullability-completeness' \
+      "$spinel_dir/bin/spinel" -O 0 --cc='clang -Wno-nullability-completeness' \
       "$root/experiments/roundhouse/unicode-smoke.rb" -o "$work/unicode-smoke"
     "$work/unicode-smoke"
     ;;
@@ -170,9 +173,9 @@ case "${1:-help}" in
     ;;
   spinel-build)
     cd "$work/spinel"
-    capture spinel-build env PATH="$work/spinel-toolchain/bin:$PATH" \
+    capture spinel-build env PATH="$spinel_dir/bin:$PATH" \
       XDG_CACHE_HOME="$work/spin-cache" XDG_CONFIG_HOME="$work/spin-config" \
-      CC=clang "$work/spinel-toolchain/bin/spin" build
+      CC=clang "$spinel_dir/bin/spin" build
     ;;
   spinel-run)
     project="$work/${2:-spinel-native}"
@@ -185,8 +188,6 @@ case "${1:-help}" in
     export BLOG_DB="$project/storage/development.sqlite3"
     export PORT="${PORT:-3901}"
     export WORKERS=1
-    # Full marking retains GC and avoids the observed remembered-set fault.
-    export SPINEL_GC_MINOR="${SPINEL_GC_MINOR:-0}"
     export SPINEL_WORKERS="${SPINEL_WORKERS:-2}"
     exec "$root/experiments/roundhouse/guard" --max-rss-mb "${NATIVE_MAX_RSS_MB:-512}" --seconds "${NATIVE_MAX_SECONDS:-0}" -- ./build/bin/blog
     ;;

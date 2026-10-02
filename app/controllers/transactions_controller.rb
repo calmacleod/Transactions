@@ -161,7 +161,7 @@ class TransactionsController < ApplicationController
   end
 
   def bulk_transaction_ids
-    bulk_transaction_params.to_h.fetch("transaction_ids", []).reject(&:blank?)
+    bulk_transaction_params.to_h.fetch("transaction_ids", []).compact_blank
   end
 
   def bulk_category_update?
@@ -174,7 +174,7 @@ class TransactionsController < ApplicationController
   end
 
   def bulk_subcategory_ids
-    TransactionSubcategory.where(user_id: current_user.id, id: bulk_transaction_params.to_h.fetch("subcategory_ids", []).reject(&:blank?)).ids
+    TransactionSubcategory.where(user_id: current_user.id, id: bulk_transaction_params.to_h.fetch("subcategory_ids", []).compact_blank).ids
   end
 
   def transaction_per_page_options
@@ -182,7 +182,7 @@ class TransactionsController < ApplicationController
   end
 
   def transactions_per_page
-    return @transactions_per_page if @transactions_per_page
+    return @transactions_per_page if defined?(@transactions_per_page)
 
     requested_limit = params[:limit]
     requested_limit_value = Integer(requested_limit, exception: false) if requested_limit.present?
@@ -218,7 +218,7 @@ class TransactionsController < ApplicationController
       id: saved_query.id,
       name: saved_query.name,
       path: transactions_path(saved_query_id: saved_query.id),
-      destroy_path: saved_transaction_query_path(saved_query.id)
+      destroy_path: saved_transaction_query_path(saved_query)
     }
   end
 
@@ -280,7 +280,7 @@ class TransactionsController < ApplicationController
 
   def filtered_chat_transactions(filter)
     scope = filter.call(ExpenseTransaction.where(user_id: current_user.id)).includes(:category, :subcategories)
-    transaction_ids = Array(params[:transaction_ids]).reject(&:blank?)
+    transaction_ids = Array(params[:transaction_ids]).compact_blank
 
     transaction_ids.present? ? scope.where(id: transaction_ids) : scope
   end

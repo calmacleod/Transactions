@@ -135,7 +135,7 @@ class ApplicationController < ActionController::Base
       notes: transaction.notes,
       classification_reason: transaction.classification_reason,
       confidence_label: transaction.classification_confidence.present? ? "#{(transaction.classification_confidence.to_d * 100).round}%" : "Pending",
-      update_path: transaction_path(transaction.id),
+      update_path: transaction_path(transaction),
       view_path: transactions_path(transaction_id: transaction.id)
     }
   end

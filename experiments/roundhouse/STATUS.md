@@ -1,127 +1,128 @@
-# Experiment status — October 1, 2026
+# Experiment status — October 2, 2026
 
-This is a checkpoint of the experimental branch, not a claim that the full app
-has Rails parity. The native executable builds and runs, normal authentication
-works, and the recorded fixture checks pass. Browser testing has also exposed an
-unresolved transactions-page error. Keep the memory guard enabled.
+The fresh v8 native Spinel build passes normal sign-in, all 13 navigation pages,
+all 15 action groups, account flows, Chromium navigation and configured AI
+protocol checks against local stubs. Its default-GC soak also passes 2,100 reads
+and 420 completed no-key chats. These are recorded fixture checks with the saved
+compiler patches and framework adapters. Strict compilation and the shared
+runtime gradual-type gate remain failing; full Rails parity is not established.
 
-## Current build and server
+## Reproducible snapshot
 
-- Generated project: `tmp/roundhouse/spinel-native-v24` (ignored, reproducible).
-- Dev server: <http://127.0.0.1:3901/>; ordinary admin sign-in with
-  `spinel@example.test` / `spinel-local-experiment`.
-- Separate experiment SQLite database; Rails development data is untouched.
-- Roundhouse pin: `3219450199e45b23bb716acdb63edbea01fd2714`.
-- Spinel pin: `65121d29b14d7095d5172f50f232ee839332aab6`.
-- These are the upstream versions fetched and tested on October 1; they are
-  pinned for reproduction, not a promise that upstream has stopped changing.
-- Native runs use one process, two OS workers, full-mark GC
-  (`SPINEL_GC_MINOR=0`) and a sampled 512 MiB process-tree ceiling.
+- Roundhouse: `e74a81da1fa9d465f6d0daac12483c1e0837f4e5`, plus `roundhouse.patch`.
+- Spinel: `7ca803c957565e40436155edaab47cf1cdd4b960`, plus `spinel-compiler.patch`.
+- These are the latest upstream revisions fetched for this October 2 run;
+  upstream can advance afterward. The pins make this checkpoint reproducible.
+- Recorded native project: `tmp/roundhouse/spinel-native-current-20261002-v8`.
+  Generate fresh output under a new name to preserve earlier databases.
+- Fixture login: `spinel@example.test` / `spinel-local-experiment`. It uses
+  password verification, signed sessions and the ordinary dashboard destination.
+  There is no login bypass or Imports landing workaround.
+- The native SQLite database and signing secret are separate from Rails
+  development data. Generate `config/schema.rb` before running `seed-native`.
 
-[README.md](README.md) has setup, compilation, seeding, running and verification
-commands. [SPINEL.md](SPINEL.md) describes the compatibility fixes and boundaries.
-Generated binaries, databases and raw logs remain under ignored `tmp/roundhouse`;
-the source, adapters, compiler patches and verification scripts are committed.
+[README.md](README.md) contains setup, compile, seed, run and verification
+commands. [SPINEL.md](SPINEL.md) records repairs and compatibility boundaries.
+Generated projects, binaries, databases and logs are ignored under
+`tmp/roundhouse`; reproduction scripts, patches and adapters are tracked.
 
-## Working in the recorded checks
+## Final v8 checks
 
-| Area | Evidence and scope |
-| --- | --- |
-| Compilation/startup | Fresh v24 generation/preparation/native compilation succeeded. The later rebuild adding timing logs also succeeded: 77.6 seconds, 896.4 MiB peak process-tree RSS under the 1 GiB build guard. |
-| Authentication | Normal password checks, signed sessions, CSRF/origin checks, requested return URLs and logout passed. Invitation registration, tenant/admin isolation, password-reset token invalidation and session revocation passed. No login bypass or Imports landing workaround. |
-| Pages | All 13 Svelte navigation destinations rendered in Chromium on seeded data. HTTP checks also covered chat/import details, offline snapshot, PWA/assets and the native jobs monitor. This does not cover every filter or real imported dataset. |
-| Writes | Fixture checks passed for search/filters, saved queries, transaction notes/categories/tags, bulk edits, budgets/cents, subcategories, settings/onboarding, model access/favorites and AI preferences. |
-| Imports/classification | Fixture CSV upload, preview, queued classification, retained CSV download and commit passed. This is not exhaustive coverage of arbitrary statement data. |
-| Jobs/chat/insights | Persisted classification/chat/insight jobs and no-key fallback paths passed; local insight evidence and snapshot output were checked. No-key chat jobs can finish with a handled assistant failure; their completion is not evidence of a real model response. |
-| Configured AI protocols | Local stubs passed all nine combinations of budget/spending/search tools and OpenAI/Anthropic/Gemini, including callbacks, tool results, persisted messages and token accounting. Structured insight editing passed for all three protocols. |
-| Live browser updates | Normal form sign-in, Inertia navigation, authenticated Cable subscription and a live completed chat response passed against the local provider stub. |
-| Request console | HTTP status/method/path/duration logging was added and verified after restart, including actual 500 responses. The monotonic timing includes body consumption, dispatch and HTTP response writes; WebSocket entries measure upgrade dispatch separately. |
+Log paths below are relative to `tmp/roundhouse/logs/`.
 
-## Known broken or incomplete behavior
-
-- **Transactions page:** browser testing produced repeated
-  `500 GET /transactions -- TypeError: no implicit conversion of Date into Integer`,
-  both before and after timing logging was added. Other transactions requests
-  returned 200. The console records paths rather than query strings, so the exact
-  failing filter/input is not captured there. The cause is unresolved and no
-  regression test currently covers that observed failure. Fixture passes must
-  not be interpreted as proof that transactions work with every date/filter/data
-  combination. Recent log evidence is in `native-dev-server.log`.
-- **Strict Roundhouse compilation:** still fails with 32 type errors and zero
-  unsupported/syntax errors. The runnable build uses survey output and recorded
-  adapters. Deferred props, relation APIs, nullable numeric/date values, RubyLLM
-  metadata and mailer state remain among the inference gaps.
-- **Framework parity:** Inertia deferred props are resolved eagerly; full partial
-  reload/version/history semantics are not established. The native job monitor
-  replaces Mission Control; Solid Queue recurring scheduling and concurrency
-  semantics are not reproduced. Scheduled reminders need an explicit scheduler.
-- **Email delivery:** invitation/reset/reminder messages are local JSON spool
-  files. SMTP, production delivery, HTML layouts and attachments are not implemented.
-- **AI parity:** native transport implements the app-used protocols, but complete
-  RubyLLM discovery, retries, caching and streaming behavior are not established.
-- **Storage/platforms:** local SQLite and retained CSV storage are covered, not
-  the full Active Storage service matrix. Scripts target this macOS ARM/Homebrew
-  environment; other platforms and production deployment are not verified.
-- **Memory:** the original growth trigger was repaired and full marking avoids
-  an observed generational-GC fault. Neither finding proves all leaks are gone
-  or fixes the upstream GC implementation. The first final soak failed its
-  growth assertion; the continuation on the same server passed (details below).
-
-## Checks actually run
-
-These results precede the final request-logging addition unless stated otherwise.
-The logging rebuild was followed by normal admin sign-in and dashboard,
-transactions, imports and spending HTTP checks, redirects/404s, and observation
-of timed browser requests and failures. The full suites and long soak were not
-rerun after that logging-only change. Committing this checkpoint does not erase
-the failures found during subsequent browser testing.
-
-| Check | Recorded result | Local log under `tmp/roundhouse/logs/` |
+| Check | Result and scope | Log |
 | --- | --- | --- |
-| Rails Minitest, one worker | 209 tests, 1,080 assertions, zero failures/errors/skips | `rails-final-tests.log` |
-| RuboCop on changed Ruby files | 39 files, no offenses | `rubocop-final.log` |
-| Targeted Roundhouse regressions | 22 passed: form coercion, contextual keyword binding, parameter presence/attribute binding, nested permissions and collection-route ordering | `roundhouse-final-regressions.log` |
-| Native page/prop checks | Passed | `verify-native-v24.log` |
-| Native write/action checks | All 14 groups passed | `verify-actions-v24.log` |
-| Native invitation/reset/isolation checks | Passed | `verify-account-v24.log` |
-| Native stubbed AI + Chromium/Cable checks | Passed; no real provider calls | `verify-ai-v24.log` |
-| Initial final memory soak | 1,040 navigation/snapshot reads and 260 completed no-key chat jobs; failed unchanged `<8 MiB` final-half growth assertion at +13.1 MiB; RSS reached about 190 MiB | `memory-final-soak.log` |
-| Continuation on the same server/PID | Another 2,100 reads and 420 completed no-key chat jobs; passed unchanged assertion, plateau about 163 MiB, final-half growth +0.6 MiB | `memory-final-extended-soak.log` |
-| Fresh full native build | Passed, 859.3 MiB compilation peak | `native-v24-build.log` |
-| Later request-logging rebuild | Passed, 896.4 MiB compilation peak | `spinel-native-v24-build.log` |
-| Strict compilation | Failed: 32 type errors | `spinel-strict-final.log` |
+| Fresh native build | Passed; 88.1s, 840.0 MiB peak process-tree RSS. | `spinel-native-current-20261002-v8-build.log` |
+| Native pages | Passed: normal session, 13 Inertia navigation destinations, chat index, offline snapshot, PWA/assets and native jobs monitor. | `current-20261002-v8-verify-native.log` |
+| Native actions and date filters | All 15 groups and 19 date-bound cases passed, including transaction edits, budgets, saved filters, settings, CSV preview/classification/download/commit, background jobs, no-key chat/insights and logout. | `current-20261002-v8-verify-actions.log` |
+| Native accounts | Passed: invitation/registration, one-time code, tenant/admin isolation, password reset, token invalidation, session revocation and new-password login. | `current-20261002-v8-verify-account.log` |
+| Chromium navigation | All 13 pages passed; 822.0 MiB peak, 1.8s. | `current-20261002-v8-verify-browser.log` |
+| Configured AI stubs | All nine budget/spending/search tool combinations across OpenAI/Anthropic/Gemini, three structured-insight protocols and live authenticated browser/Cable chat passed; 25 local stub requests. Chromium peak 921.6 MiB, 2.1s. No paid provider requests. | `current-20261002-v8-verify-ai.log` |
+| Default-GC memory soak | Passed: 2,100 reads and 420 completed no-key chats, plus polls; RSS samples 101.8–116.0 MiB, final-half growth 3.4 MiB against the unchanged `<8 MiB` assertion. | `current-20261002-v8-default-gc-memory.log` |
+| Focused Roundhouse gates | 16 targets, 67 tests: 66 passed, one failed, zero ignored. Peak 1,868.0 MiB, 63.8s. The sole failure is runtime Bar B; this command did not exit successfully. | `current-20261002-v8-final-affected-gates.log` |
+| Runtime typing | Bar A passed with no unresolved runtime inference sites. Bar B failed: 562 `Ty::Untyped` sites against the unchanged ceiling of 519. | `current-20261002-v8-final-affected-gates.log` |
+| App analysis and strict emission | Check: zero parse errors, 15 errors, 333 warnings, 28 gap-attributed notes and three survey gaps. Strict Spinel emission: 22 type errors, zero unsupported/syntax errors. Runnable output uses survey generation and recorded adapters. | `current-20261002-v8-check.log`, `current-20261002-v8-spinel-strict.log` |
+| Rails Minitest | 209 tests, 1,080 assertions, zero failures/errors/skips; one worker. This preceded the last shared compiler fixes. Final insight-generator rerun: two tests, 12 assertions, zero failures/errors/skips. | `current-20261002-rails-tests.log`, `current-20261002-final-insight-rails-test.log` |
+| Changed Ruby lint | Eight files, no offenses. Python/Bash/browser-JS syntax, native gem RBS and seed syntax checks also passed. | `current-20261002-final-rubocop.log` |
+| Full Roundhouse library suite | Not completed: compilation was stopped by the 2 GiB guard at 2,053.4 MiB. No library/default-suite pass is claimed. | `current-20261002-latest-roundhouse-gates.log` |
 
-Additional checks during this experiment covered native compiler/Unicode smoke
-programs, Gregorian date arithmetic/hydration, decimal rounding/formatting,
-scoped record creation, captured-string GC, patch application to clean pinned
-toolchains, and guard memory/deadline/interruption/descendant cleanup. They are
-focused checks, not the complete upstream compiler/runtime test suites.
+Native compiler/Unicode and Date contract smokes also passed against the patched
+pinned toolchains (`current-20261002-spinel-final-smokes.log` and
+`current-20261002-date-smoke.log`). The focused tests include emitted execution
+for Date/SQLite/partial updates, Data factories, containers, runtime blocks,
+bounded batches, truncation, compact_blank, paths, calendars and keyword-rest
+Hash helpers. Both patches passed clean forward and reverse application checks.
 
-Before this checkpoint commit, syntax checks passed for eight Python experiment
-scripts, the Bash driver, the browser JavaScript check and seven Ruby seed/adapter
-files. Both saved compiler patches were verified against the patched pinned
-checkouts. These checks do not replace functional execution.
+The date-filter checks cover open/inclusive/same-day bounds, invalid/empty/
+whitespace inputs and every app quick range. They no longer reproduce the
+previous Date-to-Integer error. Authentication-heavy verifiers require server
+restarts between suites to preserve the legitimate ten-sign-ins-per-three-minutes
+limit; the README documents this setup requirement.
+The final dev-server page check also passed after writes. Dashboard totals are
+checked against the live SQLite records rather than fixed pre-import counts
+(`current-20261002-v8-final-server-health.log`).
 
-The two memory stages together exercised 3,140 reads and 680 completed no-key
-chat jobs on one server, plus additional polling requests. Finite plateau
-evidence is not proof of leak freedom. The 200 ms guard sampling can overshoot
-its threshold during an allocation burst.
+## Repairs and removed workarounds
 
-## Not tested or not revalidated for this checkpoint
+The app-specific Date implementation and RBS file, Date-to-Time substitutions,
+Date SQL/RBS post-processing, native Time wrapper, String truncation source
+replacement and four Insights Array-return RBS downgrades are removed. Date and
+DateRange support lives in the compiler/runtime. Spinel handles boxed Time
+operations through the C compiler repair. Normal record arguments, collection
+helpers and password authentication remain in app code.
 
-- Real OpenAI/Anthropic/Gemini requests, paid-provider behavior, network/TLS error
-  handling, rate limits, retry/caching semantics and long streamed responses.
-- Exhaustive imported CSV formats, large datasets/uploads, all date filters and
-  the particular transaction failure observed during browser testing.
-- A long memory soak of the final timing-enabled executable, prolonged user
-  sessions, many concurrent connections or real-provider workloads.
-- Full `bin/ci`, the complete Rails Playwright suite, bundler-audit and Brakeman
-  for these experiment changes. The recorded Chromium check targets the native
-  app and does not replace those suites.
-- Complete Roundhouse/Spinel upstream test suites, full clean-machine setup,
-  Linux/Windows builds, production deploy, SMTP or nonlocal storage backends.
-- Rust compilation/runtime after the Spinel follow-up. [RUST.md](RUST.md) records
-  the earlier failures; a working Rust app has not been demonstrated.
+The Roundhouse patch contains bounded Data factory support, accurate runtime RBS
+block binding, recursive container narrowing, Relation demand for bounded
+batches, parameter/normalization support and route/helper repairs. Keyword-rest
+arguments have a truthful Hash shape; specialized String/Symbol key helpers are
+used only for proven key types with the core conversion methods intact. Opaque
+keys and results retain gradual types and their actual semantics.
 
-The next functional repair is the native transactions date/input error, followed
-by a focused regression using the failing request/data and broader filter checks.
+Ordinary `sig/` declarations describe app-used external gem APIs while opaque
+results remain `untyped`. The baseline explicit normalization of opaque insight
+JSON remains. These declarations do not implement Inertia or RubyLLM, and the
+native framework adapters and compiler patches are still substantial.
+
+## Remaining gaps and verification limits
+
+- **Compiler checks remain failing.** Survey output does not resolve the 15
+  analysis errors, 22 strict-emission errors or runtime Bar B debt. The full
+  library/default upstream suite has not completed under the guard.
+- **Framework parity is partial.** Inertia deferred props run eagerly; complete
+  partial/deferred/version/history behavior is unverified. The native jobs
+  monitor replaces Mission Control. Solid Queue recurring scheduling and
+  concurrency semantics are not reproduced; reminders need a scheduler.
+- **Mail and storage are local.** Messages are JSON spool files without SMTP,
+  production delivery, HTML layouts or attachments. Storage coverage is SQLite
+  and retained CSV, rather than all Active Storage services or Rails engines.
+- **AI checks use local stubs.** No real paid providers, discovery, retries,
+  caching, long streaming responses or network/TLS failures are claimed.
+- **Date, relation and native Hash support remain bounded.** See SPINEL for
+  calendar/formatter, interval-owner, batching, scoped-default and key-layout
+  limits. Passing fixtures do not cover every input or custom schema/key type.
+- **Error-path constants remain incomplete.** `ActiveRecord::NoDatabaseError`
+  and `ActiveRecord::StatementInvalid` in the model-catalog importer's
+  `model_table_ready?` rescue clause still emit unsupported-constant stubs.
+  Those database-failure paths are not verified.
+- **Other checks remain unvalidated.** No full `bin/ci`, complete Rails/native
+  browser suite, security audit, clean-machine setup, non-macOS build or
+  production deploy is claimed. Rust was not rerun;
+  [RUST.md](RUST.md) retains its original evidence.
+
+## Memory limits
+
+The driver now uses Spinel's upstream generational-GC default without forcing
+`SPINEL_GC_MINOR`. The final v8 workload passed with the unchanged growth limit;
+this finite sample does not prove all inputs, concurrent sessions, uploads or
+real-provider operations leak-free. `SPINEL_GC_MINOR=0` remains available for an
+explicit full-marking comparison.
+
+Historical v5 comparisons passed the same read/job counts: full marking sampled
+146.3–176.6 MiB with 2.0 MiB final-half growth, and generational GC sampled
+95.6–121.4 MiB with 0.5 MiB growth (`current-20261002-v5-full-gc-memory-rerun.log`
+and `current-20261002-v5-minor-gc-memory.log`). These are earlier-build evidence,
+not matched performance claims about v8 or proof that every GC defect is fixed.
+
+Whole-process-tree guards remain enabled: 2 GiB for toolchain builds, 1 GiB for
+native compilation and 512 MiB for the server. Sampling every 200 ms can overshoot
+during an allocation burst; retain headroom and keep the guard enabled.

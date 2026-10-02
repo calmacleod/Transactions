@@ -1,9 +1,3 @@
-module NativeTime
-  def self.iso8601(time)
-    time.iso8601(3)
-  end
-end
-
 # Supplemental framework methods omitted by Roundhouse's Spinel runtime.
 # This file is loaded only in the generated native project.
 module Sock
@@ -96,18 +90,6 @@ module ActiveRecord
     end
   end
 
-  class Base
-    def self.sanitize_sql_like(value, escape_character = '\\')
-      value.to_s.gsub(escape_character, escape_character * 2)
-        .gsub('%', escape_character + '%').gsub('_', escape_character + '_')
-    end
-  end
-end
-
-module ActiveSupport
-  def self.truncate(text, length)
-    text.length <= length ? text : text[0, length - 3] + '...'
-  end
 end
 
 module Params
@@ -146,16 +128,6 @@ class RubyLlmModelImporter
 end
 
 class User
-  def self.authenticate_by(email_address:, password:)
-    return nil if password.nil? || password.empty?
-    record = User.find_by(email_address: email_address.to_s.strip.downcase)
-    unless record
-      BCrypt::Password.create(password)
-      return nil
-    end
-    record.authenticate(password) ? record : nil
-  end
-
   # Tokens in this isolated native database carry both the user id and
   # password salt, expire after 15 minutes, and become invalid on reset.
   def password_reset_token
@@ -186,10 +158,6 @@ module RouteHelpers
   def self.admin_first_time_flow_preview_path
     '/admin/first_time_flow_preview'
   end
-end
-
-module NativeCalendar
-  DAYNAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 end
 
 module ActionCable

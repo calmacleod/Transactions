@@ -222,8 +222,8 @@ module RubyLLM
       # These methods are emitted with the positional ABI by Roundhouse.
       result = case call.name
       when 'search_transactions' then Ai::Tools::SearchTransactionsTool.new.execute(args)
-      when 'budget_summary' then Ai::Tools::BudgetSummaryTool.new.execute(month: args['month'])
-      when 'spending_summary' then Ai::Tools::SpendingSummaryTool.new.execute(start_date: args['start_date'], end_date: args['end_date'])
+      when 'budget_summary' then Ai::Tools::BudgetSummaryTool.new.execute(args['month'])
+      when 'spending_summary' then Ai::Tools::SpendingSummaryTool.new.execute(args['start_date'], args['end_date'])
       else raise 'Unknown native tool'
       end
       @after.call(result) if @after

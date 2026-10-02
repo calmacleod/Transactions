@@ -1,12 +1,13 @@
-require_relative '../../tmp/roundhouse/toolchain/runtime/ruby/active_support_ext'
-require_relative '../../tmp/roundhouse/toolchain/runtime/spinel/active_support_time_parsing'
-require_relative 'compat/date'
+require_relative '../../tmp/roundhouse/toolchain-final-20261002/runtime/ruby/active_support_ext'
+require_relative '../../tmp/roundhouse/toolchain-final-20261002/runtime/spinel/active_support_time_parsing'
+require_relative '../../tmp/roundhouse/toolchain-final-20261002/runtime/spinel/date'
 
 january = Date.iso8601('2024-01-31')
 raise 'month clamp' unless january.advance(months: 1).iso8601 == '2024-02-29'
 raise 'week boundary' unless Date.iso8601('2026-10-01').beginning_of_week.iso8601 == '2026-09-28'
 raise 'month boundary' unless Date.iso8601('2026-10-01').end_of_month.iso8601 == '2026-10-31'
-raise 'day subtraction' unless Date.iso8601('2026-10-01') - Date.iso8601('2026-09-29') == 2
+delta = Date.iso8601('2026-10-01') - Date.iso8601('2026-09-29')
+raise 'day subtraction' unless delta.is_a?(Rational) && delta == 2
 raise 'date keys' unless { january => 123 }.fetch(Date.iso8601('2024-01-31'), 0) == 123
 raise 'date grouping' unless [january, Date.iso8601('2024-01-31')].group_by { |d| d }.size == 1
 raise 'date hydration' unless ActiveSupport.parse_db_date('2026-10-01').iso8601 == '2026-10-01'

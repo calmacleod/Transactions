@@ -57,7 +57,7 @@ link = next(line for line in mail['body'].splitlines() if '/registrations/new?' 
 invite_code = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)['code'][0]
 new_user = browser()
 new_token = csrf(new_user)
-registration = {'user':{'email_address':recipient,'invite_code':invite_code,'password':'native-new-password','password_confirmation':'native-new-password'}}
+registration = {'user':{'email_address':'  ' + recipient.upper() + '  ','invite_code':invite_code,'password':'native-new-password','password_confirmation':'native-new-password'}}
 redirected(call(new_user, '/registrations', registration, token=new_token), '/')
 code, _, body = call(new_user, '/transactions')
 assert code == 200, (code,body[:300])

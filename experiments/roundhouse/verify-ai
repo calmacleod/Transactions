@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise native AI chat with local provider responses; no paid API calls."""
 import argparse
+from datetime import date, timedelta
 from decimal import Decimal
 import http.cookiejar
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -25,6 +26,11 @@ assert project.is_relative_to(root / 'tmp/roundhouse')
 fixture = json.loads((project / 'storage/native-fixtures.json').read_text())
 database = sqlite3.connect(project / 'storage/development.sqlite3')
 database.row_factory = sqlite3.Row
+historical_month = (date.today().replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
+tool_start = historical_month + '-17'
+tool_end = historical_month + '-18'
+assert historical_month != date.today().strftime('%Y-%m')
+probe_external_id = 'native-ai-date-arguments-regression'
 requests = []
 answer = 'Local provider answer with $17.00 and [[transaction:' + str(fixture['transaction_ids'][0]) + ']]'
 
@@ -38,7 +44,7 @@ class Provider(BaseHTTPRequestHandler):
         prompt = (payload['input'][0]['content'] if 'input' in payload else payload['messages'][0]['content'] if 'messages' in payload else payload['contents'][0]['parts'][0]['text'])
         match = re.search(r'Use tool: ([a-z_]+)', prompt)
         tool_name = match[1] if match else 'budget_summary'
-        arguments = {'budget_summary': {'month': fixture['month']}, 'spending_summary': {'start_date':fixture['month']+'-01','end_date':fixture['month']+'-01'}, 'search_transactions': {'query':'Native market','direction':'debit'}}[tool_name]
+        arguments = {'budget_summary': {'month': historical_month}, 'spending_summary': {'start_date':tool_start,'end_date':tool_end}, 'search_transactions': {'query':'Native market','direction':'debit'}}[tool_name]
         schema = payload.get('text', {}).get('format', {}).get('schema') or payload.get('output_config', {}).get('format', {}).get('schema') or payload.get('generationConfig', {}).get('responseJsonSchema')
         if schema:
             assert schema['type'] == 'object' and 'insights' in schema['properties'], schema
@@ -85,6 +91,8 @@ browser = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.co
 with log_path.open('w') as log:
     process = subprocess.Popen([str(root / 'experiments/roundhouse/experiment'), 'spinel-run', project.name], env=environment, stdout=log, stderr=subprocess.STDOUT)
     try:
+        database.execute("INSERT INTO expense_transactions(user_id, external_id, occurred_on, description, amount_cents, direction, category_id, source, raw_data, created_at, updated_at) VALUES(?, ?, ?, 'Native historical AI probe', 2300, 'debit', ?, 'statement_csv', '{}', datetime('now'), datetime('now')) ON CONFLICT(user_id, external_id) DO UPDATE SET occurred_on=excluded.occurred_on, amount_cents=excluded.amount_cents", [fixture['user_id'], probe_external_id, tool_start, fixture['category_id']])
+        database.commit()
         deadline = time.monotonic() + 10
         while True:
             try:
@@ -128,13 +136,16 @@ with log_path.open('w') as log:
                 assert len(tools) == 1 and tools[0]['status'] == 'complete', tools
                 result = json.loads(tools[0]['metadata'])['result']
                 if tool_name == 'budget_summary':
-                    assert result['month'] == fixture['month'], result
+                    assert result['month'] == historical_month, result
                     category = next(c for c in result['categories'] if c['id'] == fixture['category_id'])
-                    cents = database.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM expense_transactions WHERE user_id = ? AND category_id = ? AND direction = 'debit' AND strftime('%Y-%m', occurred_on) = ?", [fixture['user_id'], fixture['category_id'], fixture['month']]).fetchone()[0]
+                    cents = database.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM expense_transactions WHERE user_id = ? AND category_id = ? AND direction = 'debit' AND strftime('%Y-%m', occurred_on) = ?", [fixture['user_id'], fixture['category_id'], historical_month]).fetchone()[0]
+                    assert cents >= 2300, cents
                     assert Decimal(str(category['spent_dollars'])) == Decimal(cents) / 100, category
                 elif tool_name == 'spending_summary':
-                    cents = database.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM expense_transactions WHERE user_id = ? AND direction = 'debit' AND occurred_on = ?", [fixture['user_id'], fixture['month']+'-01']).fetchone()[0]
-                    assert result['start_date'] == fixture['month']+'-01' and result['end_date'] == result['start_date'], result
+                    count, cents = database.execute("SELECT COUNT(*), COALESCE(SUM(amount_cents), 0) FROM expense_transactions WHERE user_id = ? AND direction = 'debit' AND occurred_on BETWEEN ? AND ?", [fixture['user_id'], tool_start, tool_end]).fetchone()
+                    assert count >= 1 and cents >= 2300, (count, cents)
+                    assert result['start_date'] == tool_start and result['end_date'] == tool_end, result
+                    assert result['transaction_count'] == count, result
                     assert Decimal(str(result['total_dollars'])) == Decimal(cents) / 100, result
                 else:
                     assert result['count'] == 1 and result['transactions'][0]['id'] == fixture['transaction_ids'][0], result
@@ -170,4 +181,7 @@ with log_path.open('w') as log:
             process.wait()
         stub.shutdown()
         stub.server_close()
+        database.execute('DELETE FROM ai_chat_transactions WHERE expense_transaction_id IN (SELECT id FROM expense_transactions WHERE user_id = ? AND external_id = ?)', [fixture['user_id'], probe_external_id])
+        database.execute('DELETE FROM expense_transactions WHERE user_id = ? AND external_id = ?', [fixture['user_id'], probe_external_id])
+        database.commit()
 print('No real provider requests were made; server log: ' + str(log_path))

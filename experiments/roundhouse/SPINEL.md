@@ -1,132 +1,189 @@
 # Roundhouse → native Spinel compatibility notes
 
-## Scope and evidence
+## Purpose and tested snapshot
 
-This experiment compiles the Rails source into a native macOS ARM executable,
-reuses the built Vite/Svelte frontend, and stores data in a separate SQLite file.
-Normal sign-in reaches the dashboard and preserves requested return URLs.
-Invitations and password resets use the app's ordinary credential checks;
-there are no seeded-user authentication shortcuts.
+Transactions remains a Rails app with SQLite and its existing Svelte/Inertia
+frontend. Roundhouse emits Ruby and sidecar types; Spinel compiles that output
+to a native executable. The experiment aims to keep ordinary application code
+and repair compiler/runtime behavior where it is shared.
 
-This is an incomplete experiment. Subsequent browser testing exposed repeated
-`/transactions` 500s (`no implicit conversion of Date into Integer`) alongside
-successful requests; that input/date bug is unresolved. [STATUS.md](STATUS.md)
-separates the passed fixture checks from observed failures and untested behavior.
+The October 2 upstream refresh uses Roundhouse
+`e74a81da1fa9d465f6d0daac12483c1e0837f4e5` and Spinel
+`7ca803c957565e40436155edaab47cf1cdd4b960`, with the saved patches.
+These identify the fetched snapshot; upstream may advance afterward. The fresh v8
+native build passed all 13 navigation pages, all 15 action groups, account flows,
+19 date-filter cases, Chromium navigation and configured-provider protocols
+against local stubs. Its default-GC soak passed 2,100 reads and 420 completed
+no-key chats. Authentication-heavy checks need server restarts between suites
+to preserve the normal login rate limit. Strict compiler and gradual-type checks
+remain failing.
+[STATUS.md](STATUS.md) records execution results and limitations;
+[README.md](README.md) contains complete commands. Old generated projects and
+SQLite files remain under ignored `tmp/roundhouse` for comparison.
 
-The October 1 follow-up verifies authenticated page props and writes against
-seeded, isolated data rather than treating a successful build as app parity.
-`verify-native`, `verify-actions`, `verify-account`, `verify-browser.mjs`,
-`verify-ai` and `verify-memory`
-are executable assertions. Logs are under `tmp/roundhouse/logs`.
+## Application workarounds removed
 
-The Rails suite passed 209 tests and 1,080 assertions. Focused Roundhouse tests
-cover form coercion, parameter presence, attribute binding, contextual keyword
-defaults, nested row permissions and collection-route order. Native smoke programs
-cover C code generation, Unicode, Gregorian dates, decimal rounding and scoped
-relation creation. Real provider requests have not been tested; provider protocol
-checks use local responses and fake keys.
+- Ordinary record arguments are restored in transaction, import, model,
+  subcategory and saved-query path helpers. Ruby-family route boundaries use
+  the existing `ActiveSupport.to_param` protocol, retaining scalar IDs and
+  custom model slugs instead of coercing every argument to Integer.
+- Array `compact_blank` and the normal `defined?` memoization check replace
+  experiment-specific alternatives. Supported Hash key helpers retain their
+  normal calls; opaque insight responses still use the existing explicit
+  `transform_keys(&:to_sym).slice(...)` normalization.
+- The app's Date shim and sidecar, Date-to-Time substitutions, generated Date
+  constant substitutions and Date SQL/RBS post-processing are removed.
+  Calendar dates are actual Date values in the compiler runtime.
+- The native Time wrapper is removed; boxed Time formatting/accessors are
+  handled by the patched Spinel compiler. Four Insights Array-return RBS
+  downgrades are also removed rather than maintained as preparation changes.
+- Duplicate authentication, LIKE sanitizer and truncation helpers are removed.
+  Authentication uses the emitted normal app flow and real bcrypt; truncation
+  and LIKE sanitizing use the shared runtime. The app's String truncation call
+  is handled by shared lowering, without a generated-source replacement.
+- Already-merged collection-route precedence, typed form coercion and literal
+  scoped-creation repairs are used from upstream.
+- External gem constants use ordinary `sig/` declarations for the app-used
+  RubyLLM/Inertia APIs and bcrypt error type. Opaque gem results remain `untyped`;
+  the declarations do not replace the native adapters or claim full gem typing.
 
-The final browser check covers normal form sign-in, Inertia navigation and all
-13 Svelte navigation pages. Local provider checks cover all nine combinations
-of budget/spending/search tools and OpenAI/Anthropic/Gemini protocols, three
-structured insight-editing responses, token accounting and authenticated live
-WebSocket delivery. These checks do not contact paid providers.
+Some earlier source changes remain because their underlying behavior is still
+unsupported or because removing them would reintroduce observed growth: explicit
+owner queries in affected association paths, explicit grouped SQL, consistent
+pagination key types, a saved-query memoization assignment and explicit insight
+result fields/cleanup and normalization of opaque insight data. The patch and
+adapters remain substantial; this is not an unpatched Rails-compatible runtime.
 
-## Fixes recorded
+## Shared repairs retained in the patch
 
-| Area | Failure found | Recorded change |
-| --- | --- | --- |
-| Relations | Owner associations emitted as Arrays, losing `where`, `includes`, ordering and aggregate behavior | Explicit scoped model queries in affected app paths; shared relation/scope lowering and RBS corrections |
-| Creation | Scoped `find_or_create_by!` lost ownership and did not yield the setup block before validation | Preserve scalar equality scope attributes and run the block before saving; do not yield an existing record |
-| Forms | Text/JSON form values reached numeric and Boolean setters with the wrong native representation | Cast typed DTO values at assignment; preserve omitted fields and array-valued permissions |
-| Nested CSV rows | `permit` remained on plain emitted hashes | Filter residual scalar permissions after flat DTO synthesis, retaining strong-parameter filtering |
-| Keyword arguments | Optional keywords became positional values; later keywords bound to earlier slots, sometimes as Hashes | Preserve contextual defaults and instance keyword binding; normalize literal class/helper keywords consistently |
-| Routes | `/transactions/bulk_update` matched the standard `/:id` update route | Emit collection/custom routes before dynamic resource members |
-| Dates | Missing Date values, hydration, month arithmetic, hashing and range handling | Gregorian date adapter and DateRange; preserve dates in SQLite/JSON and distinguish boxed Date/Time values |
-| Money | Decimal conversion, fixed formatting and rounding were incomplete | Shared decimal lowering and Spinel BigDecimal fixes; verify half-up cents and negative/decimal cases |
-| Imports | Uploaded-file/IO modeling, attachment download and filename headers were incomplete | Native multipart IO support, retained-file download and `Content-Disposition` |
-| Data classes | Bodies of `Data.define` declarations and colliding result names were mishandled | Preserve declaration methods and use distinct result class names |
-| Hashes | Mixed String/Symbol pagination keys caused rapid request-memory growth | Normalize filter keys before merging; maintain consistent key types at API boundaries |
-| Insight candidates | An implicit empty branch retained a nested result in compiled code | Explicitly skip a category that yields no meaningful finding |
-| Analysis shape | `summary.merge` retained the original Hash-only inferred value type, passing a findings Array using the wrong native representation | Return explicit analysis fields and make the LLM findings array boundary explicit; verify structured insight editing |
-| Authentication | Generated session state lost Boolean values; browser XSRF header was not copied to the request verifier | Signed JSON session envelope and standard Inertia XSRF-header mapping; keep password checks, CSRF and authentication filters |
-| Browser cookies | Unsigned cookie jar serialized the options Hash instead of its value | Set the XSRF cookie to the actual token using the native jar's value API |
-| Live updates | Action Cable's native payload encoder only supported integer values | Encode nested chat/import messages as JSON; verify an authenticated subscription and live completed chat response |
-| AI integration | RubyLLM runtime/schema/tool declaration APIs were absent | Export declaration metadata using the installed gems; native transport for app-used text/schema/tool flows, finite timeouts and tool rounds |
-| Jobs/mail | In-memory placeholders lost work or retained deliveries; the persistent job thread retained its broadcast log | SQLite job state/arguments/errors, disk mail spool and per-job log cleanup; interrupted jobs requeue on restart |
-| Spinel C | Hash merge expression truncation, rescue String lending, Time boxing, result-type coercion and String iteration casts | Saved `spinel-compiler.patch` and native compiler/Unicode/decimal checks |
-
-The source changes favor explicit scopes, IDs, accumulators and scalar conversions.
-They preserve the Rails behavior exercised by its suite. Framework-specific
-adapters remain in the experiment and generated output.
-
-## Memory findings
-
-The original unbounded run could grow rapidly while assembling transaction
-pagination URLs. Mixed key types were one reproduced trigger. The repaired
-runtime also encountered an invalid generational remembered/pinned-cell scan,
-so the driver uses full marking (`SPINEL_GC_MINOR=0`) while retaining GC.
-This is a stability setting, not a claim that the upstream GC defect is fixed.
-
-`guard` counts the child process tree, including children that change process
-groups. It samples every 200 ms, enforces a memory ceiling and optional deadline,
-reports peak RSS, and terminates owned descendants. Ctrl-C has a two-second
-shutdown grace period. Intentional allocation beyond a 64 MiB test ceiling
-was terminated without leaving the allocator running. Sampling can overshoot
-the threshold during a rapid allocation burst.
-
-| Operation | Default ceiling / configuration |
+| Area | Behavior retained or repaired |
 | --- | --- |
-| Native server | 512 MiB; one process, two OS workers |
-| Native compilation | 1,024 MiB; `-O 0 --no-inline-hot`, one C worker, no debug symbols |
-| Toolchain build | 2,048 MiB; Cargo/make serial; Cargo release optimization level 1 |
-| Long memory check | Two stages on one server: 3,140 authenticated navigation/snapshot reads and 680 completed no-key background chat jobs, plus polling requests |
+| Dates and intervals | Native Date hydration/JSON/SQL, calendar arithmetic, hashing and Rational subtraction; DateRange lowering distinguishes Date intervals from Time intervals. Model owner metadata and exact helper return types survive lowering. |
+| Inference | Integer `times.map`/`collect` binds integer offsets; integral duration constructors and implemented Date/Time conversions have grounded types. Parameter defaults are typed before model method bodies. |
+| Relations | Relation demand survives `to_sql` and association/helper chains; generated association ID readers are registered using the same catalog as synthesis. Scoped creation retains supported equality attributes and setup blocks. Symbol-clause `unscope` and bounded primary-key `find_in_batches` support filtering and classification. |
+| Authentication | Supported `authenticate_by` arguments bind once, normalized lookup and generated setters use the supported model normalization, empty passwords fail, and missing users retain bcrypt work. |
+| Parameters and forms | Presence, nested array permissions, scalar permissions and raw JSON shape are preserved; malformed JSON gets a client error. Contextual keyword defaults retain the upstream forwarding metadata. |
+| Collections and helpers | Pair destructuring is applied only with multiple block parameters; supported index/fetch/group operations retain their shapes. Recursive request Array/Hash narrowing preserves declared members while arbitrary untyped values retain gradual diagnostics. Typed String truncation uses the shared view helper, preserves argument order and returns a fresh mutable result. Literal-array compact_blank handles the app's defaults without overriding custom Array methods. LIKE escaping uses a shared exact scanner. |
+| Constants | Blockless builtin `Data.define` factories with unique literal Symbol members and their aliases resolve through exact declaration owners. Custom factories, dynamic members and factory blocks retain their diagnostic boundaries. |
+| Runtime block signatures | A runtime method's own RBS block contract survives return-only cross-file registry seeds; single Array block parameters receive the array as one argument, rather than losing element types. |
+| Hash keys and tool arguments | Keyword-rest arguments are real Hashes with unknown members. Proven String/Symbol keys use typed shared helpers only when core conversion methods are intact; opaque or custom keys retain a generic result. Tool facade calls match emitted positional/keyword contracts instead of passing a keyword Hash into a Date parser. |
+| Native Spinel C | Boxed Time formatting/accessors, safe String lending/iteration qualifiers, long Hash merge expressions and inline result coercion. BigDecimal formatting/rounding and CSV String/IO input remain patched. |
 
-The first final soak rose from 174.4 to 189.7 MiB and failed the unchanged
-final-half growth assertion (+13.1 MiB). Extending the same server with another
-2,100 reads and 420 jobs passed that assertion: RSS settled near 163 MiB, with
-final-half growth of 0.6 MiB. The full guarded run peaked at 192.2 MiB. The
-request-logging addition was compiled and checked over HTTP afterward, but the
-long soak was not repeated on that executable. Successful compilation peaks
-remained below 1 GiB. A finite soak cannot cover every input,
-provider response, upload size or combination of actions. Keep the guard enabled.
+Tests that remove analyzer errors exercise emitted code as well as diagnostics.
+Route tests cover untyped serializer/helper arguments, IDs, custom slugs,
+nesting, optional segments, format/default keywords, HTML and Jbuilder. Date
+checks cover actual emitted intervals and SQLite controls, plus native HTTP
+filter checks recorded in STATUS. The entire upstream toolchain matrix has not
+been run locally.
 
-## Remaining compatibility boundaries
+## Remaining runtime adapters
 
-- **Strict inference:** strict emission still fails. The current ledger includes
-  32 type errors, including Inertia deferred props, relation IDs/`to_sql`, nullable numeric/date behavior,
-  RubyLLM metadata, sanitizer resolution and mailer view state. The executable
-  uses survey output and the recorded adapters; strict diagnostics are not hidden.
-- **Inertia:** native rendering resolves lazy/deferred props eagerly and supplies
-  normal pages, assets, cookies and JSON. Full partial/deferred/version negotiation
-  and history behavior do not have complete Rails conformance coverage.
-- **Jobs:** native SQLite queueing covers the app's six job classes and job errors,
-  retries/deletion and restart recovery. The jobs page is a native monitor rather
-  than Mission Control. Solid Queue scheduling/concurrency/recurring-task semantics
-  are not reproduced, so scheduled CSV reminders need an explicit scheduler.
-- **Mail:** invitations, reset links and reminder messages are written to JSON
-  files locally. SMTP, HTML layout/inline attachments and production delivery are
-  not implemented. Reset tokens use the isolated app's signing secret and are
-  invalidated when the password changes; Rails and native tokens are separate.
-- **AI:** the native facade covers the app-used OpenAI Responses, Anthropic
-  Messages and Gemini content protocols, tool results, JSON Schema and token
-  accounting. Live provider behavior, provider-specific error/retry/caching and
-  streaming parity remain unverified. Model refresh uses RubyLLM's published
-  catalog rather than its complete provider discovery pipeline.
-- **Uploads/frameworks:** this is the app's local SQLite/retained-CSV storage path,
-  not a complete Active Storage service matrix or arbitrary Rails engine support.
-- **Portability:** scripts assume this Mac's ICU/Homebrew layout. Linux/Windows
-  builds and production deployment are outside the recorded checks.
+`prepare-spinel` still installs explicit native support for:
 
-## Reproduction and version policy
+- Inertia rendering, built frontend assets, shared props, signed session state,
+  CSRF/XSRF mapping and conditional preview routes.
+- SQLite job state/arguments/errors, restart recovery and a native jobs monitor.
+- Mail spooling and the app-used RubyLLM text/schema/tool protocol facade.
+- Multipart uploads, retained CSV download, ICU Unicode and schema-aware
+  aggregate casting, plus a few boxed pagination/AI sidecar boundaries.
+- Nested Cable JSON messages and per-job broadcast cleanup.
 
-[README.md](README.md) contains the complete compile, seed, run and verification
-commands. Toolchains were refreshed from upstream on October 1 and then pinned:
-Roundhouse `3219450199e45b23bb716acdb63edbea01fd2714`, Spinel
-`65121d29b14d7095d5172f50f232ee839332aab6`. Patches apply to those revisions.
-The commit IDs identify the tested snapshot; upstream can advance afterward.
+These are framework adaptations. Deferred Inertia props are evaluated eagerly;
+complete partial/deferred/version/history conformance is unverified. The jobs
+monitor replaces Mission Control. Solid Queue scheduling, recurring tasks and
+concurrency controls are not reproduced; scheduled reminders need an explicit
+scheduler. Mail goes to `storage/mail/*.json`; SMTP, HTML layouts and attachments
+are not implemented. Native signing secrets and reset tokens are independent
+of Rails. Storage coverage is local SQLite/retained CSV, rather than arbitrary
+Active Storage services or mounted Rails engines.
 
-Updating a toolchain means fetching its current default branch, preserving and
-rebasing the saved patch, rebuilding under the guard, rerunning the native checks
-and recording a new pin. Do not silently pull moving dependencies during startup.
-The initial Rust survey failures remain in [RUST.md](RUST.md).
+The AI facade covers the app-used OpenAI Responses, Anthropic Messages and
+Gemini content requests, tools, JSON Schema and token accounting. Protocol tests
+use local stubs and fake keys. Real paid providers, retries, caching, streaming,
+provider discovery and network/TLS failure behavior remain unverified.
+Opaque model responses can contain any JSON shape; app normalization remains
+explicit rather than asserting a false Hash return type for parsed responses.
+
+## Date and inference limits
+
+Date supports the app's civil calendar operations for years 1–9999, the default
+Italian reform, strict ISO parsing and the two app-used strptime patterns.
+Formatting supports the implemented civil tokens; unsupported clock/week/era
+formats raise instead of pretending full stdlib parity. Arbitrary Date calendar
+starts, all Ruby Date formats and timezone-sensitive Date-to-datetime SQL
+intervals are not established. Date interval SQL is restricted to a known Date
+column owner. Other transpilation targets keep their existing Date diagnostic
+boundaries.
+
+Relation batching models the default ascending primary-key cursor and a positive
+`batch_size`, retaining an outer limit and initial offset. Alternate cursor/order
+options, blockless enumerators and complete Rails batching APIs are unverified.
+`unscope` handles the implemented Symbol clauses; selective Hash removal is not
+implemented. Relation cloning and creation defaults remain experimental, with
+incomplete Range/OR/merge behavior. Grouped aggregates still use explicit SQL in
+the app, and schema-aware aggregate Date hydration uses the native adapter.
+
+Normalization support is the recognized model-local strip/downcase declaration
+and its generated setters/authentication lookup. Arbitrary or inherited lambdas
+and normalization of every general query are not claimed. Generated association
+ID readers follow the existing Integer-key contract; UUID/custom-key parity is
+not established. Strict analysis still reports real errors; survey generation
+keeps those limitations visible rather than treating them as resolved.
+The current scalar DTO presence policy treats raw JSON null as omitted. Explicit
+nil passed through model Hash updates is covered, but that does not establish
+Rails-equivalent null assignment through every request DTO.
+
+String truncation supports a typed String receiver, Integer positional length
+and optional literal `omission: String` option. Separator, dynamic option hashes
+and attached blocks remain explicit gaps. Custom receivers and known String
+reopens keep their own dispatch. Literal-array `compact_blank` retains custom
+Array overrides; it does not turn an unknown receiver into an Array.
+
+Generic Hash key conversion cannot promise String keys: a custom key's `to_s`
+can return another type. Its shared helper retains `Hash[untyped, untyped]`;
+the String/Symbol variants retain a String-key contract only for proven keys
+with the core `to_s` methods intact. Emitted controls exercise custom keys,
+method overrides, value preservation and a fresh result. The app's typed
+transaction update uses the matching layout, but Spinel's general mutable
+`Hash#merge!` across different native key layouts remains a reproduced gap.
+Opaque insight JSON still uses the app's explicit normalization.
+
+The model-catalog importer's `model_table_ready?` rescue still contains unsupported
+`ActiveRecord::NoDatabaseError` and `ActiveRecord::StatementInvalid` constants.
+The generated stubs and those database-failure paths remain unverified; legitimate
+JSON/Errno exception declarations do not implement Active Record exceptions.
+
+Runtime typing remains an upstream contribution blocker: Bar A passes with no
+unresolved inference sites, while Bar B counts 562 `Ty::Untyped` sites against
+the unchanged ceiling of 519. This is unresolved debt, not a passing gate.
+The attempted full library-test compilation was stopped at 2,053.4 MiB by the
+2 GiB guard; the full library/default suite has not passed. STATUS lists focused
+passing targets alongside the failed and incomplete checks.
+
+## Memory and reproducibility
+
+Builds and servers always run under a whole-process-tree RSS guard. Defaults are
+512 MiB for the server, 1,024 MiB for native compilation and 2,048 MiB for toolchain
+builds. Compilation is serial; Cargo uses optimization 0 and 256 codegen units,
+and native C compilation uses `-O 0 --no-inline-hot` without debug symbols.
+The server uses one process and two OS workers.
+
+The driver uses Spinel's upstream generational-GC default without forcing
+`SPINEL_GC_MINOR`. The final v8 soak passed 2,100 reads and 420 completed no-key
+chats, plus polls, with RSS samples of 101.8–116.0 MiB and 3.4 MiB final-half
+growth against the unchanged `<8 MiB` assertion. `SPINEL_GC_MINOR=0` remains an
+explicit full-marking comparison. Earlier v5 comparisons and their logs are
+labeled historical in STATUS.
+
+These finite samples do not establish that every input, large upload, concurrent
+connection or provider workload is leak-free, or that every remembered/pinned-cell
+fault seen earlier is repaired. The guard samples every 200 ms and can overshoot
+during allocation spikes; keep it enabled.
+
+Updating either compiler means fetching its default branch, rebasing the saved
+patch onto a separate checkout, rebuilding under the guard, rerunning native
+checks and recording the tested SHA. Both patches are checked forward against
+clean pinned sources and in reverse against patched checkouts. Scripts assume
+this macOS ARM/Homebrew ICU environment. Other operating systems, production
+deployment, full clean-machine setup and the Rust target were not revalidated.
+[RUST.md](RUST.md) preserves the original Rust evidence.
