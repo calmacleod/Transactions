@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Emit a fresh native project and curate a secret-free Linux Docker context."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import platform
+import shutil
+import subprocess
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('name', help='new spinel-native-<name> output directory')
+args = parser.parse_args()
+if not re.fullmatch(r'spinel-native-[a-z0-9-]+', args.name):
+    parser.error('use spinel-native-<name>')
+root = Path(__file__).resolve().parents[2]
+work = root / 'tmp/roundhouse'
+project = work / args.name
+context = Path(os.environ.get('SPINEL_BUILD_CONTEXT', work / 'deploy-context')).resolve()
+assert context.is_relative_to(work) and context != work, 'keep the curated context under tmp/roundhouse'
+assert not context.is_relative_to(project) and not project.is_relative_to(context), 'project/context must be separate'
+if project.exists() or context.exists():
+    parser.error('preserve existing output; choose a fresh name and SPINEL_BUILD_CONTEXT before packaging again')
+roundhouse = Path(os.environ.get('ROUNDHOUSE_TOOLCHAIN_DIR', work / 'toolchain-final-20261002'))
+spinel = Path(os.environ.get('SPINEL_TOOLCHAIN_DIR', work / 'spinel-final-20261002'))
+support = root / 'experiments/roundhouse'
+pins = {'roundhouse': 'e74a81da1fa9d465f6d0daac12483c1e0837f4e5',
+        'spinel': '7ca803c957565e40436155edaab47cf1cdd4b960',
+        'bcrypt': 'a78ea0bfae6760c3143ea3b96bcd1594c82d6b7d'}
+for name, checkout, patch in [('roundhouse', roundhouse, 'roundhouse.patch'),
+                              ('spinel', spinel, 'spinel-compiler.patch')]:
+    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=checkout, text=True).strip() == pins[name]
+    subprocess.run(['git', 'apply', '--reverse', '--check', str(support / patch)], cwd=checkout, check=True)
+
+def guarded(name, command, *, cwd=root, environment=None, memory=2048):
+    log = work / 'logs' / (args.name + '-' + name + '.log')
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open('w') as output:
+        result = subprocess.run([str(support / 'guard'), '--max-rss-mb', str(memory), '--seconds', '600', '--',
+                                 *map(str, command)], cwd=cwd, env=environment, stdout=output, stderr=subprocess.STDOUT)
+    print(log.read_text()[-3000:], flush=True)
+    result.check_returncode()
+
+guarded('frontend', ['npm', 'run', 'build'])
+guarded('transpile', [roundhouse / 'target/release/roundhouse', '--target', 'spinel', '--survey',
+                     '--allow-unsupported', '-o', project, '.'])
+guarded('prepare', [support / 'prepare-spinel', project])
+ignore = shutil.ignore_patterns('storage', 'build', '.git', '__pycache__', '*.pyc', '.DS_Store')
+shutil.copytree(project, context / 'app', ignore=ignore)
+vendor = work / 'spin-cache/spin/packages/bcrypt-0.1.0'
+if not (vendor / '.spin-sha').is_file():
+    vendor = work / 'bcrypt-toolchain'
+assert (vendor / '.spin-sha').read_text().strip() == pins['bcrypt']
+shutil.copytree(vendor, context / 'app/vendor/packages/bcrypt-0.1.0', ignore=ignore)
+manifest = context / 'app/spin.toml'
+before = 'bcrypt = { git = "https://github.com/rubys/spinel-bcrypt", ref = "main" }'
+assert before in manifest.read_text()
+manifest.write_text(manifest.read_text().replace(before, 'bcrypt = { path = "vendor/packages/bcrypt-0.1.0" }'))
+shutil.copytree(root / 'vendor/merchant_data', context / 'app/vendor/merchant_data', dirs_exist_ok=True)
+
+# Spinel's supported pack format carries generated C, runtime source and
+# dependency C source. The server builds these for Linux; no macOS object or
+# executable travels. Keep the same forced-inlining setting as compile-spinel.
+environment = os.environ.copy()
+environment.update(PATH=str(spinel / 'bin') + os.pathsep + environment['PATH'],
+                   XDG_CACHE_HOME=str(work / 'spin-cache'), XDG_CONFIG_HOME=str(work / 'spin-config'),
+                   SPIN_OFFLINE='1', SPINEL_INLINE_FORCE='0', CC='clang')
+if platform.system() == 'Darwin':
+    environment['LIBRARY_PATH'] = os.pathsep.join([str(work / 'jemalloc-install/lib'),
+        '/opt/homebrew/opt/icu4c/lib', environment.get('LIBRARY_PATH', '')])
+guarded('pack', [spinel / 'bin/spin', 'pack', 'blog', '--out', context / 'c-pack'],
+        cwd=context / 'app', environment=environment, memory=1024)
+makefile = context / 'c-pack/Makefile'
+text = makefile.read_text()
+assert 'CFLAGS ?= -O2 ' in text
+# Change the pack's optimization opinion, preserving its required ABI defines,
+# includes and link inputs. Linux ICU headers are provided by libicu-dev.
+text = text.replace('CFLAGS ?= -O2 ', 'CFLAGS ?= -O0 -g0 -Wno-nullability-completeness ')
+text = text.replace(' -I/opt/homebrew/opt/icu4c/include', '')
+makefile.write_text(text)
+shutil.rmtree(context / 'app/build')
+for name in ['guard', 'container-entrypoint']:
+    destination = context / 'support' / name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(support / name, destination)
+    destination.chmod(0o755)
+shutil.copy2(support / 'Dockerfile', context / 'Dockerfile')
+metadata = {'build_strategy': 'spinel-pack-native-c',
+            'generated_c_sha256': hashlib.sha256((context / 'c-pack/src/blog.c').read_bytes()).hexdigest(),
+            'app_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
+            'toolchains': pins,
+            'native_adapters_sha256': {str(p.relative_to(support)): hashlib.sha256(p.read_bytes()).hexdigest()
+                                     for p in sorted((support / 'compat').glob('*')) if p.is_file()},
+            'patches': {name: hashlib.sha256((support / name).read_bytes()).hexdigest()
+                        for name in ['roundhouse.patch', 'spinel-compiler.patch']}}
+(context / 'app/native-build.json').write_text(json.dumps(metadata, indent=2) + '\n')
+assert not (context / 'app/storage').exists()
+assert not (context / 'app/build').exists()
+assert not any(p.suffix in ['.o', '.a', '.dylib'] for p in (context / 'c-pack').rglob('*'))
+assert not any(path.name.startswith('.env') or path.name in ['master.key', 'secret_key_base']
+               for path in context.rglob('*') if path.is_file())
+print('Docker context:', context)
+print('Build metadata:', json.dumps(metadata))

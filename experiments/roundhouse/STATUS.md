@@ -7,6 +7,26 @@ and 420 completed no-key chats. These are recorded fixture checks with the saved
 compiler patches and framework adapters. Strict compilation and the shared
 runtime gradual-type gate remain failing; full Rails parity is not established.
 
+## Separate Linux deployment
+
+The experimental service is running at
+[transaction-spinel.callummacleod.ca](https://transaction-spinel.callummacleod.ca)
+with an independent clone of production SQLite and retained attachments.
+Normal production-account sign-in, all 13 Chromium pages, all 15 CSV downloads,
+offline/PWA endpoints and the native jobs monitor passed. The deployed secret
+values match production; the original Rails service remains on its original
+revision and volume. The same 2,100 authenticated remote reads passed with
+`SPINEL_GC_MINOR=0`: RSS samples 145.9–376.0 MiB, final 165.4 MiB and final-half
+growth −206.2 MiB against the unchanged `<8 MiB` assertion. The process did not
+restart. The initial default-GC run failed that growth check (27.8 MiB), despite
+successful requests. These finite samples do not prove all workloads leak-free.
+
+The image uses Spinel's supported portable C pack: export locally, then compile
+for Linux amd64 on the server under the same memory guard. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for exact revisions, snapshot/record evidence,
+reproduction, resource caps, limitations and rollback. These remote read checks
+are separate from the macOS fixture action/account/AI checks below.
+
 ## Reproducible snapshot
 
 - Roundhouse: `e74a81da1fa9d465f6d0daac12483c1e0837f4e5`, plus `roundhouse.patch`.
@@ -105,17 +125,20 @@ native framework adapters and compiler patches are still substantial.
   `model_table_ready?` rescue clause still emit unsupported-constant stubs.
   Those database-failure paths are not verified.
 - **Other checks remain unvalidated.** No full `bin/ci`, complete Rails/native
-  browser suite, security audit, clean-machine setup, non-macOS build or
-  production deploy is claimed. Rust was not rerun;
+  browser suite, security audit, clean-machine setup or real-provider/production-mail parity is claimed.
+  The separate experimental Linux deployment is recorded above. Rust was not rerun;
   [RUST.md](RUST.md) retains its original evidence.
 
 ## Memory limits
 
-The driver now uses Spinel's upstream generational-GC default without forcing
+The local driver uses Spinel's upstream generational-GC default without forcing
 `SPINEL_GC_MINOR`. The final v8 workload passed with the unchanged growth limit;
 this finite sample does not prove all inputs, concurrent sessions, uploads or
 real-provider operations leak-free. `SPINEL_GC_MINOR=0` remains available for an
-explicit full-marking comparison.
+explicit full-marking comparison. The separate Linux deployment sets it to
+`0` after the cloned-data default-GC soak failed; its full-marking read-soak
+passed as recorded above. The remote container is capped at 512 MiB and its
+process guard at 480 MiB.
 
 Historical v5 comparisons passed the same read/job counts: full marking sampled
 146.3–176.6 MiB with 2.0 MiB final-half growth, and generational GC sampled

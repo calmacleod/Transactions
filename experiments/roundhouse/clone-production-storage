@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Clone the live Rails storage into a new, isolated experimental volume."""
+import argparse
+from contextlib import closing
+from datetime import datetime, timezone
+import json
+import os
+from pathlib import Path
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--remote', action='store_true', help=argparse.SUPPRESS)
+parser.add_argument('--snapshot', default=datetime.now(timezone.utc).strftime('spinel-%Y%m%dT%H%M%SZ'))
+args = parser.parse_args()
+if not args.snapshot.startswith('spinel-') or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-' for c in args.snapshot):
+    parser.error('invalid snapshot name')
+if not args.remote:
+    host = os.environ['KAMAL_SERVER_IP']
+    script = Path(__file__).read_text()
+    subprocess.run(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'root@' + host,
+                    'python3', '-', '--remote', '--snapshot', args.snapshot], input=script, text=True, check=True)
+    sys.exit(0)
+
+def docker(*command):
+    return subprocess.check_output(['docker', *command], text=True).strip()
+
+target_volume = 'transactions_spinel_storage'
+if subprocess.run(['docker', 'volume', 'inspect', target_volume], stdout=subprocess.DEVNULL,
+                  stderr=subprocess.DEVNULL).returncode == 0:
+    raise SystemExit('Experimental volume already exists; refusing to overwrite it.')
+containers = docker('ps', '--filter', 'label=service=transactions', '--filter', 'label=role=web',
+                    '--format', '{{.ID}}').splitlines()
+assert len(containers) == 1, 'expected one running production Rails web container'
+container = json.loads(docker('inspect', containers[0]))[0]
+mount = next(m for m in container['Mounts'] if m['Destination'] == '/rails/storage')
+assert mount['Type'] == 'volume' and mount['Name'] == 'transactions_storage'
+source = Path(mount['Source'])
+assert (source / 'production.sqlite3').is_file()
+backup = Path('/root/transactions-backups') / args.snapshot
+backup.mkdir(mode=0o700, parents=True, exist_ok=False)
+snapshot = backup / 'storage'
+snapshot.mkdir(mode=0o700)
+report = {'snapshot': str(backup), 'time_utc': datetime.now(timezone.utc).isoformat(),
+          'production_container': container['Name'].lstrip('/'), 'production_image': container['Config']['Image'],
+          'source_volume': mount['Name'], 'target_volume': target_volume, 'databases': {}}
+
+for file in sorted(source.glob('production*.sqlite3')):
+    with closing(sqlite3.connect(file.as_uri() + '?mode=ro', uri=True, timeout=30)) as live:
+        live.execute('PRAGMA cache_size=-2048')
+        with closing(sqlite3.connect(snapshot / file.name)) as copy:
+            live.backup(copy, pages=128, sleep=.02)
+            integrity = copy.execute('PRAGMA integrity_check').fetchone()[0]
+            assert integrity == 'ok', (file.name, integrity)
+            counts = {}
+            for table in ['users', 'expense_transactions', 'categories', 'transaction_subcategories',
+                          'import_batches', 'import_rows', 'insights', 'models', 'active_storage_blobs',
+                          'active_storage_attachments', 'sessions']:
+                if copy.execute('SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?', ['table', table]).fetchone():
+                    counts[table] = copy.execute('SELECT COUNT(*) FROM "' + table + '"').fetchone()[0]
+            report['databases'][file.name] = {'integrity': integrity, 'counts': counts}
+            copy.execute('PRAGMA journal_mode=DELETE')
+    (snapshot / file.name).chmod(0o600)
+
+def ignored(directory, entries):
+    return [name for name in entries if name.startswith('production') and '.sqlite3' in name
+            or name in ['secret_key_base', 'experimental-backups', 'mail']]
+
+shutil.copytree(source, snapshot, dirs_exist_ok=True, ignore=ignored)
+# Rails config/storage.yml uses storage/<xx>/<yy>/<key>. The current native
+# disk adapter uses storage/files/<xx>/<yy>/<key>. Keep the original files and
+# add links wholly inside the isolated clone, never into production storage.
+with sqlite3.connect((snapshot / 'production.sqlite3').as_uri() + '?mode=ro', uri=True) as database:
+    blob_keys = [r[0] for r in database.execute('SELECT key FROM active_storage_blobs')]
+for key in blob_keys:
+    assert isinstance(key, str) and key.isalnum(), 'unexpected Active Storage key'
+    relative = Path(key[:2]) / key[2:4] / key
+    original = snapshot / relative
+    assert original.is_file(), 'a snapshot-referenced blob is missing from storage'
+    native = snapshot / 'files' / relative
+    native.parent.mkdir(parents=True, exist_ok=True)
+    if not native.exists():
+        os.link(original, native)
+report['blob_files'] = len(blob_keys)
+docker('volume', 'create', target_volume)
+destination = Path(json.loads(docker('volume', 'inspect', target_volume))[0]['Mountpoint'])
+shutil.copytree(snapshot, destination, dirs_exist_ok=True)
+for directory, _, filenames in os.walk(destination):
+    os.chown(directory, 1000, 1000)
+    for filename in filenames:
+        os.chown(Path(directory) / filename, 1000, 1000)
+report['clone_path'] = str(destination)
+report['production_still_running'] = json.loads(docker('inspect', containers[0]))[0]['State']['Running']
+assert report['production_still_running']
+(backup / 'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
+(backup / 'manifest.json').chmod(0o600)
+print(json.dumps(report, indent=2))

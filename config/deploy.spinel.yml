@@ -1,0 +1,64 @@
+<%
+  require "erb"
+  require "yaml"
+  production = YAML.safe_load(ERB.new(File.read("config/deploy.yml")).result, aliases: true)
+  experimental_host = ENV.fetch("KAMAL_SPINEL_HOST", "transaction-spinel.callummacleod.ca")
+  experimental_env = production.fetch("env").fetch("clear").merge(
+    "APP_URL" => "https://#{experimental_host}",
+    "APP_HOST" => experimental_host,
+    "NATIVE_APP_URL" => "https://#{experimental_host}",
+    "NATIVE_BIND_HOST" => "0.0.0.0",
+    "BLOG_DB" => "/rails/storage/production.sqlite3",
+    "PORT" => "3901",
+    "WORKERS" => "1",
+    "SPINEL_WORKERS" => "2",
+    "SPINEL_GC_MINOR" => "0"
+  )
+%>
+# Use as a separate config: bin/kamal <command> -c config/deploy.spinel.yml
+# This is not a destination overlay for the production Rails service.
+service: transactions-spinel
+image: transactions-spinel
+
+servers:
+  web:
+    hosts:
+<%= production.fetch("servers").fetch("web").map { |host| "      - #{host}" }.join("\n") %>
+    options:
+      memory: 512m
+      memory-swap: 512m
+
+proxy:
+  ssl: true
+  host: <%= experimental_host %>
+  app_port: 3901
+  forward_headers: true
+
+registry:
+<%= production.fetch("registry").to_yaml.lines.drop(1).map { |line| "  #{line}" }.join %>
+
+hooks_path: experiments/roundhouse/kamal-hooks
+secrets_path: .kamal/secrets
+env:
+  secret:
+<%= production.fetch("env").fetch("secret").map { |name| "    - #{name}" }.join("\n") %>
+  clear:
+<%= experimental_env.to_yaml.lines.drop(1).map { |line| "    #{line}" }.join %>
+
+aliases:
+  shell: app exec --interactive --reuse "bash"
+  logs: app logs -f
+  dbc: app exec --interactive --reuse "sqlite3 storage/production.sqlite3"
+
+volumes:
+  - transactions_spinel_storage:/rails/storage
+asset_path: /rails/public/vite
+
+builder:
+  arch: amd64
+  remote: ssh://root@<%= production.fetch("servers").fetch("web").first %>
+  local: false
+  context: <%= ENV.fetch("SPINEL_BUILD_CONTEXT", "tmp/roundhouse/deploy-context") %>
+  dockerfile: experiments/roundhouse/Dockerfile
+
+retain_containers: 2

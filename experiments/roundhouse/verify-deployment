@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Verify the experimental HTTPS deployment with normal production credentials."""
+import argparse
+import http.cookiejar
+import json
+import os
+import re
+import shlex
+import subprocess
+import time
+import urllib.request
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--browser', action='store_true')
+parser.add_argument('--soak', action='store_true', help='2,100 authenticated reads with remote native RSS samples')
+args = parser.parse_args()
+host = os.environ.get('KAMAL_SPINEL_HOST', 'transaction-spinel.callummacleod.ca')
+assert re.fullmatch(r'[a-z0-9.-]+', host)
+base = 'https://' + host
+ruby = 'require "kamal"; require "json"; s=Kamal::Secrets.new; puts JSON.generate(ARGV.to_h { |k| [k,s[k]] })'
+result = subprocess.run(['bundle', 'exec', 'ruby', '-e', ruby, 'ADMIN_EMAIL', 'ADMIN_PASSWORD'],
+                        capture_output=True, text=True)
+assert result.returncode == 0, 'Kamal credentials unavailable (secret output suppressed)'
+credentials = json.loads(result.stdout)
+client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+with client.open(base + '/up', timeout=20) as response:
+    assert response.status == 200
+with client.open(base + '/session/new', timeout=20) as response:
+    body = response.read().decode()
+    token = re.search(r'<meta name="csrf-token" content="([^"]*)"', body)[1]
+data = json.dumps({'email_address': credentials['ADMIN_EMAIL'], 'password': credentials['ADMIN_PASSWORD']}).encode()
+with client.open(urllib.request.Request(base + '/session', data, headers={
+        'Content-Type': 'application/json', 'X-CSRF-Token': token}), timeout=20) as response:
+    assert response.status == 200 and response.url == base + '/', 'normal sign-in did not reach dashboard'
+print('HTTPS health, login page and normal production-account sign-in: PASS', flush=True)
+paths = ['/', '/transactions', '/spending', '/imports', '/budgets', '/subcategories',
+         '/insights', '/settings', '/ai_preferences', '/admin', '/admin/ai_controls', '/admin/models', '/offline']
+for path in paths:
+    started = time.monotonic()
+    with client.open(urllib.request.Request(base + path, headers={'X-Inertia': 'true'}), timeout=30) as response:
+        assert response.status == 200
+        page = json.loads(response.read())
+        assert page['props']['auth']['authenticated'] is True
+        assert page['props']['auth']['admin'] is True
+    print(f'{path}: {page["component"]}, HTTP 200, {(time.monotonic()-started)*1000:.1f}ms', flush=True)
+    if path == '/imports':
+        imports = page['props']['import_batches']
+        downloads = [record['download_path'] for record in imports if record.get('download_path')]
+        for download in downloads:
+            assert re.fullmatch(r'/imports/[0-9]+/download', download)
+            with client.open(base + download, timeout=30) as response:
+                assert response.status == 200 and len(response.read()) > 0
+                assert 'attachment' in response.headers.get('Content-Disposition', '')
+        print(f'Retained CSV downloads: {len(downloads)} passed', flush=True)
+for path in ['/offline/snapshot.json', '/manifest.json', '/service-worker.js', '/admin/jobs']:
+    with client.open(base + path, timeout=30) as response:
+        assert response.status == 200
+        response.read()
+    print(path + ': HTTP 200', flush=True)
+if args.browser:
+    environment = os.environ.copy()
+    environment.update(NATIVE_VERIFY_EMAIL=credentials['ADMIN_EMAIL'],
+                       NATIVE_VERIFY_PASSWORD=credentials['ADMIN_PASSWORD'], KAMAL_SPINEL_HOST=host)
+    subprocess.run(['experiments/roundhouse/guard', '--max-rss-mb', '1024', '--seconds', '60', '--',
+                    'node', 'experiments/roundhouse/verify-browser.mjs', base, '--deployment'],
+                   env=environment, check=True)
+if args.soak:
+    server = os.environ['KAMAL_SERVER_IP']
+    def remote(*command):
+        return subprocess.check_output(['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+                                       'root@' + server, shlex.join(command)], text=True)
+    containers = remote('docker', 'ps', '--filter', 'label=service=transactions-spinel',
+                        '--filter', 'label=role=web', '--format', '{{.ID}}').splitlines()
+    assert len(containers) == 1, 'expected one native experimental container'
+    native_pid = []
+    def rss():
+        rows = remote('docker', 'top', containers[0], '-eo', 'pid,comm,rss').splitlines()
+        values = [(row.split()[0], int(row.split()[2]) / 1024)
+                  for row in rows[1:] if row.split()[1] == 'blog']
+        assert len(values) == 1, 'native server exited or process was ambiguous'
+        if native_pid:
+            assert values[0][0] == native_pid[0], 'native process restarted during the soak'
+        else:
+            native_pid.append(values[0][0])
+        return round(values[0][1], 1)
+    routes = ['/', '/transactions?direction=credit', '/imports', '/spending', '/budgets',
+              '/insights', '/settings', '/ai_preferences', '/admin/ai_controls', '/admin/models',
+              '/offline/snapshot.json']
+    samples = []
+    for batch in range(21):
+        for number in range(100):
+            path = routes[number % len(routes)]
+            with client.open(urllib.request.Request(base + path, headers={'X-Inertia': 'true'}), timeout=30) as response:
+                assert response.status == 200 and isinstance(json.loads(response.read()), dict)
+        samples.append(rss())
+        print(f'{(batch + 1) * 100} authenticated reads: {samples[-1]} MiB native RSS', flush=True)
+    growth = samples[-1] - samples[len(samples) // 2]
+    assert growth < 8, f'Native RSS grew {growth:.1f} MiB in the final half: {samples}'
+    assert max(samples) < 480, f'Native RSS approached its guard: {samples}'
+    print(f'Read-only memory soak passed: {samples}; final-half growth {growth:.1f} MiB', flush=True)
+print('Read-only deployment verification passed; no paid-provider, mail or classification jobs requested.')

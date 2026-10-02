@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /rails
+if [[ ! -f "${BLOG_DB:-/rails/storage/production.sqlite3}" ]]; then
+  printf 'No cloned database at %s. Clone production before booting this service.\n' "${BLOG_DB:-/rails/storage/production.sqlite3}" >&2
+  exit 1
+fi
+exec python3 /rails/bin/native-guard --max-rss-mb "${NATIVE_MAX_RSS_MB:-480}" --seconds 0 -- "$@"

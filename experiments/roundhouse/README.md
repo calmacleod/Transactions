@@ -53,6 +53,10 @@ alone. `--fixtures` adds disposable records for the verification scripts.
 Choose a new `spinel-native-<name>` for each build; existing output is preserved.
 The executable is `<generated tree>/build/bin/blog`. Stop it with Ctrl-C.
 
+The native listener defaults to `127.0.0.1`. Set `NATIVE_BIND_HOST=0.0.0.0`
+when a container proxy must reach it. [DEPLOYMENT.md](DEPLOYMENT.md) describes
+the separate Kamal service, production snapshot, Linux build and remote checks.
+
 The threaded server logs status, method, path and response duration to stderr,
 including failed requests. Timings use a monotonic clock and cover body
 consumption, dispatch and the response write. Idle keep-alive time is excluded;

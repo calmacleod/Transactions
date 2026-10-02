@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import {chromium, expect} from '@playwright/test';
 
 const base = process.argv[2];
-assert(base && /^http:\/\/127\.0\.0\.1:\d+$/.test(base),
-  'Usage: node experiments/roundhouse/verify-browser.mjs http://127.0.0.1:<port>');
+const deployment = process.argv.includes('--deployment');
+assert(base && (deployment
+  ? base === 'https://' + process.env.KAMAL_SPINEL_HOST
+  : /^http:\/\/127\.0\.0\.1:\d+$/.test(base)), 'Supply the authorized deployment origin or loopback URL');
+assert(!deployment || !process.argv.includes('--chat'), 'Deployment verification only performs read-only navigation');
+const email = deployment ? process.env.NATIVE_VERIFY_EMAIL : 'spinel@example.test';
+const password = deployment ? process.env.NATIVE_VERIFY_PASSWORD : 'spinel-local-experiment';
+assert(email && password, 'Deployment credentials must be supplied in the process environment');
 const browser = await chromium.launch({headless: true});
 try {
   const page = await browser.newPage();
@@ -17,8 +23,8 @@ try {
     if (response.status() >= 500) errors.push(`${response.status()} ${response.url()}`);
   });
   await page.goto(base + '/session/new');
-  await page.getByLabel('Email', {exact: true}).fill('spinel@example.test');
-  await page.getByLabel('Password', {exact: true}).fill('spinel-local-experiment');
+  await page.getByLabel('Email', {exact: true}).fill(email);
+  await page.getByLabel('Password', {exact: true}).fill(password);
   await page.getByRole('button', {name: 'Sign in', exact: true}).click();
   await page.waitForURL(base + '/', {timeout: 15000});
   await page.getByRole('link', {name: 'Transactions', exact: true}).first().click();
@@ -51,7 +57,7 @@ try {
   }
   assert.deepEqual(errors, [], 'Browser/runtime errors');
   await page.goto(base + '/');
-  await page.screenshot({path: 'tmp/roundhouse/native-dashboard.png', fullPage: true});
+  if (!deployment) await page.screenshot({path: 'tmp/roundhouse/native-dashboard.png', fullPage: true});
   console.log('Normal browser sign-in, Inertia navigation and thirteen Svelte pages: passed');
 } finally {
   await browser.close();

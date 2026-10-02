@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import platform
 import shlex
 import subprocess
 import time
@@ -17,13 +18,16 @@ work = root / "tmp/roundhouse"
 project = args.project.resolve()
 spinel_dir = Path(os.environ.get("SPINEL_TOOLCHAIN_DIR", work / "spinel-final-20261002"))
 environment = os.environ.copy()
+library_paths = [environment['LIBRARY_PATH']] if environment.get('LIBRARY_PATH') else []
+if platform.system() == 'Darwin':
+    library_paths[:0] = [str(work / 'jemalloc-install/lib'), '/opt/homebrew/opt/icu4c/lib']
 environment.update(
     PATH=str(spinel_dir / "bin") + os.pathsep + environment["PATH"],
     XDG_CACHE_HOME=str(work / "spin-cache"),
     XDG_CONFIG_HOME=str(work / "spin-config"),
     SPIN_OFFLINE="1",
     CC="clang",
-    LIBRARY_PATH=str(work / "jemalloc-install/lib") + os.pathsep + "/opt/homebrew/opt/icu4c/lib" + os.pathsep + environment.get("LIBRARY_PATH", ""),
+    LIBRARY_PATH=os.pathsep.join(library_paths),
 )
 resolved = subprocess.run(
     [str(spinel_dir / "bin/spin"), "flags"],

@@ -4,7 +4,7 @@ module Sock
   ffi_func :sp_net_listen_host, [:str, :int, :int], :int
 
   def self.sphttp_listen(port, reuse)
-    Sock.sp_net_listen_host('127.0.0.1', port, 1024)
+    Sock.sp_net_listen_host(ENV.fetch('NATIVE_BIND_HOST', '127.0.0.1'), port, 1024)
   end
 end
 
